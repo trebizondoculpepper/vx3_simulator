@@ -45,7 +45,7 @@ import {
   createScopeScreen,
 } from '../scene/screens';
 import { createWorldMapTexture } from '../scene/world-map';
-import { createAshtray } from '../scene/ashtray';
+import { createPedestalAshtray } from '../scene/pedestal-ashtray';
 import { createXenonCylinders } from '../scene/xenon-cylinders';
 import { createHotlinePhone } from '../scene/hotline-phone';
 import { createTeleprinter } from '../scene/teleprinter';
@@ -669,10 +669,10 @@ export function startScene(canvas: HTMLCanvasElement) {
   for (let i = 0; i < 4; i++)
     cube(bench, 0.57, 0.025, 0.38, '#e0d4af', 0.47, 1.45 + i * 0.025, 0.36);
 
-  // A 1970s ashtray at the far end of the bench, one cigarette still burning.
-  const ashtray = createAshtray();
-  ashtray.group.position.set(-1.12, 1.38, 0.42);
-  bench.add(ashtray.group);
+  // The brass stand sits left of the xenon bank, cigarette still burning.
+  const ashtray = createPedestalAshtray();
+  ashtray.group.position.set(-8.75, floorY, -1.6);
+  lab.add(ashtray.group);
   dynamic.push(() =>
     ashtray.update(performance.now() / 1000, reducedMotion.matches),
   );
@@ -1105,7 +1105,7 @@ export function startScene(canvas: HTMLCanvasElement) {
 
   const overlay = document.createElement('div');
   overlay.className = 'rack-ui';
-  overlay.innerHTML = `<div class="rack-heading"><strong>VX3 / FULL RIG</strong><small>EARLY-1970s ANALOGUE APPARATUS</small><span id="rig-status">RIG COLD</span><span id="delta-readout">δ 0.000 / 0.880</span></div><div class="view-switch" role="group" aria-label="Camera view"><button type="button" data-view="perspective" aria-pressed="true">PERSPECTIVE</button><button type="button" data-view="isometric" aria-pressed="false">ISOMETRIC</button></div><div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Pan and zoom"><button type="button" data-pan="left" aria-label="Pan left">◀</button><button type="button" data-pan="up" aria-label="Pan up">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Pan down">▼</button><button type="button" data-pan="right" aria-label="Pan right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook"><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log" hidden>▤ LOG <span id="unread-count"></span></button><p class="rack-help">WHEEL TO SCROLL · DRAG TO LOOK · CLICK CONTROLS</p>`;
+  overlay.innerHTML = `<div class="rack-heading"><strong>VX3 / FULL RIG</strong><small>EARLY-1970s ANALOGUE APPARATUS</small><span id="rig-status">RIG COLD</span><span id="delta-readout">δ 0.000 / 0.880</span></div><div class="view-switch" role="group" aria-label="Camera view"><button type="button" data-view="perspective" aria-pressed="true">PERSPECTIVE</button><button type="button" data-view="isometric" aria-pressed="false">ISOMETRIC</button></div><div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Pan and zoom"><button type="button" data-pan="left" aria-label="Pan left">◀</button><button type="button" data-pan="up" aria-label="Pan up">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Pan down">▼</button><button type="button" data-pan="right" aria-label="Pan right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook"><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log" hidden>▤ LOG <span id="unread-count"></span></button><p class="rack-help">WHEEL: DEPTH · ALT+WHEEL: HEIGHT · SWIPE: PAN · DRAG: LOOK</p>`;
   const manualSheet = document.createElement('aside');
   manualSheet.className = 'manual-sheet';
   manualSheet.hidden = true;
@@ -1257,6 +1257,11 @@ export function startScene(canvas: HTMLCanvasElement) {
   let pan = halfTravel;
   let panX = 0;
   let cameraZoom = 1;
+  const zoomTo = (value: number) => {
+    cameraZoom = Math.max(0.65, Math.min(1.8, value));
+    isometricCamera.zoom = cameraZoom;
+    isometricCamera.updateProjectionMatrix();
+  };
   const panTo = (value: number) => {
     pan = Math.max(-halfTravel, Math.min(halfTravel, value));
     unitReadout.textContent = `U ${String(Math.max(1, Math.floor((halfTravel - pan) / U) + 1)).padStart(2, '0')} / ${Math.round(totalHeight / U)}`;
@@ -1269,26 +1274,23 @@ export function startScene(canvas: HTMLCanvasElement) {
     panTo(pan - 1.5);
   });
   overlay.querySelector('[data-pan="left"]')!.addEventListener('click', () => {
-    panX = Math.max(-4, panX - 0.75);
+    panX = Math.max(-6.5, panX - 0.75);
   });
   overlay.querySelector('[data-pan="right"]')!.addEventListener('click', () => {
     panX = Math.min(9.5, panX + 0.75);
   });
   overlay.querySelector('[data-zoom="in"]')!.addEventListener('click', () => {
-    cameraZoom = Math.min(1.8, cameraZoom + 0.15);
-    isometricCamera.zoom = cameraZoom;
-    isometricCamera.updateProjectionMatrix();
+    zoomTo(cameraZoom + 0.15);
   });
   overlay.querySelector('[data-zoom="out"]')!.addEventListener('click', () => {
-    cameraZoom = Math.max(0.65, cameraZoom - 0.15);
-    isometricCamera.zoom = cameraZoom;
-    isometricCamera.updateProjectionMatrix();
+    zoomTo(cameraZoom - 0.15);
   });
   const wheel = (event: WheelEvent) => {
     event.preventDefault();
     const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
-    panX = Math.max(-4, Math.min(9.5, panX + event.deltaX * scale * 0.005));
-    panTo(pan - event.deltaY * scale * 0.004);
+    panX = Math.max(-6.5, Math.min(9.5, panX + event.deltaX * scale * 0.005));
+    if (event.altKey) panTo(pan - event.deltaY * scale * 0.004);
+    else zoomTo(cameraZoom - event.deltaY * scale * 0.002);
   };
   canvas.addEventListener('wheel', wheel, { passive: false });
   const raycaster = new Raycaster();
