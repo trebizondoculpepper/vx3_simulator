@@ -1,8 +1,11 @@
 name: Deploy to Fly.io
 
-# Manual until the Fly app `vx3-simulator` and the FLY_API_TOKEN secret exist.
-# Then add: push: branches: [main]
+# Deploys main after CI has passed on it; can also be run by hand.
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,10 +18,13 @@ concurrency:
 jobs:
   deploy:
     name: Build and deploy
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Deploy
         run: flyctl deploy --remote-only --ha=false
