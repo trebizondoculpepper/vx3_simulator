@@ -30,5 +30,6 @@ npm run build
 ## Credits
 
 - [Three.js](https://threejs.org/) by the three.js authors — MIT.
+- [ZzFX](https://github.com/KilledByAPixel/ZzFX) by Frank Force — MIT. Procedural sound effects.
 - Development tools: [Vite](https://vite.dev/) (MIT), [TypeScript](https://www.typescriptlang.org/) (Apache-2.0), [Vitest](https://vitest.dev/) (MIT), [ESLint](https://eslint.org/) (MIT), [Prettier](https://prettier.io/) (MIT).
 - Premise: the r/VXJunkies community. This project is unaffiliated fan work.

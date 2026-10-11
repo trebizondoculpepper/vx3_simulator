@@ -15,7 +15,8 @@
   },
   "type": "module",
   "dependencies": {
-    "three": "0.186.1"
+    "three": "0.186.1",
+    "zzfx": "1.4.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
