@@ -38,7 +38,280 @@
       "https://vxjunkies.fandom.com/wiki/Getting_Started",
       "https://vxjunkies.fandom.com/wiki/List_of_VX_manufacturers",
       "https://libreddit.app.runonflux.io/r/VXJunkies"
-    ]
+    ],
+    "manufacturer": {
+      "name": "Neumann Dynamik",
+      "origin": "Leipzig",
+      "model": "Typ FK-6 Ferrocore Carrier",
+      "pairing": "invented"
+    },
+    "visual_description": "Cream enamel 3U carrier. Six numbered brass sockets sit behind a hinged smoked-perspex door; each seated core is a dull grey ferrite cylinder with a red tamper band. A finned heat sink fills the right-hand end.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "core-select",
+          "kind": "rotary-selector",
+          "label": "CORE",
+          "cell": [0, 0],
+          "positions": ["1", "2", "3", "4", "5", "6"],
+          "span": [2, 2]
+        },
+        {
+          "id": "seat-depth",
+          "kind": "slider",
+          "label": "SEAT DEPTH",
+          "cell": [2, 0],
+          "span": [1, 2]
+        },
+        {
+          "id": "overclock",
+          "kind": "guarded-toggle",
+          "label": "O/C",
+          "cell": [3, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "ramp",
+          "kind": "knob",
+          "label": "WARM RAMP",
+          "cell": [3, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "eject",
+          "kind": "push-button",
+          "label": "EJECT",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "theta-trim",
+          "kind": "trimpot",
+          "label": "θ TRIM",
+          "cell": [1, 2],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "capacitivity",
+          "kind": "analogue-meter",
+          "label": "µB",
+          "cell": [4, 0],
+          "shows": "ferrocore.capacitivity",
+          "span": [2, 2]
+        },
+        {
+          "id": "rpm",
+          "kind": "nixie",
+          "label": "RPM",
+          "cell": [6, 0],
+          "shows": "ferrocore.rpm",
+          "digits": 5,
+          "span": [5, 1]
+        },
+        {
+          "id": "seated",
+          "kind": "lamp",
+          "label": "SEATED",
+          "cell": [11, 0],
+          "shows": "ferrocore.seat-depth",
+          "threshold": 0.2,
+          "span": [1, 1]
+        },
+        {
+          "id": "wear",
+          "kind": "bargraph",
+          "label": "WEAR",
+          "cell": [6, 1],
+          "shows": "ferrocore.wear",
+          "span": [1, 2]
+        },
+        {
+          "id": "theta",
+          "kind": "magic-eye",
+          "label": "θ",
+          "cell": [7, 1],
+          "shows": "ferrocore.theta",
+          "span": [1, 1]
+        },
+        {
+          "id": "varistor",
+          "kind": "edge-meter",
+          "label": "VARISTOR MH",
+          "cell": [8, 1],
+          "shows": "ferrocore.capacitivity",
+          "span": [2, 1]
+        },
+        {
+          "id": "doa",
+          "kind": "flag",
+          "label": "DOA",
+          "cell": [10, 1],
+          "shows": "ferrocore.wear",
+          "threshold": 0.95,
+          "span": [1, 1]
+        },
+        {
+          "id": "cavitation",
+          "kind": "annunciator",
+          "label": "CAVITATION",
+          "cell": [8, 2],
+          "shows": "ferrocore.theta",
+          "threshold": 0.7,
+          "span": [2, 1]
+        },
+        {
+          "id": "hours",
+          "kind": "counter",
+          "label": "HOURS",
+          "cell": [10, 2],
+          "shows": "ferrocore.wear",
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "rpm",
+          "label": "Rotational speed",
+          "unit": "rpm",
+          "scale": 12000,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 2.5,
+          "noise": 0.01,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "encabulator.drive",
+              "weight": 0.55
+            },
+            {
+              "kind": "linear",
+              "source": "oblidisk.coupling",
+              "weight": 0.15
+            },
+            {
+              "kind": "linear",
+              "source": "ballast-variac.volts",
+              "weight": 0.25
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore.overclock",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "governor-flyweights.limit",
+              "weight": -0.35
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore.seat-depth",
+              "weight": -0.15
+            },
+            {
+              "kind": "linear",
+              "source": "baltovsky-chamber.pressure",
+              "weight": -0.1
+            }
+          ],
+          "gates": [
+            {
+              "source": "ferrocore-warming-oven.temp",
+              "threshold": 0.3
+            }
+          ]
+        },
+        {
+          "id": "capacitivity",
+          "label": "Interplanar capacitivity",
+          "unit": "µB",
+          "scale": 50,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 1.5,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "ferrocore.rpm",
+              "weight": 0.6
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore.seat-depth",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore.wear",
+              "weight": -0.5
+            }
+          ]
+        },
+        {
+          "id": "wear",
+          "label": "Depletion",
+          "unit": "%",
+          "scale": 100,
+          "mode": "integrate",
+          "base": 0.0,
+          "lag": 600,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "ferrocore.overclock",
+              "weight": 0.4
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore.rpm",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "nanocore-bose-einstein-radiator.cooling",
+              "weight": -0.2
+            }
+          ]
+        },
+        {
+          "id": "theta",
+          "label": "Theta-constant instability",
+          "unit": "θ",
+          "scale": 1,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 1.0,
+          "influences": [
+            {
+              "kind": "difference",
+              "a": "ferrocore.ramp",
+              "b": "ferrocore-warming-oven.temp",
+              "weight": 0.8
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore.overclock",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore.theta-trim",
+              "weight": -0.1
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "baltovsky-chamber",
@@ -69,7 +342,188 @@
     "sources": [
       "https://vxjunkies.fandom.com/wiki/Getting_Started",
       "https://news.ycombinator.com/item?id=13847098"
-    ]
+    ],
+    "manufacturer": {
+      "name": "Gorskiy",
+      "origin": "Soviet Union",
+      "model": "БК-3 Baltovsky Chamber",
+      "pairing": "invented"
+    },
+    "visual_description": "Heavy olive-drab 4U chassis with Cyrillic stencilling and two big T-handles. An armoured-glass porthole shows the chamber, which glows faintly yellow and brighter when a core is failing.",
+    "panel": {
+      "units": 4,
+      "grid": {
+        "columns": 12,
+        "rows": 4
+      },
+      "controls": [
+        {
+          "id": "dissipation",
+          "kind": "crank",
+          "label": "DISSIPATION",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "purge",
+          "kind": "mushroom-button",
+          "label": "PURGE",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "lamp-test",
+          "kind": "push-button",
+          "label": "LAMP TEST",
+          "cell": [1, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "interlock",
+          "kind": "key-switch",
+          "label": "INTERLOCK",
+          "cell": [0, 3],
+          "span": [1, 1]
+        },
+        {
+          "id": "range",
+          "kind": "toggle3",
+          "label": "RANGE",
+          "cell": [1, 3],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "window",
+          "kind": "viewport",
+          "label": "CHAMBER",
+          "cell": [3, 0],
+          "shows": "baltovsky-chamber.glow",
+          "span": [2, 2]
+        },
+        {
+          "id": "glow",
+          "kind": "analogue-meter",
+          "label": "GLOW",
+          "cell": [5, 0],
+          "shows": "baltovsky-chamber.glow",
+          "span": [2, 2]
+        },
+        {
+          "id": "pressure",
+          "kind": "analogue-meter",
+          "label": "kPa",
+          "cell": [7, 0],
+          "shows": "baltovsky-chamber.pressure",
+          "span": [2, 2]
+        },
+        {
+          "id": "yellow",
+          "kind": "lamp",
+          "label": "YELLOW",
+          "cell": [9, 0],
+          "shows": "baltovsky-chamber.glow",
+          "threshold": 0.7,
+          "span": [1, 1]
+        },
+        {
+          "id": "overpressure",
+          "kind": "annunciator",
+          "label": "OVERPRESSURE",
+          "cell": [10, 0],
+          "shows": "baltovsky-chamber.pressure",
+          "threshold": 0.8,
+          "span": [2, 1]
+        },
+        {
+          "id": "pressure-log",
+          "kind": "chart-recorder",
+          "label": "PRESSURE",
+          "cell": [3, 2],
+          "shows": "baltovsky-chamber.pressure",
+          "span": [4, 2]
+        },
+        {
+          "id": "glow-bar",
+          "kind": "bargraph",
+          "label": "GLOW",
+          "cell": [7, 2],
+          "shows": "baltovsky-chamber.glow",
+          "span": [1, 2]
+        },
+        {
+          "id": "events",
+          "kind": "dekatron",
+          "label": "EVENTS",
+          "cell": [8, 2],
+          "shows": "baltovsky-chamber.pressure",
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "glow",
+          "label": "Chamber glow",
+          "unit": "lux",
+          "scale": 900,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 2.0,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "ferrocore.wear",
+              "weight": 0.6
+            },
+            {
+              "kind": "linear",
+              "source": "hyperflux-inductor.flux",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "baltovsky-chamber.dissipation",
+              "weight": -0.4
+            }
+          ]
+        },
+        {
+          "id": "pressure",
+          "label": "Chamber pressure",
+          "unit": "kPa",
+          "scale": 300,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 3.0,
+          "noise": 0.01,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "meta-stable-flux-plasma-inducer.plasma",
+              "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "baltovsky-chamber.glow",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "vacuum-tube-relief-valve.vent",
+              "weight": -0.6
+            },
+            {
+              "kind": "linear",
+              "source": "baltovsky-chamber.purge",
+              "weight": -0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "main-bus-controller",
@@ -91,7 +545,305 @@
     "sources": [
       "https://vxjunkies.fandom.com/wiki/Getting_Started",
       "https://vxjunkies.fandom.com/wiki/Retrostability_check"
-    ]
+    ],
+    "manufacturer": {
+      "name": "Volt Xoccula",
+      "origin": "United States",
+      "model": "MBC-300 Main Bus Controller",
+      "pairing": "invented"
+    },
+    "visual_description": "Volt Xoccula grey-and-amber 3U controller. A row of amber annunciator tiles runs across the top beside a big black load meter, and a screw-terminal strip shows through a slot in the faceplate.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "shed",
+          "kind": "guarded-toggle",
+          "label": "LOAD SHED",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "mode",
+          "kind": "chicken-head",
+          "label": "MODE",
+          "cell": [1, 0],
+          "positions": ["STBY", "RUN", "TEST"],
+          "span": [1, 1]
+        },
+        {
+          "id": "reset",
+          "kind": "push-button",
+          "label": "BUS RESET",
+          "cell": [0, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "mute",
+          "kind": "rocker",
+          "label": "MUTE",
+          "cell": [1, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "priority",
+          "kind": "dip-bank",
+          "label": "PRIORITY",
+          "cell": [0, 2],
+          "span": [2, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "load",
+          "kind": "analogue-meter",
+          "label": "LOAD %",
+          "cell": [2, 0],
+          "shows": "main-bus-controller.load",
+          "span": [2, 2]
+        },
+        {
+          "id": "stability",
+          "kind": "vu-meter",
+          "label": "INSTABILITY",
+          "cell": [4, 0],
+          "shows": "main-bus-controller.instability",
+          "span": [2, 1]
+        },
+        {
+          "id": "strain",
+          "kind": "vu-meter",
+          "label": "STRAIN",
+          "cell": [4, 1],
+          "shows": "main-bus-controller.strain",
+          "span": [2, 1]
+        },
+        {
+          "id": "delta",
+          "kind": "nixie",
+          "label": "δ",
+          "cell": [6, 0],
+          "shows": "main-bus-controller.delta",
+          "digits": 4,
+          "span": [4, 1]
+        },
+        {
+          "id": "yalgeth",
+          "kind": "annunciator",
+          "label": "YALGETH",
+          "cell": [10, 0],
+          "shows": "main-bus-controller.delta",
+          "threshold": 0.85,
+          "span": [2, 1]
+        },
+        {
+          "id": "crash",
+          "kind": "flag",
+          "label": "CRASH",
+          "cell": [6, 1],
+          "shows": "main-bus-controller.load",
+          "threshold": 0.95,
+          "span": [1, 1]
+        },
+        {
+          "id": "bus-ok",
+          "kind": "lamp",
+          "label": "BUS OK",
+          "cell": [7, 1],
+          "shows": "main-bus-controller.load",
+          "threshold": 0.05,
+          "span": [1, 1]
+        },
+        {
+          "id": "cycles",
+          "kind": "counter",
+          "label": "CYCLES",
+          "cell": [8, 1],
+          "shows": "main-bus-controller.load",
+          "span": [2, 1]
+        },
+        {
+          "id": "strain-alarm",
+          "kind": "annunciator",
+          "label": "STRAIN",
+          "cell": [10, 1],
+          "shows": "main-bus-controller.strain",
+          "threshold": 0.6,
+          "span": [2, 1]
+        },
+        {
+          "id": "overcurrent",
+          "kind": "annunciator",
+          "label": "OVERCURRENT",
+          "cell": [2, 2],
+          "shows": "main-bus-controller.load",
+          "threshold": 0.85,
+          "span": [2, 1]
+        },
+        {
+          "id": "ripple",
+          "kind": "edge-meter",
+          "label": "RIPPLE",
+          "cell": [4, 2],
+          "shows": "plynost-modulation-rectifier.ripple",
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "load",
+          "label": "Bus load",
+          "unit": "%",
+          "scale": 100,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 1.0,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "helmholtz-blatz-coil.field",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore.rpm",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "betaform-amplifier.gain",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "meta-stable-flux-plasma-inducer.plasma",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.shed",
+              "weight": -0.3
+            }
+          ]
+        },
+        {
+          "id": "instability",
+          "label": "Field instability",
+          "unit": "%",
+          "scale": 100,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.5,
+          "influences": [
+            {
+              "kind": "difference",
+              "a": "helmholtz-blatz-coil.trim-set",
+              "b": "hyperflux-inductor.flux",
+              "weight": 0.9
+            },
+            {
+              "kind": "linear",
+              "source": "baltovsky-chamber.pressure",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "micro-weave-tachyon-suppressor.noise",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "cradling-node.sway",
+              "weight": 0.15
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore.theta",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "passive-damping-lattice.damping",
+              "weight": -0.25
+            },
+            {
+              "kind": "linear",
+              "source": "antiacclimator.bias",
+              "weight": -0.2
+            }
+          ]
+        },
+        {
+          "id": "strain",
+          "label": "Accumulated strain",
+          "unit": "%",
+          "scale": 100,
+          "mode": "integrate",
+          "base": -0.5,
+          "lag": 8,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.instability",
+              "weight": 1.0
+            }
+          ]
+        },
+        {
+          "id": "delta",
+          "label": "Delta",
+          "unit": "δ",
+          "scale": 1,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 2.0,
+          "max": 0.88,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "helmholtz-blatz-coil.field",
+              "weight": 0.35
+            },
+            {
+              "kind": "linear",
+              "source": "holtzmann-resonance-coil.resonance",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "bohr-schreiffer-phase-cell.phase",
+              "weight": 0.15
+            },
+            {
+              "kind": "linear",
+              "source": "sizing-relay.engaged",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "vx3-master-control-register.word",
+              "weight": 0.05
+            },
+            {
+              "kind": "linear",
+              "source": "double-helix-transistor.gain",
+              "weight": 0.05
+            },
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.instability",
+              "weight": -0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "isolated-frame-flux-emitter",
@@ -107,7 +859,135 @@
     "consequences": ["calibration results won't stabilise"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"],
+    "manufacturer": {
+      "name": "Synclex",
+      "origin": "Tucson",
+      "model": "IFE-2 Isolated-Frame Emitter",
+      "pairing": "invented"
+    },
+    "visual_description": "Pale lilac 2U drawer floating on ceramic stand-offs. A louvred emitter aperture sits behind a wire guard, with a sliding brass shutter.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "aperture",
+          "kind": "slider",
+          "label": "APERTURE",
+          "cell": [0, 0],
+          "span": [1, 2]
+        },
+        {
+          "id": "arm",
+          "kind": "guarded-toggle",
+          "label": "ARM",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "emit",
+          "kind": "push-button",
+          "label": "EMIT",
+          "cell": [1, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "focus",
+          "kind": "knob",
+          "label": "FOCUS",
+          "cell": [2, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "frame",
+          "kind": "toggle3",
+          "label": "FRAME",
+          "cell": [2, 1],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "output",
+          "kind": "edge-meter",
+          "label": "OUTPUT",
+          "cell": [3, 0],
+          "shows": "isolated-frame-flux-emitter.output",
+          "span": [2, 1]
+        },
+        {
+          "id": "emitting",
+          "kind": "lamp",
+          "label": "EMIT",
+          "cell": [5, 0],
+          "shows": "isolated-frame-flux-emitter.output",
+          "threshold": 0.2,
+          "span": [1, 1]
+        },
+        {
+          "id": "output-bar",
+          "kind": "bargraph",
+          "label": "OUT",
+          "cell": [6, 0],
+          "shows": "isolated-frame-flux-emitter.output",
+          "span": [1, 2]
+        },
+        {
+          "id": "leakage",
+          "kind": "annunciator",
+          "label": "LEAKAGE",
+          "cell": [3, 1],
+          "shows": "ion-insulation-plate.leakage",
+          "threshold": 0.5,
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "output",
+          "label": "Emitter output",
+          "unit": "W",
+          "scale": 400,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 1.0,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "helmholtz-blatz-coil.field",
+              "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "isolated-frame-flux-emitter.aperture",
+              "weight": 0.4
+            },
+            {
+              "kind": "linear",
+              "source": "isolated-frame-flux-emitter.focus",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "ion-insulation-plate.shielding",
+              "weight": -0.2
+            }
+          ],
+          "gates": [
+            {
+              "source": "isolated-frame-flux-emitter.arm",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "betaform-amplifier",
@@ -123,7 +1003,155 @@
     "consequences": ["bus controller crash"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"],
+    "manufacturer": {
+      "name": "Volt Xoccula",
+      "origin": "United States",
+      "model": "BF-7 Seven-Stage Betaform",
+      "pairing": "invented"
+    },
+    "visual_description": "Seven valves stand proud of a perforated cage on top of a dark-grey 3U chassis, each stage with its own tiny neon. A heavy output transformer sits at one end.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "stages",
+          "kind": "rotary-selector",
+          "label": "STAGES",
+          "cell": [0, 0],
+          "positions": ["1", "2", "3", "4", "5", "6", "7"],
+          "span": [2, 2]
+        },
+        {
+          "id": "drive",
+          "kind": "vernier-dial",
+          "label": "DRIVE",
+          "cell": [2, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "standby",
+          "kind": "toggle",
+          "label": "STBY",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "polarity",
+          "kind": "toggle",
+          "label": "POL",
+          "cell": [1, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "bias",
+          "kind": "trimpot",
+          "label": "BIAS",
+          "cell": [2, 2],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "gain",
+          "kind": "analogue-meter",
+          "label": "GAIN dB",
+          "cell": [4, 0],
+          "shows": "betaform-amplifier.gain",
+          "span": [2, 2]
+        },
+        {
+          "id": "stage",
+          "kind": "nixie",
+          "label": "STG",
+          "cell": [6, 0],
+          "shows": "betaform-amplifier.stages",
+          "digits": 1,
+          "span": [1, 1]
+        },
+        {
+          "id": "output",
+          "kind": "oscilloscope",
+          "label": "OUTPUT",
+          "cell": [7, 0],
+          "shows": "betaform-amplifier.gain",
+          "span": [3, 2]
+        },
+        {
+          "id": "clip",
+          "kind": "lamp",
+          "label": "CLIP",
+          "cell": [10, 0],
+          "shows": "betaform-amplifier.gain",
+          "threshold": 0.9,
+          "span": [1, 1]
+        },
+        {
+          "id": "temp",
+          "kind": "thermometer",
+          "label": "TEMP",
+          "cell": [11, 0],
+          "shows": "infrafractor-housing.temp",
+          "span": [1, 2]
+        },
+        {
+          "id": "level",
+          "kind": "vu-meter",
+          "label": "LEVEL",
+          "cell": [4, 2],
+          "shows": "betaform-amplifier.gain",
+          "span": [2, 1]
+        },
+        {
+          "id": "hours",
+          "kind": "counter",
+          "label": "HOURS",
+          "cell": [6, 2],
+          "shows": "betaform-amplifier.gain",
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "gain",
+          "label": "Amplifier gain",
+          "unit": "dB",
+          "scale": 70,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.8,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "betaform-amplifier.stages",
+              "weight": 0.6
+            },
+            {
+              "kind": "linear",
+              "source": "betaform-amplifier.drive",
+              "weight": 0.4
+            },
+            {
+              "kind": "linear",
+              "source": "betaform-amplifier.standby",
+              "weight": -1.0
+            }
+          ],
+          "gates": [
+            {
+              "source": "ballast-variac.volts",
+              "threshold": 0.2
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "varistance-isolator",
@@ -139,7 +1167,140 @@
     "consequences": ["surges downstream"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"],
+    "manufacturer": {
+      "name": "Wonshou Labs",
+      "origin": "Jinan",
+      "model": "VI-150 Varistance-Isolator",
+      "pairing": "invented"
+    },
+    "visual_description": "Brick-red 2U with a huge Bakelite mains lever. A mica window shows the varistor stack, which glows a faint orange when loaded.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "mains",
+          "kind": "lever",
+          "label": "MAINS",
+          "cell": [0, 0],
+          "span": [1, 2]
+        },
+        {
+          "id": "isolate",
+          "kind": "knob",
+          "label": "ISOLATION",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "earth",
+          "kind": "toggle",
+          "label": "EARTH",
+          "cell": [1, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "phase",
+          "kind": "chicken-head",
+          "label": "PHASE",
+          "cell": [2, 0],
+          "positions": ["L1", "L2", "L3"],
+          "span": [1, 1]
+        },
+        {
+          "id": "test",
+          "kind": "push-button",
+          "label": "TEST",
+          "cell": [2, 1],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "volts",
+          "kind": "analogue-meter",
+          "label": "V AC",
+          "cell": [3, 0],
+          "shows": "ballast-variac.volts",
+          "span": [2, 2]
+        },
+        {
+          "id": "isolation",
+          "kind": "edge-meter",
+          "label": "ISOLATION",
+          "cell": [5, 0],
+          "shows": "varistance-isolator.isolation",
+          "span": [2, 1]
+        },
+        {
+          "id": "live",
+          "kind": "lamp",
+          "label": "LIVE",
+          "cell": [7, 0],
+          "shows": "varistance-isolator.mains",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "earth-fault",
+          "kind": "annunciator",
+          "label": "EARTH FAULT",
+          "cell": [5, 1],
+          "shows": "ion-insulation-plate.leakage",
+          "threshold": 0.7,
+          "span": [2, 1]
+        },
+        {
+          "id": "isolated",
+          "kind": "lamp",
+          "label": "ISOL OK",
+          "cell": [7, 1],
+          "shows": "varistance-isolator.isolation",
+          "threshold": 0.5,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "isolation",
+          "label": "Isolation",
+          "unit": "MΩ",
+          "scale": 600,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.5,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "varistance-isolator.isolate",
+              "weight": 0.7
+            },
+            {
+              "kind": "linear",
+              "source": "varistance-isolator.earth",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "electron-pump.flow",
+              "weight": -0.2
+            }
+          ],
+          "gates": [
+            {
+              "source": "varistance-isolator.mains",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "nanocore-bose-einstein-radiator",
@@ -155,7 +1316,141 @@
     "consequences": ["ferrocore damage on fast ramp"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"],
+    "manufacturer": {
+      "name": "Synclex",
+      "origin": "Tucson",
+      "model": "BE-9 Nanocore Radiator",
+      "pairing": "invented"
+    },
+    "visual_description": "Finned silver 3U heat exchanger with frost creeping along the fins. A round sight-glass shows pale blue condensate swirling when the coolant runs.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "coolant",
+          "kind": "crank",
+          "label": "COOLANT",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "fan",
+          "kind": "toggle3",
+          "label": "FAN",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "bleed",
+          "kind": "push-button",
+          "label": "BLEED",
+          "cell": [1, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "mode",
+          "kind": "key-switch",
+          "label": "MODE",
+          "cell": [2, 2],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "cooling",
+          "kind": "analogue-meter",
+          "label": "COOLING",
+          "cell": [2, 0],
+          "shows": "nanocore-bose-einstein-radiator.cooling",
+          "span": [2, 2]
+        },
+        {
+          "id": "sight",
+          "kind": "viewport",
+          "label": "SIGHT GLASS",
+          "cell": [4, 0],
+          "shows": "nanocore-bose-einstein-radiator.cooling",
+          "span": [2, 2]
+        },
+        {
+          "id": "temp",
+          "kind": "thermometer",
+          "label": "°K",
+          "cell": [6, 0],
+          "shows": "infrafractor-housing.temp",
+          "span": [1, 2]
+        },
+        {
+          "id": "frost",
+          "kind": "annunciator",
+          "label": "FROST",
+          "cell": [7, 0],
+          "shows": "condensate-trap-coil.frost",
+          "threshold": 0.6,
+          "span": [2, 1]
+        },
+        {
+          "id": "flow",
+          "kind": "vu-meter",
+          "label": "FLOW",
+          "cell": [7, 1],
+          "shows": "condensate-trap-coil.flow",
+          "span": [2, 1]
+        },
+        {
+          "id": "bec",
+          "kind": "magic-eye",
+          "label": "BEC",
+          "cell": [9, 0],
+          "shows": "nanocore-bose-einstein-radiator.cooling",
+          "span": [1, 1]
+        },
+        {
+          "id": "cold",
+          "kind": "lamp",
+          "label": "COLD",
+          "cell": [10, 0],
+          "shows": "nanocore-bose-einstein-radiator.cooling",
+          "threshold": 0.5,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "cooling",
+          "label": "Cooling capacity",
+          "unit": "kW",
+          "scale": 12,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 8,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "nanocore-bose-einstein-radiator.coolant",
+              "weight": 0.6
+            },
+            {
+              "kind": "linear",
+              "source": "nanocore-bose-einstein-radiator.fan",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "condensate-trap-coil.flow",
+              "weight": 0.3
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "fromitz-probe",
@@ -171,7 +1466,124 @@
     "consequences": ["undetected radiant leakage"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"],
+    "manufacturer": {
+      "name": "Bonk Industries",
+      "origin": "United States",
+      "model": "Model 41 Fromitz Probe",
+      "pairing": "invented"
+    },
+    "visual_description": "Chunky orange 2U case with the probe on a coiled cable clipped to the front. A big pointer meter has a mirrored scale for reading without parallax.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "insert",
+          "kind": "slider",
+          "label": "INSERT",
+          "cell": [0, 0],
+          "span": [1, 2]
+        },
+        {
+          "id": "range",
+          "kind": "rotary-selector",
+          "label": "RANGE",
+          "cell": [1, 0],
+          "positions": ["×1", "×10", "×100", "Fz"],
+          "span": [2, 2]
+        },
+        {
+          "id": "zero",
+          "kind": "trimpot",
+          "label": "ZERO",
+          "cell": [3, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "hold",
+          "kind": "toggle",
+          "label": "HOLD",
+          "cell": [3, 1],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "reading",
+          "kind": "analogue-meter",
+          "label": "FROMITZ",
+          "cell": [4, 0],
+          "shows": "fromitz-probe.reading",
+          "span": [2, 2]
+        },
+        {
+          "id": "count",
+          "kind": "dekatron",
+          "label": "COUNT",
+          "cell": [6, 0],
+          "shows": "fromitz-probe.reading",
+          "span": [1, 1]
+        },
+        {
+          "id": "over",
+          "kind": "lamp",
+          "label": "OVER",
+          "cell": [6, 1],
+          "shows": "fromitz-probe.reading",
+          "threshold": 0.9,
+          "span": [1, 1]
+        },
+        {
+          "id": "log",
+          "kind": "chart-recorder",
+          "label": "LOG",
+          "cell": [7, 0],
+          "shows": "fromitz-probe.reading",
+          "span": [4, 2]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "reading",
+          "label": "Fromitz reading",
+          "unit": "Fz",
+          "scale": 1000,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.6,
+          "noise": 0.02,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "meta-stable-flux-plasma-inducer.plasma",
+              "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "ion-insulation-plate.leakage",
+              "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "fromitz-probe.zero",
+              "weight": 0.05
+            }
+          ],
+          "gates": [
+            {
+              "source": "fromitz-probe.insert",
+              "threshold": 0.3
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "hyperfine-detector",
@@ -187,7 +1599,145 @@
     "consequences": ["operator proceeds anyway"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"],
+    "manufacturer": {
+      "name": "Neumann Dynamik",
+      "origin": "Leipzig",
+      "model": "HD-22 Hyperfine Detector",
+      "pairing": "invented"
+    },
+    "visual_description": "Cream-and-grey 2U with a domed detector window and a little loudspeaker grille. Five Nixie tubes count events above a slim rate meter.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "gate",
+          "kind": "thumbwheel",
+          "label": "GATE s",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "threshold",
+          "kind": "knob",
+          "label": "THRESHOLD",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "counting",
+          "kind": "toggle",
+          "label": "COUNT",
+          "cell": [0, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "reset",
+          "kind": "push-button",
+          "label": "RESET",
+          "cell": [1, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "audio",
+          "kind": "rocker",
+          "label": "AUDIO",
+          "cell": [2, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "counts",
+          "kind": "nixie",
+          "label": "CPM",
+          "cell": [3, 0],
+          "shows": "hyperfine-detector.count",
+          "digits": 5,
+          "span": [5, 1]
+        },
+        {
+          "id": "rate",
+          "kind": "edge-meter",
+          "label": "RATE",
+          "cell": [3, 1],
+          "shows": "hyperfine-detector.count",
+          "span": [2, 1]
+        },
+        {
+          "id": "event",
+          "kind": "lamp",
+          "label": "EVENT",
+          "cell": [5, 1],
+          "shows": "hyperfine-detector.count",
+          "threshold": 0.2,
+          "span": [1, 1]
+        },
+        {
+          "id": "high",
+          "kind": "annunciator",
+          "label": "HIGH",
+          "cell": [6, 1],
+          "shows": "hyperfine-detector.count",
+          "threshold": 0.8,
+          "span": [2, 1]
+        },
+        {
+          "id": "spectrum",
+          "kind": "oscilloscope",
+          "label": "SPECTRUM",
+          "cell": [8, 0],
+          "shows": "hyperfine-detector.count",
+          "span": [3, 2]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "count",
+          "label": "Hyperfine count rate",
+          "unit": "cpm",
+          "scale": 99999,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.4,
+          "noise": 0.03,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "baltovsky-chamber.glow",
+              "weight": 0.4
+            },
+            {
+              "kind": "linear",
+              "source": "ion-insulation-plate.leakage",
+              "weight": 0.4
+            },
+            {
+              "kind": "linear",
+              "source": "chirality-indicator.chirality",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "hyperfine-detector.threshold",
+              "weight": -0.2
+            }
+          ],
+          "gates": [
+            {
+              "source": "hyperfine-detector.counting",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "antiacclimator",
@@ -203,7 +1753,132 @@
     "consequences": ["radiant leakage"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/Getting_Started"],
+    "manufacturer": {
+      "name": "Gorskiy",
+      "origin": "Soviet Union",
+      "model": "АА-1 Antiacclimator",
+      "pairing": "invented"
+    },
+    "visual_description": "Slim grey 1U strip with colour-coded binding posts at one end and a seasonal thumbwheel. Its front is covered in hand-scratched calibration marks.",
+    "panel": {
+      "units": 1,
+      "grid": {
+        "columns": 12,
+        "rows": 1
+      },
+      "controls": [
+        {
+          "id": "bias-set",
+          "kind": "knob",
+          "label": "BIAS",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "enable",
+          "kind": "toggle",
+          "label": "ON",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "rate",
+          "kind": "chicken-head",
+          "label": "RATE",
+          "cell": [2, 0],
+          "positions": ["SLOW", "MED", "FAST"],
+          "span": [1, 1]
+        },
+        {
+          "id": "season",
+          "kind": "thumbwheel",
+          "label": "SEASON",
+          "cell": [3, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "acclim",
+          "kind": "edge-meter",
+          "label": "ACCLIM",
+          "cell": [4, 0],
+          "shows": "antiacclimator.bias",
+          "span": [2, 1]
+        },
+        {
+          "id": "active",
+          "kind": "lamp",
+          "label": "ACTIVE",
+          "cell": [6, 0],
+          "shows": "antiacclimator.enable",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "drift",
+          "kind": "vu-meter",
+          "label": "DRIFT",
+          "cell": [7, 0],
+          "shows": "main-bus-controller.instability",
+          "span": [2, 1]
+        },
+        {
+          "id": "days",
+          "kind": "counter",
+          "label": "DAYS",
+          "cell": [9, 0],
+          "shows": "antiacclimator.bias",
+          "span": [2, 1]
+        },
+        {
+          "id": "saturated",
+          "kind": "flag",
+          "label": "SAT",
+          "cell": [11, 0],
+          "shows": "antiacclimator.bias",
+          "threshold": 0.9,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "bias",
+          "label": "Antiacclimation bias",
+          "unit": "%",
+          "scale": 100,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 4,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "antiacclimator.bias-set",
+              "weight": 0.7
+            },
+            {
+              "kind": "linear",
+              "source": "antiacclimator.rate",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "antiacclimator.season",
+              "weight": 0.1
+            }
+          ],
+          "gates": [
+            {
+              "source": "antiacclimator.enable",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "ion-insulation-plate",
@@ -226,7 +1901,153 @@
       "https://vxjunkies.fandom.com/wiki/VX_Module_Versions",
       "https://libreddit.tiekoetter.com/r/VXjunkies",
       "https://www.reddit.com/r/VXJunkies/comments/pvqtq/"
-    ]
+    ],
+    "manufacturer": {
+      "name": "Neumann Dynamik",
+      "origin": "Leipzig",
+      "model": "IP-3 Ion Insulation Stack",
+      "pairing": "invented"
+    },
+    "visual_description": "Three iridescent plates stand on edge behind a slotted grille in a cream 2U panel. A discharge button sits under a hinged red cover.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "charge",
+          "kind": "slider",
+          "label": "CHARGE",
+          "cell": [0, 0],
+          "span": [1, 2]
+        },
+        {
+          "id": "polarity",
+          "kind": "toggle3",
+          "label": "POLARITY",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "discharge",
+          "kind": "mushroom-button",
+          "label": "DISCHARGE",
+          "cell": [1, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "plate",
+          "kind": "chicken-head",
+          "label": "PLATE",
+          "cell": [2, 0],
+          "positions": ["A", "B", "C"],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "shield",
+          "kind": "analogue-meter",
+          "label": "SHIELD",
+          "cell": [3, 0],
+          "shows": "ion-insulation-plate.shielding",
+          "span": [2, 2]
+        },
+        {
+          "id": "leakage",
+          "kind": "vu-meter",
+          "label": "LEAKAGE",
+          "cell": [5, 0],
+          "shows": "ion-insulation-plate.leakage",
+          "span": [2, 1]
+        },
+        {
+          "id": "ion",
+          "kind": "magic-eye",
+          "label": "ION",
+          "cell": [7, 0],
+          "shows": "ion-insulation-plate.shielding",
+          "span": [1, 1]
+        },
+        {
+          "id": "ok",
+          "kind": "lamp",
+          "label": "OK",
+          "cell": [8, 0],
+          "shows": "ion-insulation-plate.shielding",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "breach",
+          "kind": "annunciator",
+          "label": "BREACH",
+          "cell": [5, 1],
+          "shows": "ion-insulation-plate.leakage",
+          "threshold": 0.7,
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "shielding",
+          "label": "Ion shielding",
+          "unit": "%",
+          "scale": 100,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 3,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "ion-insulation-plate.charge",
+              "weight": 0.7
+            },
+            {
+              "kind": "linear",
+              "source": "ion-insulation-plate.leakage",
+              "weight": -0.4
+            },
+            {
+              "kind": "linear",
+              "source": "ion-insulation-plate.discharge",
+              "weight": -0.8
+            }
+          ]
+        },
+        {
+          "id": "leakage",
+          "label": "Ion leakage",
+          "unit": "nA",
+          "scale": 500,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 1.5,
+          "noise": 0.01,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "isolated-frame-flux-emitter.output",
+              "weight": 0.4
+            },
+            {
+              "kind": "linear",
+              "source": "plynost-modulation-rectifier.ripple",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "faraday-suit.grounding",
+              "weight": -0.2
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "encabulator",
@@ -246,7 +2067,170 @@
       "https://vxjunkies.fandom.com/wiki/What_is_a_VX_module%3F",
       "https://libreddit.app.runonflux.io/r/VXJunkies",
       "https://news.ycombinator.com/item?id=29755025"
-    ]
+    ],
+    "manufacturer": {
+      "name": "Bonk Industries",
+      "origin": "United States",
+      "model": "Model 77 Encabulator Drive",
+      "pairing": "invented"
+    },
+    "visual_description": "Bonk's 4U drive: a polished aluminium drum turns behind a window above a heavy cast base plate. A hand brake lever and a guarded boost switch sit alongside, and the paint is worn through where hands rest.",
+    "panel": {
+      "units": 4,
+      "grid": {
+        "columns": 12,
+        "rows": 4
+      },
+      "controls": [
+        {
+          "id": "drive-set",
+          "kind": "vernier-dial",
+          "label": "DRIVE",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "boost",
+          "kind": "guarded-toggle",
+          "label": "BOOST",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "brake",
+          "kind": "lever",
+          "label": "BRAKE",
+          "cell": [1, 2],
+          "span": [1, 2]
+        },
+        {
+          "id": "gear",
+          "kind": "rotary-selector",
+          "label": "GEAR",
+          "cell": [2, 2],
+          "positions": ["L", "1", "2", "3"],
+          "span": [2, 2]
+        },
+        {
+          "id": "direction",
+          "kind": "toggle",
+          "label": "FWD/REV",
+          "cell": [0, 3],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "drum",
+          "kind": "viewport",
+          "label": "DRUM",
+          "cell": [2, 0],
+          "shows": "encabulator.drive",
+          "span": [2, 2]
+        },
+        {
+          "id": "rpm",
+          "kind": "analogue-meter",
+          "label": "RPM",
+          "cell": [4, 0],
+          "shows": "encabulator.drive",
+          "span": [2, 2]
+        },
+        {
+          "id": "torque",
+          "kind": "vu-meter",
+          "label": "TORQUE",
+          "cell": [6, 0],
+          "shows": "encabulator.drive",
+          "span": [2, 1]
+        },
+        {
+          "id": "slip",
+          "kind": "annunciator",
+          "label": "SLIP",
+          "cell": [6, 1],
+          "shows": "encabulator.drive",
+          "threshold": 0.9,
+          "span": [2, 1]
+        },
+        {
+          "id": "revs",
+          "kind": "counter",
+          "label": "REVS",
+          "cell": [8, 0],
+          "shows": "encabulator.drive",
+          "span": [2, 1]
+        },
+        {
+          "id": "run",
+          "kind": "lamp",
+          "label": "RUN",
+          "cell": [10, 0],
+          "shows": "encabulator.drive",
+          "threshold": 0.1,
+          "span": [1, 1]
+        },
+        {
+          "id": "brake-on",
+          "kind": "lamp",
+          "label": "BRAKE",
+          "cell": [11, 0],
+          "shows": "encabulator.brake",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "speed-log",
+          "kind": "chart-recorder",
+          "label": "SPEED",
+          "cell": [4, 2],
+          "shows": "encabulator.drive",
+          "span": [4, 2]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "drive",
+          "label": "Encabulator drive",
+          "unit": "rpm",
+          "scale": 3000,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 3,
+          "noise": 0.01,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "encabulator.drive-set",
+              "weight": 0.7
+            },
+            {
+              "kind": "linear",
+              "source": "encabulator.gear",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "encabulator.boost",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "encabulator.brake",
+              "weight": -0.9
+            }
+          ],
+          "gates": [
+            {
+              "source": "ballast-variac.volts",
+              "threshold": 0.25
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "delta-hypersistor",
@@ -262,7 +2246,131 @@
     "consequences": ["exposure to Smolensky radiation"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://libreddit.tiekoetter.com/r/VXjunkies"]
+    "sources": ["https://libreddit.tiekoetter.com/r/VXjunkies"],
+    "manufacturer": {
+      "name": "Volt Xoccula",
+      "origin": "United States",
+      "model": "DH-4 Delta Hypersistor",
+      "pairing": "invented"
+    },
+    "visual_description": "Grey 2U with a fat ceramic-cased hypersistor mounted on the face under a wire cage, stencilled with lightning bolts. A key-switch arms the dump circuit.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "bleed",
+          "kind": "toggle",
+          "label": "BLEED",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "dump",
+          "kind": "push-button",
+          "label": "DUMP",
+          "cell": [0, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "limit",
+          "kind": "knob",
+          "label": "LIMIT",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "arm",
+          "kind": "key-switch",
+          "label": "ARM",
+          "cell": [1, 1],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "charge",
+          "kind": "analogue-meter",
+          "label": "CHARGE",
+          "cell": [2, 0],
+          "shows": "delta-hypersistor.charge",
+          "span": [2, 2]
+        },
+        {
+          "id": "delta",
+          "kind": "nixie",
+          "label": "δ",
+          "cell": [4, 0],
+          "shows": "main-bus-controller.delta",
+          "digits": 4,
+          "span": [4, 1]
+        },
+        {
+          "id": "dumping",
+          "kind": "annunciator",
+          "label": "DUMPING",
+          "cell": [4, 1],
+          "shows": "delta-hypersistor.charge",
+          "threshold": 0.9,
+          "span": [2, 1]
+        },
+        {
+          "id": "full",
+          "kind": "lamp",
+          "label": "FULL",
+          "cell": [8, 0],
+          "shows": "delta-hypersistor.charge",
+          "threshold": 0.9,
+          "span": [1, 1]
+        },
+        {
+          "id": "charge-bar",
+          "kind": "bargraph",
+          "label": "Q",
+          "cell": [9, 0],
+          "shows": "delta-hypersistor.charge",
+          "span": [1, 2]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "charge",
+          "label": "Hypersistor charge",
+          "unit": "C",
+          "scale": 1,
+          "mode": "integrate",
+          "base": 0.0,
+          "lag": 30,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "helmholtz-blatz-coil.field",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "delta-hypersistor.bleed",
+              "weight": -0.6
+            },
+            {
+              "kind": "linear",
+              "source": "delta-hypersistor.dump",
+              "weight": -1.0
+            },
+            {
+              "kind": "linear",
+              "source": "delta-hypersistor.limit",
+              "weight": -0.1
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "oblidisk",
@@ -278,7 +2386,144 @@
     "consequences": [],
     "provenance": "community",
     "frequency": "recurring",
-    "sources": ["https://libreddit.tiekoetter.com/r/VXjunkies"]
+    "sources": ["https://libreddit.tiekoetter.com/r/VXjunkies"],
+    "manufacturer": {
+      "name": "Synclex",
+      "origin": "Tucson",
+      "model": "OD-12 Oblidisk",
+      "pairing": "invented"
+    },
+    "visual_description": "A smoked-glass platter turns on top of a lilac 3U case like a turntable, lit from beneath in violet. Its obliquity is set by a big vernier dial.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "coupling",
+          "kind": "knob",
+          "label": "COUPLING",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "clutch",
+          "kind": "lever",
+          "label": "CLUTCH",
+          "cell": [0, 1],
+          "span": [1, 2]
+        },
+        {
+          "id": "obliquity",
+          "kind": "vernier-dial",
+          "label": "OBLIQUITY",
+          "cell": [1, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "strobe",
+          "kind": "toggle",
+          "label": "STROBE",
+          "cell": [3, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "platter",
+          "kind": "viewport",
+          "label": "PLATTER",
+          "cell": [4, 0],
+          "shows": "oblidisk.rpm",
+          "span": [2, 2]
+        },
+        {
+          "id": "rpm",
+          "kind": "nixie",
+          "label": "RPM",
+          "cell": [6, 0],
+          "shows": "oblidisk.rpm",
+          "digits": 4,
+          "span": [4, 1]
+        },
+        {
+          "id": "sync",
+          "kind": "lamp",
+          "label": "SYNC",
+          "cell": [10, 0],
+          "shows": "oblidisk.rpm",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "wobble",
+          "kind": "oscilloscope",
+          "label": "WOBBLE",
+          "cell": [6, 1],
+          "shows": "oblidisk.rpm",
+          "span": [3, 2]
+        },
+        {
+          "id": "load",
+          "kind": "vu-meter",
+          "label": "LOAD",
+          "cell": [9, 1],
+          "shows": "oblidisk.rpm",
+          "span": [2, 1]
+        },
+        {
+          "id": "tilt",
+          "kind": "edge-meter",
+          "label": "TILT",
+          "cell": [1, 2],
+          "shows": "oblidisk.obliquity",
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "rpm",
+          "label": "Platter speed",
+          "unit": "rpm",
+          "scale": 3300,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 2.5,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "ferrocore.rpm",
+              "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "oblidisk.coupling",
+              "weight": 0.4
+            },
+            {
+              "kind": "linear",
+              "source": "oblidisk.obliquity",
+              "weight": -0.1
+            },
+            {
+              "kind": "linear",
+              "source": "passive-damping-lattice.damping",
+              "weight": -0.2
+            }
+          ],
+          "gates": [
+            {
+              "source": "oblidisk.clutch",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "double-helix-transistor",
@@ -294,7 +2539,126 @@
     "consequences": [],
     "provenance": "community",
     "frequency": "recurring",
-    "sources": ["https://libreddit.tiekoetter.com/r/VXjunkies"]
+    "sources": ["https://libreddit.tiekoetter.com/r/VXjunkies"],
+    "manufacturer": {
+      "name": "Volt Xoccula",
+      "origin": "United States",
+      "model": "DHT-2N Double-Helix Transistor",
+      "pairing": "invented"
+    },
+    "visual_description": "Black 1U strip with a large metal-can transistor on a finned heat sink, its leads visibly twisted. It is labelled 'magnify your oblidisk' in Dymo tape.",
+    "panel": {
+      "units": 1,
+      "grid": {
+        "columns": 12,
+        "rows": 1
+      },
+      "controls": [
+        {
+          "id": "bias",
+          "kind": "knob",
+          "label": "BIAS",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "twist",
+          "kind": "chicken-head",
+          "label": "TWIST",
+          "cell": [1, 0],
+          "positions": ["L", "0", "R"],
+          "span": [1, 1]
+        },
+        {
+          "id": "enable",
+          "kind": "toggle",
+          "label": "ON",
+          "cell": [2, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "gain",
+          "kind": "edge-meter",
+          "label": "GAIN",
+          "cell": [3, 0],
+          "shows": "double-helix-transistor.gain",
+          "span": [2, 1]
+        },
+        {
+          "id": "helix",
+          "kind": "magic-eye",
+          "label": "HELIX",
+          "cell": [5, 0],
+          "shows": "double-helix-transistor.gain",
+          "span": [1, 1]
+        },
+        {
+          "id": "on",
+          "kind": "lamp",
+          "label": "ON",
+          "cell": [6, 0],
+          "shows": "double-helix-transistor.enable",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "hfe",
+          "kind": "nixie",
+          "label": "hFE",
+          "cell": [7, 0],
+          "shows": "double-helix-transistor.gain",
+          "digits": 3,
+          "span": [3, 1]
+        },
+        {
+          "id": "hot",
+          "kind": "flag",
+          "label": "HOT",
+          "cell": [10, 0],
+          "shows": "double-helix-transistor.gain",
+          "threshold": 0.9,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "gain",
+          "label": "Helical gain",
+          "unit": "hFE",
+          "scale": 999,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.5,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "double-helix-transistor.bias",
+              "weight": 0.6
+            },
+            {
+              "kind": "linear",
+              "source": "oblidisk.rpm",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "double-helix-transistor.twist",
+              "weight": 0.1
+            }
+          ],
+          "gates": [
+            {
+              "source": "double-helix-transistor.enable",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "vacuum-tube-relief-valve",
@@ -310,7 +2674,127 @@
     "consequences": [],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/VX_Module_Versions"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/VX_Module_Versions"],
+    "manufacturer": {
+      "name": "Gorskiy",
+      "origin": "Soviet Union",
+      "model": "КП-7 Relief Valve",
+      "pairing": "invented"
+    },
+    "visual_description": "A brass relief valve pokes through a battleship-grey 2U panel, with a red-painted handwheel. A paper inspection tag hangs from it on wire, and the serial is stamped beneath.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "vent-wheel",
+          "kind": "crank",
+          "label": "VENT",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "auto",
+          "kind": "toggle",
+          "label": "AUTO",
+          "cell": [2, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "pop-test",
+          "kind": "push-button",
+          "label": "POP TEST",
+          "cell": [2, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "setpoint",
+          "kind": "thumbwheel",
+          "label": "SET kPa",
+          "cell": [3, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "pressure",
+          "kind": "analogue-meter",
+          "label": "kPa",
+          "cell": [4, 0],
+          "shows": "baltovsky-chamber.pressure",
+          "span": [2, 2]
+        },
+        {
+          "id": "venting",
+          "kind": "vu-meter",
+          "label": "VENT",
+          "cell": [6, 0],
+          "shows": "vacuum-tube-relief-valve.vent",
+          "span": [2, 1]
+        },
+        {
+          "id": "lifting",
+          "kind": "annunciator",
+          "label": "LIFTING",
+          "cell": [6, 1],
+          "shows": "vacuum-tube-relief-valve.vent",
+          "threshold": 0.6,
+          "span": [2, 1]
+        },
+        {
+          "id": "tagged",
+          "kind": "flag",
+          "label": "TAGGED",
+          "cell": [8, 0],
+          "shows": "vacuum-tube-relief-valve.vent",
+          "threshold": 0.95,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "vent",
+          "label": "Relief venting",
+          "unit": "%",
+          "scale": 100,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.7,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "vacuum-tube-relief-valve.vent-wheel",
+              "weight": 0.6
+            },
+            {
+              "kind": "linear",
+              "source": "vacuum-tube-relief-valve.auto",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "baltovsky-chamber.pressure",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "vacuum-tube-relief-valve.setpoint",
+              "weight": -0.1
+            },
+            {
+              "kind": "linear",
+              "source": "vacuum-tube-relief-valve.pop-test",
+              "weight": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "sizing-relay",
@@ -326,7 +2810,118 @@
     "consequences": [],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/VX_Module_Versions"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/VX_Module_Versions"],
+    "manufacturer": {
+      "name": "Wonshou Labs",
+      "origin": "Jinan",
+      "model": "SR-5 Sizing Relay",
+      "pairing": "invented"
+    },
+    "visual_description": "Open-frame relay behind a clear acrylic cover on a red 1U strip, its silver contacts visibly clacking. A five-position size switch has a chicken-head pointer.",
+    "panel": {
+      "units": 1,
+      "grid": {
+        "columns": 12,
+        "rows": 1
+      },
+      "controls": [
+        {
+          "id": "size",
+          "kind": "chicken-head",
+          "label": "SIZE",
+          "cell": [0, 0],
+          "positions": ["XS", "S", "M", "L", "XL"],
+          "span": [1, 1]
+        },
+        {
+          "id": "latch",
+          "kind": "toggle",
+          "label": "LATCH",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "reset",
+          "kind": "push-button",
+          "label": "RESET",
+          "cell": [2, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "engaged",
+          "kind": "lamp",
+          "label": "ENGAGED",
+          "cell": [3, 0],
+          "shows": "sizing-relay.engaged",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "size-display",
+          "kind": "nixie",
+          "label": "SIZE",
+          "cell": [4, 0],
+          "shows": "sizing-relay.size",
+          "digits": 2,
+          "span": [2, 1]
+        },
+        {
+          "id": "contacts",
+          "kind": "annunciator",
+          "label": "CONTACTS",
+          "cell": [6, 0],
+          "shows": "sizing-relay.engaged",
+          "threshold": 0.5,
+          "span": [2, 1]
+        },
+        {
+          "id": "operations",
+          "kind": "dekatron",
+          "label": "OPS",
+          "cell": [8, 0],
+          "shows": "sizing-relay.engaged",
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "engaged",
+          "label": "Relay engaged",
+          "unit": "",
+          "scale": 1,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.2,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "sizing-relay.size",
+              "weight": 0.7
+            },
+            {
+              "kind": "linear",
+              "source": "sizing-relay.latch",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "sizing-relay.reset",
+              "weight": -1.0
+            }
+          ],
+          "gates": [
+            {
+              "source": "ferrocore.capacitivity",
+              "threshold": 0.4
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "cradling-node",
@@ -342,7 +2937,122 @@
     "consequences": [],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/VX_Module_Versions"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/VX_Module_Versions"],
+    "manufacturer": {
+      "name": "Neumann Dynamik",
+      "origin": "Leipzig",
+      "model": "CN-1 Cradling Node",
+      "pairing": "invented"
+    },
+    "visual_description": "Two padded saddle clamps hold a short glass tube across the front of a cream 2U panel. A spirit-level bubble in a round window shows whether the cradle is true.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "clamp",
+          "kind": "slider",
+          "label": "CLAMP",
+          "cell": [0, 0],
+          "span": [1, 2]
+        },
+        {
+          "id": "level",
+          "kind": "knob",
+          "label": "LEVEL",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "lock",
+          "kind": "key-switch",
+          "label": "LOCK",
+          "cell": [1, 1],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "sway",
+          "kind": "analogue-meter",
+          "label": "SWAY",
+          "cell": [2, 0],
+          "shows": "cradling-node.sway",
+          "span": [2, 2]
+        },
+        {
+          "id": "bubble",
+          "kind": "viewport",
+          "label": "LEVEL",
+          "cell": [4, 0],
+          "shows": "cradling-node.sway",
+          "span": [2, 2]
+        },
+        {
+          "id": "rocking",
+          "kind": "annunciator",
+          "label": "ROCKING",
+          "cell": [6, 0],
+          "shows": "cradling-node.sway",
+          "threshold": 0.6,
+          "span": [2, 1]
+        },
+        {
+          "id": "steady",
+          "kind": "lamp",
+          "label": "STEADY",
+          "cell": [6, 1],
+          "shows": "cradling-node.sway",
+          "threshold": 0.2,
+          "invert": true,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "sway",
+          "label": "Cradle sway",
+          "unit": "mm",
+          "scale": 20,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 1.2,
+          "noise": 0.01,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "phase-spindle.rpm",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "oblidisk.rpm",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "cradling-node.clamp",
+              "weight": -0.7
+            },
+            {
+              "kind": "linear",
+              "source": "cradling-node.level",
+              "weight": -0.1
+            },
+            {
+              "kind": "linear",
+              "source": "cradling-node.lock",
+              "weight": -0.2
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "geotransversion-unit",
@@ -358,7 +3068,139 @@
     "consequences": ["enthusiast outrage"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/VX_Module_Versions"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/VX_Module_Versions"],
+    "manufacturer": {
+      "name": "Trager-Feinstein Laboratory",
+      "origin": "United States",
+      "model": "GTU Mk III Geotransversion Unit",
+      "pairing": "invented"
+    },
+    "visual_description": "Black crackle-finish 3U with a brass-bezelled compass rose behind glass and a geared azimuth handwheel. A small clip holds a folded Ordnance-style map.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "azimuth",
+          "kind": "crank",
+          "label": "AZIMUTH",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "declination",
+          "kind": "vernier-dial",
+          "label": "DECLINATION",
+          "cell": [2, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "hemisphere",
+          "kind": "toggle",
+          "label": "N/S",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "fix",
+          "kind": "push-button",
+          "label": "FIX",
+          "cell": [1, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "latitude",
+          "kind": "thumbwheel",
+          "label": "LAT",
+          "cell": [2, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "longitude",
+          "kind": "thumbwheel",
+          "label": "LONG",
+          "cell": [3, 2],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "heading",
+          "kind": "viewport",
+          "label": "HEADING",
+          "cell": [4, 0],
+          "shows": "geotransversion-unit.alignment",
+          "span": [2, 2]
+        },
+        {
+          "id": "alignment",
+          "kind": "analogue-meter",
+          "label": "ALIGN",
+          "cell": [6, 0],
+          "shows": "geotransversion-unit.alignment",
+          "span": [2, 2]
+        },
+        {
+          "id": "fixed",
+          "kind": "lamp",
+          "label": "FIX",
+          "cell": [8, 0],
+          "shows": "geotransversion-unit.alignment",
+          "threshold": 0.8,
+          "span": [1, 1]
+        },
+        {
+          "id": "fixes",
+          "kind": "counter",
+          "label": "FIXES",
+          "cell": [9, 0],
+          "shows": "geotransversion-unit.alignment",
+          "span": [2, 1]
+        },
+        {
+          "id": "transversion",
+          "kind": "chart-recorder",
+          "label": "TRANSVERSION",
+          "cell": [8, 1],
+          "shows": "geotransversion-unit.alignment",
+          "span": [4, 2]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "alignment",
+          "label": "Geotransversal alignment",
+          "unit": "%",
+          "scale": 100,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 2,
+          "influences": [
+            {
+              "kind": "match",
+              "a": "geotransversion-unit.azimuth",
+              "b": "geotransversion-unit.declination",
+              "weight": 0.9
+            },
+            {
+              "kind": "linear",
+              "source": "geotransversion-unit.hemisphere",
+              "weight": 0.05
+            },
+            {
+              "kind": "linear",
+              "source": "geotransversion-unit.fix",
+              "weight": 0.05
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "vx3-master-control-register",
@@ -374,7 +3216,178 @@
     "consequences": ["lost logs"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/ConVX"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/ConVX"],
+    "manufacturer": {
+      "name": "Ottman",
+      "origin": "United States",
+      "model": "Ottman-1200 Control Register",
+      "pairing": "invented"
+    },
+    "visual_description": "A later add-on: a beige 3U box with chunky paddle switches like a minicomputer front panel, red lamps and a Nixie data display. It is obviously newer than everything around it.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "word-hi",
+          "kind": "dip-bank",
+          "label": "WORD HI",
+          "cell": [0, 1],
+          "span": [2, 1]
+        },
+        {
+          "id": "word-lo",
+          "kind": "dip-bank",
+          "label": "WORD LO",
+          "cell": [2, 1],
+          "span": [2, 1]
+        },
+        {
+          "id": "load",
+          "kind": "push-button",
+          "label": "LOAD",
+          "cell": [4, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "run",
+          "kind": "toggle",
+          "label": "RUN/HALT",
+          "cell": [5, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "step",
+          "kind": "push-button",
+          "label": "STEP",
+          "cell": [6, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "examine",
+          "kind": "push-button",
+          "label": "EXAM",
+          "cell": [7, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "panel-key",
+          "kind": "key-switch",
+          "label": "PANEL",
+          "cell": [8, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "address",
+          "kind": "thumbwheel",
+          "label": "ADDR",
+          "cell": [9, 1],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "data",
+          "kind": "nixie",
+          "label": "DATA",
+          "cell": [0, 0],
+          "shows": "vx3-master-control-register.word",
+          "digits": 6,
+          "span": [6, 1]
+        },
+        {
+          "id": "running",
+          "kind": "lamp",
+          "label": "RUN",
+          "cell": [6, 0],
+          "shows": "vx3-master-control-register.run",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "halted",
+          "kind": "lamp",
+          "label": "HALT",
+          "cell": [7, 0],
+          "shows": "vx3-master-control-register.run",
+          "threshold": 0.5,
+          "invert": true,
+          "span": [1, 1]
+        },
+        {
+          "id": "parity",
+          "kind": "annunciator",
+          "label": "PARITY",
+          "cell": [8, 0],
+          "shows": "vx3-master-control-register.word",
+          "threshold": 0.95,
+          "span": [2, 1]
+        },
+        {
+          "id": "cycles",
+          "kind": "counter",
+          "label": "CYCLES",
+          "cell": [10, 0],
+          "shows": "vx3-master-control-register.word",
+          "span": [2, 1]
+        },
+        {
+          "id": "bus-load",
+          "kind": "edge-meter",
+          "label": "BUS",
+          "cell": [0, 2],
+          "shows": "main-bus-controller.load",
+          "span": [2, 1]
+        },
+        {
+          "id": "delta",
+          "kind": "vu-meter",
+          "label": "δ",
+          "cell": [2, 2],
+          "shows": "main-bus-controller.delta",
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "word",
+          "label": "Control word",
+          "unit": "",
+          "scale": 1,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.3,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "vx3-master-control-register.word-hi",
+              "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "vx3-master-control-register.word-lo",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "vx3-master-control-register.load",
+              "weight": 0.2
+            }
+          ],
+          "gates": [
+            {
+              "source": "vx3-master-control-register.run",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "hyperflux-inductor",
@@ -390,7 +3403,160 @@
     "consequences": [],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/List_of_VX_manufacturers"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/List_of_VX_manufacturers"],
+    "manufacturer": {
+      "name": "Neumann Dynamik",
+      "origin": "Leipzig",
+      "model": "HFI-40 Hyperflux Inductor",
+      "pairing": "invented"
+    },
+    "visual_description": "Neumann Dynamik's 4U inductor: a big green-enamelled coil shows through a mesh window, with a polished copper bus bar bolted across the front. It is quietly the most expensive thing in the rack.",
+    "panel": {
+      "units": 4,
+      "grid": {
+        "columns": 12,
+        "rows": 4
+      },
+      "controls": [
+        {
+          "id": "gain",
+          "kind": "vernier-dial",
+          "label": "FLUX GAIN",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "tap",
+          "kind": "rotary-selector",
+          "label": "TAP",
+          "cell": [0, 2],
+          "positions": ["1", "2", "3", "4", "5"],
+          "span": [2, 2]
+        },
+        {
+          "id": "shunt",
+          "kind": "guarded-toggle",
+          "label": "SHUNT",
+          "cell": [2, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "polarity",
+          "kind": "toggle",
+          "label": "POL",
+          "cell": [2, 3],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "coil",
+          "kind": "viewport",
+          "label": "COIL",
+          "cell": [2, 0],
+          "shows": "hyperflux-inductor.flux",
+          "span": [2, 2]
+        },
+        {
+          "id": "flux",
+          "kind": "analogue-meter",
+          "label": "FLUX Wb",
+          "cell": [4, 0],
+          "shows": "hyperflux-inductor.flux",
+          "span": [2, 2]
+        },
+        {
+          "id": "trace",
+          "kind": "oscilloscope",
+          "label": "FLUX",
+          "cell": [6, 0],
+          "shows": "hyperflux-inductor.flux",
+          "span": [3, 2]
+        },
+        {
+          "id": "saturation",
+          "kind": "annunciator",
+          "label": "SATURATION",
+          "cell": [9, 0],
+          "shows": "hyperflux-inductor.flux",
+          "threshold": 0.9,
+          "span": [2, 1]
+        },
+        {
+          "id": "flux-bar",
+          "kind": "bargraph",
+          "label": "Φ",
+          "cell": [11, 0],
+          "shows": "hyperflux-inductor.flux",
+          "span": [1, 2]
+        },
+        {
+          "id": "flux-log",
+          "kind": "chart-recorder",
+          "label": "FLUX",
+          "cell": [3, 2],
+          "shows": "hyperflux-inductor.flux",
+          "span": [4, 2]
+        },
+        {
+          "id": "hum",
+          "kind": "vu-meter",
+          "label": "HUM",
+          "cell": [7, 2],
+          "shows": "hyperflux-inductor.flux",
+          "span": [2, 1]
+        },
+        {
+          "id": "temp",
+          "kind": "thermometer",
+          "label": "TEMP",
+          "cell": [9, 2],
+          "shows": "infrafractor-housing.temp",
+          "span": [1, 2]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "flux",
+          "label": "Hyperflux",
+          "unit": "Wb",
+          "scale": 4,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 2,
+          "noise": 0.02,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "ferrocore.capacitivity",
+              "weight": 0.4
+            },
+            {
+              "kind": "linear",
+              "source": "holtzmann-resonance-coil.resonance",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "hyperflux-inductor.gain",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "hyperflux-inductor.tap",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "hyperflux-inductor.shunt",
+              "weight": -0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "plynost-modulation-rectifier",
@@ -406,7 +3572,154 @@
     "consequences": [],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://vxjunkies.fandom.com/wiki/List_of_VX_manufacturers"]
+    "sources": ["https://vxjunkies.fandom.com/wiki/List_of_VX_manufacturers"],
+    "manufacturer": {
+      "name": "Wonshou Labs",
+      "origin": "Jinan",
+      "model": "PMR-3 Plynost Modulation Rectifier",
+      "pairing": "invented"
+    },
+    "visual_description": "Wonshou's signature red 3U with a stack of black finned rectifier plates on the face and a big RECTIFY lever. An oscilloscope shows the output waveform.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "smoothing",
+          "kind": "crank",
+          "label": "SMOOTHING",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "modulation",
+          "kind": "rotary-selector",
+          "label": "MOD",
+          "cell": [2, 0],
+          "positions": ["AM", "FM", "PM", "PLYNOST"],
+          "span": [2, 2]
+        },
+        {
+          "id": "rectify",
+          "kind": "lever",
+          "label": "RECTIFY",
+          "cell": [4, 0],
+          "span": [1, 2]
+        },
+        {
+          "id": "fuse-test",
+          "kind": "push-button",
+          "label": "FUSE TEST",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "reset",
+          "kind": "push-button",
+          "label": "RESET",
+          "cell": [1, 2],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "ripple",
+          "kind": "analogue-meter",
+          "label": "RIPPLE",
+          "cell": [5, 0],
+          "shows": "plynost-modulation-rectifier.ripple",
+          "span": [2, 2]
+        },
+        {
+          "id": "output",
+          "kind": "oscilloscope",
+          "label": "OUTPUT",
+          "cell": [7, 0],
+          "shows": "plynost-modulation-rectifier.ripple",
+          "span": [3, 2]
+        },
+        {
+          "id": "on",
+          "kind": "lamp",
+          "label": "ON",
+          "cell": [10, 0],
+          "shows": "plynost-modulation-rectifier.rectify",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "fuse",
+          "kind": "flag",
+          "label": "FUSE",
+          "cell": [11, 0],
+          "shows": "plynost-modulation-rectifier.ripple",
+          "threshold": 0.95,
+          "span": [1, 1]
+        },
+        {
+          "id": "dc-out",
+          "kind": "vu-meter",
+          "label": "DC OUT",
+          "cell": [2, 2],
+          "shows": "ballast-variac.volts",
+          "span": [2, 1]
+        },
+        {
+          "id": "hum",
+          "kind": "annunciator",
+          "label": "HUM",
+          "cell": [4, 2],
+          "shows": "plynost-modulation-rectifier.ripple",
+          "threshold": 0.6,
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "ripple",
+          "label": "Output ripple",
+          "unit": "mV",
+          "scale": 800,
+          "mode": "lag",
+          "base": 0.3,
+          "lag": 0.6,
+          "noise": 0.02,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "plynost-modulation-rectifier.smoothing",
+              "weight": -0.4
+            },
+            {
+              "kind": "linear",
+              "source": "plynost-modulation-rectifier.modulation",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "ballast-variac.volts",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "varistance-isolator.isolation",
+              "weight": -0.2
+            }
+          ],
+          "gates": [
+            {
+              "source": "plynost-modulation-rectifier.rectify",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "micro-weave-tachyon-suppressor",
@@ -425,7 +3738,135 @@
     ],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"]
+    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"],
+    "manufacturer": {
+      "name": "Synclex",
+      "origin": "Tucson",
+      "model": "TS-8 Micro-Weave Suppressor",
+      "pairing": "invented"
+    },
+    "visual_description": "Lilac 2U with a domed fine-mesh filter can on the front, a sliding weave adjuster and a degauss button. The mesh shimmers slightly when looked at sideways.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "weave",
+          "kind": "slider",
+          "label": "WEAVE",
+          "cell": [0, 0],
+          "span": [1, 2]
+        },
+        {
+          "id": "density",
+          "kind": "knob",
+          "label": "DENSITY",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "mesh",
+          "kind": "chicken-head",
+          "label": "MESH",
+          "cell": [1, 1],
+          "positions": ["FINE", "STD", "COARSE"],
+          "span": [1, 1]
+        },
+        {
+          "id": "degauss",
+          "kind": "push-button",
+          "label": "DEGAUSS",
+          "cell": [2, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "tachyons",
+          "kind": "analogue-meter",
+          "label": "TACHYONS",
+          "cell": [3, 0],
+          "shows": "micro-weave-tachyon-suppressor.noise",
+          "span": [2, 2]
+        },
+        {
+          "id": "noise",
+          "kind": "oscilloscope",
+          "label": "NOISE",
+          "cell": [5, 0],
+          "shows": "micro-weave-tachyon-suppressor.noise",
+          "span": [3, 2]
+        },
+        {
+          "id": "leak",
+          "kind": "annunciator",
+          "label": "LEAK",
+          "cell": [8, 0],
+          "shows": "micro-weave-tachyon-suppressor.noise",
+          "threshold": 0.7,
+          "span": [2, 1]
+        },
+        {
+          "id": "quiet",
+          "kind": "lamp",
+          "label": "QUIET",
+          "cell": [8, 1],
+          "shows": "micro-weave-tachyon-suppressor.noise",
+          "threshold": 0.3,
+          "invert": true,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "noise",
+          "label": "Tachyon noise",
+          "unit": "t/s",
+          "scale": 1000,
+          "mode": "lag",
+          "base": 0.5,
+          "lag": 0.8,
+          "noise": 0.03,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "micro-weave-tachyon-suppressor.weave",
+              "weight": -0.4
+            },
+            {
+              "kind": "linear",
+              "source": "micro-weave-tachyon-suppressor.density",
+              "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "micro-weave-tachyon-suppressor.mesh",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "double-helix-transistor.gain",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "betaform-amplifier.gain",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "micro-weave-tachyon-suppressor.degauss",
+              "weight": -0.3
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "infrafractor-housing",
@@ -444,7 +3885,148 @@
     "consequences": ["melted housing"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"]
+    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"],
+    "manufacturer": {
+      "name": "Gorskiy",
+      "origin": "Soviet Union",
+      "model": "ИФ-2 Infrafractor Housing",
+      "pairing": "invented"
+    },
+    "visual_description": "Heavy cast-iron 3U housing with a bolted inspection hatch and a small red window that glows when hot. A Cyrillic warning plate is riveted beside a red SCRAM mushroom.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "hatch",
+          "kind": "key-switch",
+          "label": "HATCH",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "vent",
+          "kind": "toggle3",
+          "label": "VENT",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "heater",
+          "kind": "knob",
+          "label": "HEATER",
+          "cell": [0, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "scram",
+          "kind": "mushroom-button",
+          "label": "SCRAM",
+          "cell": [1, 1],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "window",
+          "kind": "viewport",
+          "label": "INFRA",
+          "cell": [2, 0],
+          "shows": "infrafractor-housing.temp",
+          "span": [2, 2]
+        },
+        {
+          "id": "temp",
+          "kind": "thermometer",
+          "label": "TEMP",
+          "cell": [4, 0],
+          "shows": "infrafractor-housing.temp",
+          "span": [1, 2]
+        },
+        {
+          "id": "t-meter",
+          "kind": "analogue-meter",
+          "label": "°K",
+          "cell": [5, 0],
+          "shows": "infrafractor-housing.temp",
+          "span": [2, 2]
+        },
+        {
+          "id": "overtemp",
+          "kind": "annunciator",
+          "label": "OVERTEMP",
+          "cell": [7, 0],
+          "shows": "infrafractor-housing.temp",
+          "threshold": 0.8,
+          "span": [2, 1]
+        },
+        {
+          "id": "hot",
+          "kind": "lamp",
+          "label": "HOT",
+          "cell": [9, 0],
+          "shows": "infrafractor-housing.temp",
+          "threshold": 0.6,
+          "span": [1, 1]
+        },
+        {
+          "id": "t-log",
+          "kind": "chart-recorder",
+          "label": "TEMP",
+          "cell": [7, 1],
+          "shows": "infrafractor-housing.temp",
+          "span": [4, 2]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "temp",
+          "label": "Housing temperature",
+          "unit": "°K",
+          "scale": 900,
+          "mode": "lag",
+          "base": 0.2,
+          "lag": 12,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "meta-stable-flux-plasma-inducer.plasma",
+              "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "betaform-amplifier.gain",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "infrafractor-housing.heater",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "nanocore-bose-einstein-radiator.cooling",
+              "weight": -0.5
+            },
+            {
+              "kind": "linear",
+              "source": "infrafractor-housing.vent",
+              "weight": -0.1
+            },
+            {
+              "kind": "linear",
+              "source": "infrafractor-housing.scram",
+              "weight": -0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "lingden-smith-negative-pressure-chamber",
@@ -460,7 +4042,140 @@
     "consequences": ["suspected microteleportation interference"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"]
+    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"],
+    "manufacturer": {
+      "name": "Neumann Dynamik",
+      "origin": "Leipzig",
+      "model": "LS-6 Negative Pressure Chamber",
+      "pairing": "invented"
+    },
+    "visual_description": "Cream 3U with a thick round desiccator-style glass dome set into the face, a crank-driven evacuation pump and a row of vacuum gauges.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "evacuate",
+          "kind": "crank",
+          "label": "EVACUATE",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "valve",
+          "kind": "toggle",
+          "label": "VALVE",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "backfill",
+          "kind": "push-button",
+          "label": "BACKFILL",
+          "cell": [1, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "gauge-range",
+          "kind": "chicken-head",
+          "label": "RANGE",
+          "cell": [2, 2],
+          "positions": ["mbar", "µbar", "nbar"],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "pressure",
+          "kind": "analogue-meter",
+          "label": "–mbar",
+          "cell": [2, 0],
+          "shows": "lingden-smith-negative-pressure-chamber.pressure",
+          "span": [2, 2]
+        },
+        {
+          "id": "pirani",
+          "kind": "edge-meter",
+          "label": "PIRANI",
+          "cell": [4, 0],
+          "shows": "lingden-smith-negative-pressure-chamber.pressure",
+          "span": [2, 1]
+        },
+        {
+          "id": "ion-gauge",
+          "kind": "magic-eye",
+          "label": "ION",
+          "cell": [4, 1],
+          "shows": "lingden-smith-negative-pressure-chamber.pressure",
+          "span": [1, 1]
+        },
+        {
+          "id": "vacuum",
+          "kind": "lamp",
+          "label": "VACUUM",
+          "cell": [5, 1],
+          "shows": "lingden-smith-negative-pressure-chamber.pressure",
+          "threshold": 0.6,
+          "span": [1, 1]
+        },
+        {
+          "id": "log",
+          "kind": "chart-recorder",
+          "label": "PRESSURE",
+          "cell": [6, 0],
+          "shows": "lingden-smith-negative-pressure-chamber.pressure",
+          "span": [4, 2]
+        },
+        {
+          "id": "implosion",
+          "kind": "annunciator",
+          "label": "IMPLOSION RISK",
+          "cell": [6, 2],
+          "shows": "lingden-smith-negative-pressure-chamber.pressure",
+          "threshold": 0.95,
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "pressure",
+          "label": "Negative pressure",
+          "unit": "mbar",
+          "scale": 1000,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 10,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "lingden-smith-negative-pressure-chamber.evacuate",
+              "weight": 0.6
+            },
+            {
+              "kind": "linear",
+              "source": "electron-pump.flow",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "lingden-smith-negative-pressure-chamber.backfill",
+              "weight": -0.8
+            }
+          ],
+          "gates": [
+            {
+              "source": "lingden-smith-negative-pressure-chamber.valve",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "passive-damping-lattice",
@@ -476,7 +4191,110 @@
     "consequences": ["nearly lost two years of work"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"]
+    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"],
+    "manufacturer": {
+      "name": "Volt Xoccula",
+      "origin": "United States",
+      "model": "PDL-2 Damping Lattice",
+      "pairing": "invented"
+    },
+    "visual_description": "A brass lattice of taut wires is stretched across the front of a grey 2U panel like a tiny harp. A tension vernier tightens it, and it rings when tapped.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "tension",
+          "kind": "vernier-dial",
+          "label": "TENSION",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "lock",
+          "kind": "toggle",
+          "label": "LOCK",
+          "cell": [2, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "tap",
+          "kind": "push-button",
+          "label": "TAP TEST",
+          "cell": [2, 1],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "damping",
+          "kind": "analogue-meter",
+          "label": "DAMPING",
+          "cell": [3, 0],
+          "shows": "passive-damping-lattice.damping",
+          "span": [2, 2]
+        },
+        {
+          "id": "ring-down",
+          "kind": "oscilloscope",
+          "label": "RING-DOWN",
+          "cell": [5, 0],
+          "shows": "passive-damping-lattice.damping",
+          "span": [3, 2]
+        },
+        {
+          "id": "slack",
+          "kind": "annunciator",
+          "label": "SLACK",
+          "cell": [8, 0],
+          "shows": "passive-damping-lattice.damping",
+          "threshold": 0.2,
+          "invert": true,
+          "span": [2, 1]
+        },
+        {
+          "id": "resonance",
+          "kind": "vu-meter",
+          "label": "RESONANCE",
+          "cell": [8, 1],
+          "shows": "main-bus-controller.instability",
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "damping",
+          "label": "Lattice damping",
+          "unit": "%",
+          "scale": 100,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 1.5,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "passive-damping-lattice.tension",
+              "weight": 0.8
+            },
+            {
+              "kind": "linear",
+              "source": "passive-damping-lattice.lock",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "passive-damping-lattice.tap",
+              "weight": -0.3
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "bohr-schreiffer-phase-cell",
@@ -492,7 +4310,144 @@
     "consequences": ["bystanders standing too close"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"]
+    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"],
+    "manufacturer": {
+      "name": "Synclex",
+      "origin": "Tucson",
+      "model": "BSC-4 Hyperorbital Phase Cell",
+      "pairing": "invented"
+    },
+    "visual_description": "A windowed cell with metal-framed viewports, set in a lilac 3U panel. Inside, a little orbital model glows, and an X-Y scope traces the phase as a Lissajous figure.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "phase-set",
+          "kind": "vernier-dial",
+          "label": "PHASE",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "orbit",
+          "kind": "rotary-selector",
+          "label": "ORBIT",
+          "cell": [2, 0],
+          "positions": ["K", "L", "M", "N"],
+          "span": [2, 2]
+        },
+        {
+          "id": "cell",
+          "kind": "toggle",
+          "label": "CELL",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "quench",
+          "kind": "push-button",
+          "label": "QUENCH",
+          "cell": [1, 2],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "lissajous",
+          "kind": "oscilloscope",
+          "label": "PHASE",
+          "cell": [4, 0],
+          "shows": "bohr-schreiffer-phase-cell.phase",
+          "span": [3, 2]
+        },
+        {
+          "id": "lock",
+          "kind": "lamp",
+          "label": "LOCK",
+          "cell": [7, 0],
+          "shows": "bohr-schreiffer-phase-cell.phase",
+          "threshold": 0.85,
+          "span": [1, 1]
+        },
+        {
+          "id": "phase-meter",
+          "kind": "analogue-meter",
+          "label": "φ",
+          "cell": [8, 0],
+          "shows": "bohr-schreiffer-phase-cell.phase",
+          "span": [2, 2]
+        },
+        {
+          "id": "orbit-n",
+          "kind": "nixie",
+          "label": "n",
+          "cell": [10, 0],
+          "shows": "bohr-schreiffer-phase-cell.orbit",
+          "digits": 2,
+          "span": [2, 1]
+        },
+        {
+          "id": "slip",
+          "kind": "annunciator",
+          "label": "SLIP",
+          "cell": [2, 2],
+          "shows": "bohr-schreiffer-phase-cell.phase",
+          "threshold": 0.3,
+          "invert": true,
+          "span": [2, 1]
+        },
+        {
+          "id": "q",
+          "kind": "magic-eye",
+          "label": "Q",
+          "cell": [4, 2],
+          "shows": "bohr-schreiffer-phase-cell.phase",
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "phase",
+          "label": "Phase coherence",
+          "unit": "φ",
+          "scale": 1,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 1.0,
+          "noise": 0.01,
+          "influences": [
+            {
+              "kind": "match",
+              "a": "bohr-schreiffer-phase-cell.phase-set",
+              "b": "phase-spindle.rpm",
+              "weight": 0.9
+            },
+            {
+              "kind": "linear",
+              "source": "bohr-schreiffer-phase-cell.orbit",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "bohr-schreiffer-phase-cell.quench",
+              "weight": -1.0
+            }
+          ],
+          "gates": [
+            {
+              "source": "bohr-schreiffer-phase-cell.cell",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "electron-pump",
@@ -508,7 +4463,145 @@
     "consequences": ["characteristic patina"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"]
+    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"],
+    "manufacturer": {
+      "name": "Bonk Industries",
+      "origin": "United States",
+      "model": "Model 9 Electron Pump",
+      "pairing": "invented"
+    },
+    "visual_description": "A chrome piston pump with a visible flywheel spins behind a window in an orange 3U panel. There is a crank handle on the front for when the motor sulks.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "stroke",
+          "kind": "crank",
+          "label": "STROKE",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "prime",
+          "kind": "plunger",
+          "label": "PRIME",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "valve",
+          "kind": "toggle3",
+          "label": "VALVE",
+          "cell": [1, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "governor",
+          "kind": "knob",
+          "label": "GOV",
+          "cell": [2, 2],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "flywheel",
+          "kind": "viewport",
+          "label": "FLYWHEEL",
+          "cell": [2, 0],
+          "shows": "electron-pump.flow",
+          "span": [2, 2]
+        },
+        {
+          "id": "flow",
+          "kind": "analogue-meter",
+          "label": "e⁻/s",
+          "cell": [4, 0],
+          "shows": "electron-pump.flow",
+          "span": [2, 2]
+        },
+        {
+          "id": "strokes",
+          "kind": "counter",
+          "label": "STROKES",
+          "cell": [6, 0],
+          "shows": "electron-pump.flow",
+          "span": [2, 1]
+        },
+        {
+          "id": "cavitation",
+          "kind": "annunciator",
+          "label": "CAVITATION",
+          "cell": [6, 1],
+          "shows": "electron-pump.flow",
+          "threshold": 0.9,
+          "span": [2, 1]
+        },
+        {
+          "id": "flow-bar",
+          "kind": "bargraph",
+          "label": "FLOW",
+          "cell": [8, 0],
+          "shows": "electron-pump.flow",
+          "span": [1, 2]
+        },
+        {
+          "id": "primed",
+          "kind": "lamp",
+          "label": "PRIMED",
+          "cell": [9, 0],
+          "shows": "electron-pump.flow",
+          "threshold": 0.2,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "flow",
+          "label": "Electron flow",
+          "unit": "e⁻/s",
+          "scale": 1e18,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 2,
+          "noise": 0.01,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "electron-pump.stroke",
+              "weight": 0.7
+            },
+            {
+              "kind": "linear",
+              "source": "electron-pump.prime",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "electron-pump.valve",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "electron-pump.governor",
+              "weight": -0.1
+            }
+          ],
+          "gates": [
+            {
+              "source": "ballast-variac.volts",
+              "threshold": 0.2
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "hydromagnetic-tau-induction-connector",
@@ -524,7 +4617,137 @@
     "consequences": ["nearly sacrificed a thousand-dollar model"],
     "provenance": "community",
     "frequency": "one-off",
-    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"]
+    "sources": ["https://libreddit.app.runonflux.io/r/VXJunkies"],
+    "manufacturer": {
+      "name": "Wonshou Labs",
+      "origin": "Jinan",
+      "model": "TC-12 Tau-Induction Connector",
+      "pairing": "invented"
+    },
+    "visual_description": "A big multi-pin connector with red and blue cables mates into the face of a red 2U panel behind a locking lever. A small flow-glass shows dark fluid circulating.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "engage",
+          "kind": "lever",
+          "label": "ENGAGE",
+          "cell": [0, 0],
+          "span": [1, 2]
+        },
+        {
+          "id": "tune",
+          "kind": "knob",
+          "label": "TAU",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "coolant",
+          "kind": "toggle",
+          "label": "COOL",
+          "cell": [1, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "flush",
+          "kind": "push-button",
+          "label": "FLUSH",
+          "cell": [2, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "coupling",
+          "kind": "analogue-meter",
+          "label": "τ",
+          "cell": [3, 0],
+          "shows": "hydromagnetic-tau-induction-connector.coupling",
+          "span": [2, 2]
+        },
+        {
+          "id": "flow-glass",
+          "kind": "viewport",
+          "label": "FLOW",
+          "cell": [5, 0],
+          "shows": "hydromagnetic-tau-induction-connector.coupling",
+          "span": [2, 2]
+        },
+        {
+          "id": "mated",
+          "kind": "lamp",
+          "label": "MATED",
+          "cell": [7, 0],
+          "shows": "hydromagnetic-tau-induction-connector.engage",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "seepage",
+          "kind": "annunciator",
+          "label": "SEEPAGE",
+          "cell": [8, 0],
+          "shows": "hydromagnetic-tau-induction-connector.coupling",
+          "threshold": 0.85,
+          "span": [2, 1]
+        },
+        {
+          "id": "tau",
+          "kind": "nixie",
+          "label": "τ ms",
+          "cell": [7, 1],
+          "shows": "hydromagnetic-tau-induction-connector.coupling",
+          "digits": 3,
+          "span": [3, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "coupling",
+          "label": "Tau coupling",
+          "unit": "τ",
+          "scale": 1,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 1.2,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "hydromagnetic-tau-induction-connector.tune",
+              "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "hydromagnetic-tau-induction-connector.coolant",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "nanocore-bose-einstein-radiator.cooling",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "hydromagnetic-tau-induction-connector.flush",
+              "weight": -0.5
+            }
+          ],
+          "gates": [
+            {
+              "source": "hydromagnetic-tau-induction-connector.engage",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "holtzmann-resonance-coil",
@@ -542,7 +4765,147 @@
     "frequency": "one-off",
     "sources": [
       "https://www.reddit.com/r/VXJunkies/comments/stbk2x/what_the_hell_are_you_guys_taking_about/"
-    ]
+    ],
+    "manufacturer": {
+      "name": "Volt Xoccula",
+      "origin": "United States",
+      "model": "HRC-1 Holtzmann Resonance Coil",
+      "pairing": "invented"
+    },
+    "visual_description": "A tall, open-wound copper coil stands in a cut-out of the grey 3U panel, with a magic-eye tuning indicator. The fine tuning vernier is worn shiny.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "tune",
+          "kind": "vernier-dial",
+          "label": "TUNE",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "q-switch",
+          "kind": "toggle",
+          "label": "HIGH Q",
+          "cell": [2, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "band",
+          "kind": "chicken-head",
+          "label": "BAND",
+          "cell": [2, 1],
+          "positions": ["I", "II", "III"],
+          "span": [1, 1]
+        },
+        {
+          "id": "ring",
+          "kind": "push-button",
+          "label": "RING",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "damp",
+          "kind": "toggle",
+          "label": "DAMP",
+          "cell": [1, 2],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "resonance",
+          "kind": "analogue-meter",
+          "label": "RESONANCE",
+          "cell": [3, 0],
+          "shows": "holtzmann-resonance-coil.resonance",
+          "span": [2, 2]
+        },
+        {
+          "id": "eye",
+          "kind": "magic-eye",
+          "label": "TUNE",
+          "cell": [5, 0],
+          "shows": "holtzmann-resonance-coil.resonance",
+          "span": [1, 1]
+        },
+        {
+          "id": "ring-scope",
+          "kind": "oscilloscope",
+          "label": "RING",
+          "cell": [6, 0],
+          "shows": "holtzmann-resonance-coil.resonance",
+          "span": [3, 2]
+        },
+        {
+          "id": "peak",
+          "kind": "lamp",
+          "label": "PEAK",
+          "cell": [9, 0],
+          "shows": "holtzmann-resonance-coil.resonance",
+          "threshold": 0.85,
+          "span": [1, 1]
+        },
+        {
+          "id": "res-bar",
+          "kind": "bargraph",
+          "label": "Q",
+          "cell": [10, 0],
+          "shows": "holtzmann-resonance-coil.resonance",
+          "span": [1, 2]
+        },
+        {
+          "id": "frequency",
+          "kind": "nixie",
+          "label": "Hz",
+          "cell": [3, 2],
+          "shows": "ferrocore.rpm",
+          "digits": 5,
+          "span": [5, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "resonance",
+          "label": "Holtzmann resonance",
+          "unit": "Q",
+          "scale": 1,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.8,
+          "influences": [
+            {
+              "kind": "match",
+              "a": "holtzmann-resonance-coil.tune",
+              "b": "ferrocore.rpm",
+              "weight": 0.8
+            },
+            {
+              "kind": "linear",
+              "source": "holtzmann-resonance-coil.q-switch",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "holtzmann-resonance-coil.damp",
+              "weight": -0.3
+            },
+            {
+              "kind": "linear",
+              "source": "holtzmann-resonance-coil.ring",
+              "weight": 0.2
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "meta-stable-flux-plasma-inducer",
@@ -560,7 +4923,179 @@
     "frequency": "one-off",
     "sources": [
       "https://www.reddit.com/r/VXJunkies/comments/stbk2x/what_the_hell_are_you_guys_taking_about/"
-    ]
+    ],
+    "manufacturer": {
+      "name": "Gorskiy",
+      "origin": "Soviet Union",
+      "model": "ПИ-4 Plasma Inducer",
+      "pairing": "invented"
+    },
+    "visual_description": "A bulbous glass plasma globe crackles with violet filaments inside a steel cage on the face of an olive 4U chassis. Heavy Soviet toggles sit beside a mode selector that goes up to META.",
+    "panel": {
+      "units": 4,
+      "grid": {
+        "columns": 12,
+        "rows": 4
+      },
+      "controls": [
+        {
+          "id": "strike",
+          "kind": "push-button",
+          "label": "STRIKE",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "bias",
+          "kind": "knob",
+          "label": "BIAS",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "contain",
+          "kind": "guarded-toggle",
+          "label": "CONTAIN",
+          "cell": [0, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "sustain",
+          "kind": "knob",
+          "label": "SUSTAIN",
+          "cell": [1, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "mode",
+          "kind": "rotary-selector",
+          "label": "MODE",
+          "cell": [0, 2],
+          "positions": ["OFF", "PULSE", "CW", "META"],
+          "span": [2, 2]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "globe",
+          "kind": "viewport",
+          "label": "PLASMA",
+          "cell": [2, 0],
+          "shows": "meta-stable-flux-plasma-inducer.plasma",
+          "span": [2, 2]
+        },
+        {
+          "id": "plasma",
+          "kind": "analogue-meter",
+          "label": "PLASMA",
+          "cell": [4, 0],
+          "shows": "meta-stable-flux-plasma-inducer.plasma",
+          "span": [2, 2]
+        },
+        {
+          "id": "spectrum",
+          "kind": "oscilloscope",
+          "label": "SPECTRUM",
+          "cell": [6, 0],
+          "shows": "meta-stable-flux-plasma-inducer.plasma",
+          "span": [3, 2]
+        },
+        {
+          "id": "metastable",
+          "kind": "annunciator",
+          "label": "METASTABLE",
+          "cell": [9, 0],
+          "shows": "meta-stable-flux-plasma-inducer.plasma",
+          "threshold": 0.7,
+          "span": [2, 1]
+        },
+        {
+          "id": "lit",
+          "kind": "lamp",
+          "label": "LIT",
+          "cell": [11, 0],
+          "shows": "meta-stable-flux-plasma-inducer.plasma",
+          "threshold": 0.1,
+          "span": [1, 1]
+        },
+        {
+          "id": "log",
+          "kind": "chart-recorder",
+          "label": "PLASMA",
+          "cell": [2, 2],
+          "shows": "meta-stable-flux-plasma-inducer.plasma",
+          "span": [4, 2]
+        },
+        {
+          "id": "temp",
+          "kind": "thermometer",
+          "label": "TEMP",
+          "cell": [6, 2],
+          "shows": "infrafractor-housing.temp",
+          "span": [1, 2]
+        },
+        {
+          "id": "strikes",
+          "kind": "dekatron",
+          "label": "STRIKES",
+          "cell": [7, 2],
+          "shows": "meta-stable-flux-plasma-inducer.plasma",
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "plasma",
+          "label": "Plasma density",
+          "unit": "n",
+          "scale": 1,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 1.5,
+          "noise": 0.03,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "isolated-frame-flux-emitter.output",
+              "weight": 0.4
+            },
+            {
+              "kind": "linear",
+              "source": "meta-stable-flux-plasma-inducer.strike",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "meta-stable-flux-plasma-inducer.bias",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "meta-stable-flux-plasma-inducer.sustain",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "meta-stable-flux-plasma-inducer.mode",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "lingden-smith-negative-pressure-chamber.pressure",
+              "weight": -0.3
+            }
+          ],
+          "gates": [
+            {
+              "source": "meta-stable-flux-plasma-inducer.contain",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "control-panel-display",
@@ -579,7 +5114,128 @@
     "sources": [
       "https://libreddit.tiekoetter.com/r/VXjunkies",
       "https://libreddit.app.runonflux.io/r/VXJunkies"
-    ]
+    ],
+    "manufacturer": {
+      "name": "Volt Xoccula",
+      "origin": "United States",
+      "model": "CPD-5 Status Display",
+      "pairing": "invented"
+    },
+    "visual_description": "A green-phosphor CRT under a black hood in a grey 2U panel shows a status page in chunky vector characters. The bezel is fingerprinted where people point at it.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "intensity",
+          "kind": "knob",
+          "label": "INTENSITY",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "page",
+          "kind": "rotary-selector",
+          "label": "PAGE",
+          "cell": [1, 0],
+          "positions": ["δ", "FIELD", "CORE", "BUS"],
+          "span": [2, 2]
+        },
+        {
+          "id": "hold",
+          "kind": "toggle",
+          "label": "HOLD",
+          "cell": [3, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "degauss",
+          "kind": "push-button",
+          "label": "DEGAUSS",
+          "cell": [3, 1],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "crt",
+          "kind": "oscilloscope",
+          "label": "STATUS",
+          "cell": [4, 0],
+          "shows": "main-bus-controller.delta",
+          "span": [3, 2]
+        },
+        {
+          "id": "delta",
+          "kind": "nixie",
+          "label": "δ",
+          "cell": [7, 0],
+          "shows": "main-bus-controller.delta",
+          "digits": 4,
+          "span": [4, 1]
+        },
+        {
+          "id": "alarm",
+          "kind": "annunciator",
+          "label": "ALARM",
+          "cell": [7, 1],
+          "shows": "main-bus-controller.strain",
+          "threshold": 0.6,
+          "span": [2, 1]
+        },
+        {
+          "id": "stability",
+          "kind": "vu-meter",
+          "label": "STAB",
+          "cell": [9, 1],
+          "shows": "main-bus-controller.instability",
+          "span": [2, 1]
+        },
+        {
+          "id": "power",
+          "kind": "lamp",
+          "label": "PWR",
+          "cell": [11, 0],
+          "shows": "control-panel-display.brightness",
+          "threshold": 0.1,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "brightness",
+          "label": "Display brightness",
+          "unit": "%",
+          "scale": 100,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.5,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "control-panel-display.intensity",
+              "weight": 0.9
+            },
+            {
+              "kind": "linear",
+              "source": "control-panel-display.degauss",
+              "weight": 0.1
+            }
+          ],
+          "gates": [
+            {
+              "source": "ballast-variac.volts",
+              "threshold": 0.2
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "faraday-suit",
@@ -598,7 +5254,106 @@
     "sources": [
       "https://vxjunkies.fandom.com/wiki/Getting_Started",
       "https://libreddit.tiekoetter.com/r/VXjunkies"
-    ]
+    ],
+    "manufacturer": {
+      "name": "Bonk Industries",
+      "origin": "United States",
+      "model": "Model 3 Suit Interlock",
+      "pairing": "invented"
+    },
+    "visual_description": "A 1U interlock strip with a crocodile-clip grounding lead coiled on a hook. The suit itself hangs on the wall nearby, and a NO SUIT tile glows red until the operator clips on.",
+    "panel": {
+      "units": 1,
+      "grid": {
+        "columns": 12,
+        "rows": 1
+      },
+      "controls": [
+        {
+          "id": "ground-clip",
+          "kind": "toggle",
+          "label": "CLIP",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "continuity",
+          "kind": "push-button",
+          "label": "TEST",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "interlock",
+          "kind": "key-switch",
+          "label": "INTERLOCK",
+          "cell": [2, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "grounded",
+          "kind": "lamp",
+          "label": "GROUNDED",
+          "cell": [3, 0],
+          "shows": "faraday-suit.grounding",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "ohms",
+          "kind": "edge-meter",
+          "label": "Ω",
+          "cell": [4, 0],
+          "shows": "faraday-suit.grounding",
+          "span": [2, 1]
+        },
+        {
+          "id": "no-suit",
+          "kind": "annunciator",
+          "label": "NO SUIT",
+          "cell": [6, 0],
+          "shows": "faraday-suit.grounding",
+          "threshold": 0.5,
+          "invert": true,
+          "span": [2, 1]
+        },
+        {
+          "id": "static",
+          "kind": "vu-meter",
+          "label": "STATIC",
+          "cell": [8, 0],
+          "shows": "ion-insulation-plate.leakage",
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "grounding",
+          "label": "Operator grounding",
+          "unit": "%",
+          "scale": 100,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.3,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "faraday-suit.ground-clip",
+              "weight": 0.8
+            },
+            {
+              "kind": "linear",
+              "source": "faraday-suit.interlock",
+              "weight": 0.2
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "helmholtz-blatz-coil",
@@ -617,7 +5372,198 @@
     ],
     "provenance": "invented",
     "frequency": "one-off",
-    "sources": []
+    "sources": [],
+    "manufacturer": {
+      "name": "Volt Xoccula",
+      "origin": "United States",
+      "model": "HB-2 Helmholtz-Blatz Coil Pair",
+      "pairing": "invented"
+    },
+    "visual_description": "Volt Xoccula's flagship 4U: two copper air-core coils face each other through a big window, and the field between them is visible as a faint blue shimmer. Two large verniers set FIELD and BLATZ TRIM.",
+    "panel": {
+      "units": 4,
+      "grid": {
+        "columns": 12,
+        "rows": 4
+      },
+      "controls": [
+        {
+          "id": "field-set",
+          "kind": "vernier-dial",
+          "label": "FIELD",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "trim",
+          "kind": "vernier-dial",
+          "label": "BLATZ TRIM",
+          "cell": [2, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "energise",
+          "kind": "guarded-toggle",
+          "label": "ENERGISE",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "polarity",
+          "kind": "toggle",
+          "label": "POL",
+          "cell": [1, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "fine-trim",
+          "kind": "trimpot",
+          "label": "FINE",
+          "cell": [2, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "flip",
+          "kind": "push-button",
+          "label": "FLIP",
+          "cell": [3, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "coils",
+          "kind": "chicken-head",
+          "label": "COILS",
+          "cell": [0, 3],
+          "positions": ["A", "A+B", "B"],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "window",
+          "kind": "viewport",
+          "label": "COILS",
+          "cell": [4, 0],
+          "shows": "helmholtz-blatz-coil.field",
+          "span": [2, 2]
+        },
+        {
+          "id": "field-meter",
+          "kind": "analogue-meter",
+          "label": "mBz",
+          "cell": [6, 0],
+          "shows": "helmholtz-blatz-coil.field",
+          "span": [2, 2]
+        },
+        {
+          "id": "blatz",
+          "kind": "vu-meter",
+          "label": "BLATZ",
+          "cell": [8, 0],
+          "shows": "main-bus-controller.instability",
+          "span": [2, 1]
+        },
+        {
+          "id": "locked",
+          "kind": "lamp",
+          "label": "LOCKED",
+          "cell": [10, 0],
+          "shows": "main-bus-controller.instability",
+          "threshold": 0.1,
+          "invert": true,
+          "span": [1, 1]
+        },
+        {
+          "id": "wander",
+          "kind": "annunciator",
+          "label": "WANDER",
+          "cell": [8, 1],
+          "shows": "main-bus-controller.instability",
+          "threshold": 0.55,
+          "span": [2, 1]
+        },
+        {
+          "id": "field-log",
+          "kind": "chart-recorder",
+          "label": "FIELD",
+          "cell": [4, 2],
+          "shows": "helmholtz-blatz-coil.field",
+          "span": [4, 2]
+        },
+        {
+          "id": "field-bar",
+          "kind": "bargraph",
+          "label": "H-B",
+          "cell": [8, 2],
+          "shows": "helmholtz-blatz-coil.field",
+          "span": [1, 2]
+        },
+        {
+          "id": "blatz-scope",
+          "kind": "oscilloscope",
+          "label": "BLATZ",
+          "cell": [9, 2],
+          "shows": "main-bus-controller.instability",
+          "span": [3, 2]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "field",
+          "label": "Helmholtz-Blatz field",
+          "unit": "mBz",
+          "scale": 400,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 3,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "hyperflux-inductor.flux",
+              "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "helmholtz-blatz-coil.field-set",
+              "weight": 0.5
+            }
+          ],
+          "gates": [
+            {
+              "source": "helmholtz-blatz-coil.energise",
+              "threshold": 0.5
+            },
+            {
+              "source": "phase-spindle.rpm",
+              "threshold": 0.2
+            }
+          ]
+        },
+        {
+          "id": "trim-set",
+          "label": "Blatz trim setting",
+          "unit": "",
+          "scale": 1,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.2,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "helmholtz-blatz-coil.trim",
+              "weight": 0.9
+            },
+            {
+              "kind": "linear",
+              "source": "helmholtz-blatz-coil.fine-trim",
+              "weight": 0.1
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "phase-spindle",
@@ -635,7 +5581,153 @@
     ],
     "provenance": "invented",
     "frequency": "one-off",
-    "sources": []
+    "sources": [],
+    "manufacturer": {
+      "name": "Bonk Industries",
+      "origin": "United States",
+      "model": "Model 12 Phase Spindle",
+      "pairing": "invented"
+    },
+    "visual_description": "A brass shaft turns in pillow-block bearings behind a window, with a black-and-white stripe for the strobe. A belt runs from a small motor at one side, and a hand-painted sign reads KEEP TIES CLEAR.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "ratio",
+          "kind": "knob",
+          "label": "RATIO",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "spin",
+          "kind": "toggle",
+          "label": "SPIN",
+          "cell": [0, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "jog",
+          "kind": "push-button",
+          "label": "JOG",
+          "cell": [0, 2],
+          "span": [1, 1]
+        },
+        {
+          "id": "strobe",
+          "kind": "toggle",
+          "label": "STROBE",
+          "cell": [1, 2],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "spindle",
+          "kind": "viewport",
+          "label": "SPINDLE",
+          "cell": [1, 0],
+          "shows": "phase-spindle.rpm",
+          "span": [2, 2]
+        },
+        {
+          "id": "tacho",
+          "kind": "analogue-meter",
+          "label": "rpm",
+          "cell": [3, 0],
+          "shows": "phase-spindle.rpm",
+          "span": [2, 2]
+        },
+        {
+          "id": "phase",
+          "kind": "oscilloscope",
+          "label": "PHASE",
+          "cell": [5, 0],
+          "shows": "phase-spindle.rpm",
+          "span": [3, 2]
+        },
+        {
+          "id": "rpm",
+          "kind": "nixie",
+          "label": "RPM",
+          "cell": [8, 0],
+          "shows": "phase-spindle.rpm",
+          "digits": 4,
+          "span": [4, 1]
+        },
+        {
+          "id": "overspeed",
+          "kind": "annunciator",
+          "label": "OVERSPEED",
+          "cell": [8, 1],
+          "shows": "phase-spindle.rpm",
+          "threshold": 0.9,
+          "span": [2, 1]
+        },
+        {
+          "id": "revs",
+          "kind": "counter",
+          "label": "REVS",
+          "cell": [10, 1],
+          "shows": "phase-spindle.rpm",
+          "span": [2, 1]
+        },
+        {
+          "id": "ties",
+          "kind": "flag",
+          "label": "TIES",
+          "cell": [3, 2],
+          "shows": "phase-spindle.rpm",
+          "threshold": 0.6,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "rpm",
+          "label": "Spindle speed",
+          "unit": "rpm",
+          "scale": 3600,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 2.5,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "oblidisk.rpm",
+              "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "phase-spindle.ratio",
+              "weight": 0.4
+            },
+            {
+              "kind": "linear",
+              "source": "phase-spindle.jog",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "governor-flyweights.limit",
+              "weight": -0.2
+            }
+          ],
+          "gates": [
+            {
+              "source": "phase-spindle.spin",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "ferrocore-warming-oven",
@@ -651,7 +5743,146 @@
     "consequences": ["the kitchen smells of ozone for a week"],
     "provenance": "invented",
     "frequency": "one-off",
-    "sources": []
+    "sources": [],
+    "manufacturer": {
+      "name": "Neumann Dynamik",
+      "origin": "Leipzig",
+      "model": "WO-1 Ferrocore Warming Oven",
+      "pairing": "invented"
+    },
+    "visual_description": "A cream 2U drawer oven with a small glass door, an orange element glow inside and a bimetal thermostat dial. It smells faintly of hot dust.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "power",
+          "kind": "toggle",
+          "label": "OVEN",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "door",
+          "kind": "key-switch",
+          "label": "DOOR",
+          "cell": [0, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "thermostat",
+          "kind": "knob",
+          "label": "THERMOSTAT",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "timer",
+          "kind": "chicken-head",
+          "label": "TIMER",
+          "cell": [1, 1],
+          "positions": ["0", "15", "30", "60"],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "temp",
+          "kind": "analogue-meter",
+          "label": "°C",
+          "cell": [2, 0],
+          "shows": "ferrocore-warming-oven.temp",
+          "span": [2, 2]
+        },
+        {
+          "id": "thermometer",
+          "kind": "thermometer",
+          "label": "°C",
+          "cell": [4, 0],
+          "shows": "ferrocore-warming-oven.temp",
+          "span": [1, 2]
+        },
+        {
+          "id": "ready",
+          "kind": "lamp",
+          "label": "READY",
+          "cell": [5, 0],
+          "shows": "ferrocore-warming-oven.temp",
+          "threshold": 0.6,
+          "span": [1, 1]
+        },
+        {
+          "id": "heating",
+          "kind": "lamp",
+          "label": "HEAT",
+          "cell": [5, 1],
+          "shows": "ferrocore-warming-oven.power",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "window",
+          "kind": "viewport",
+          "label": "OVEN",
+          "cell": [6, 0],
+          "shows": "ferrocore-warming-oven.temp",
+          "span": [2, 2]
+        },
+        {
+          "id": "overbake",
+          "kind": "annunciator",
+          "label": "OVERBAKE",
+          "cell": [8, 0],
+          "shows": "ferrocore-warming-oven.temp",
+          "threshold": 0.95,
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "temp",
+          "label": "Oven temperature",
+          "unit": "°C",
+          "scale": 400,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 20,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "ferrocore-warming-oven.thermostat",
+              "weight": 0.7
+            },
+            {
+              "kind": "linear",
+              "source": "ballast-variac.volts",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore-warming-oven.timer",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore-warming-oven.door",
+              "weight": -0.2
+            }
+          ],
+          "gates": [
+            {
+              "source": "ferrocore-warming-oven.power",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "milliblatz-meter",
@@ -667,7 +5898,119 @@
     "consequences": ["the needle points at the neighbour's house afterwards"],
     "provenance": "invented",
     "frequency": "one-off",
-    "sources": []
+    "sources": [],
+    "manufacturer": {
+      "name": "Trager-Feinstein Laboratory",
+      "origin": "United States",
+      "model": "Type 1100 Milliblatz Meter",
+      "pairing": "invented"
+    },
+    "visual_description": "A large Bakelite-cased panel meter with a mirrored scale in a black 2U panel. A calibration certificate is taped to the side, signed and dated 1974.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "range",
+          "kind": "rotary-selector",
+          "label": "RANGE",
+          "cell": [0, 0],
+          "positions": ["1", "10", "100", "1k"],
+          "span": [2, 2]
+        },
+        {
+          "id": "zero",
+          "kind": "trimpot",
+          "label": "ZERO",
+          "cell": [2, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "damping",
+          "kind": "toggle",
+          "label": "DAMP",
+          "cell": [2, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "peak-hold",
+          "kind": "push-button",
+          "label": "PEAK HOLD",
+          "cell": [3, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "meter",
+          "kind": "analogue-meter",
+          "label": "mBz",
+          "cell": [4, 0],
+          "shows": "milliblatz-meter.reading",
+          "span": [2, 2]
+        },
+        {
+          "id": "fine",
+          "kind": "edge-meter",
+          "label": "FINE",
+          "cell": [6, 0],
+          "shows": "milliblatz-meter.reading",
+          "span": [2, 1]
+        },
+        {
+          "id": "over",
+          "kind": "lamp",
+          "label": "OVER",
+          "cell": [8, 0],
+          "shows": "milliblatz-meter.reading",
+          "threshold": 0.9,
+          "span": [1, 1]
+        },
+        {
+          "id": "peak",
+          "kind": "nixie",
+          "label": "PEAK",
+          "cell": [6, 1],
+          "shows": "milliblatz-meter.reading",
+          "digits": 4,
+          "span": [4, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "reading",
+          "label": "Milliblatz reading",
+          "unit": "mBz",
+          "scale": 400,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.4,
+          "noise": 0.005,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "helmholtz-blatz-coil.field",
+              "weight": 0.9
+            },
+            {
+              "kind": "linear",
+              "source": "milliblatz-meter.zero",
+              "weight": 0.05
+            },
+            {
+              "kind": "linear",
+              "source": "milliblatz-meter.range",
+              "weight": -0.05
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "ballast-variac",
@@ -683,7 +6026,147 @@
     "consequences": ["every streetlight on the block dims in sympathy"],
     "provenance": "invented",
     "frequency": "one-off",
-    "sources": []
+    "sources": [],
+    "manufacturer": {
+      "name": "Gorskiy",
+      "origin": "Soviet Union",
+      "model": "ЛАТР-9 Ballast Variac",
+      "pairing": "invented"
+    },
+    "visual_description": "A huge round variac with a hand-wheel through the face of a battleship-grey 3U panel and a Bakelite tap selector. The tap positions are labelled in volts in two different hands.",
+    "panel": {
+      "units": 3,
+      "grid": {
+        "columns": 12,
+        "rows": 3
+      },
+      "controls": [
+        {
+          "id": "tap",
+          "kind": "rotary-selector",
+          "label": "TAP V",
+          "cell": [0, 0],
+          "positions": ["0", "60", "120", "180", "240", "270"],
+          "span": [2, 2]
+        },
+        {
+          "id": "fine",
+          "kind": "crank",
+          "label": "FINE",
+          "cell": [2, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "cut-out",
+          "kind": "guarded-toggle",
+          "label": "CUT-OUT",
+          "cell": [4, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "fan",
+          "kind": "toggle",
+          "label": "FAN",
+          "cell": [4, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "reset",
+          "kind": "push-button",
+          "label": "RESET",
+          "cell": [0, 2],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "volts",
+          "kind": "analogue-meter",
+          "label": "V",
+          "cell": [5, 0],
+          "shows": "ballast-variac.volts",
+          "span": [2, 2]
+        },
+        {
+          "id": "amps",
+          "kind": "analogue-meter",
+          "label": "A",
+          "cell": [7, 0],
+          "shows": "main-bus-controller.load",
+          "span": [2, 2]
+        },
+        {
+          "id": "hum",
+          "kind": "vu-meter",
+          "label": "HUM",
+          "cell": [9, 0],
+          "shows": "plynost-modulation-rectifier.ripple",
+          "span": [2, 1]
+        },
+        {
+          "id": "hot",
+          "kind": "annunciator",
+          "label": "HOT",
+          "cell": [9, 1],
+          "shows": "ballast-variac.volts",
+          "threshold": 0.95,
+          "span": [2, 1]
+        },
+        {
+          "id": "on",
+          "kind": "lamp",
+          "label": "ON",
+          "cell": [11, 0],
+          "shows": "ballast-variac.volts",
+          "threshold": 0.1,
+          "span": [1, 1]
+        },
+        {
+          "id": "kwh",
+          "kind": "counter",
+          "label": "kWh",
+          "cell": [1, 2],
+          "shows": "ballast-variac.volts",
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "volts",
+          "label": "Ballast voltage",
+          "unit": "V",
+          "scale": 270,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.5,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "ballast-variac.tap",
+              "weight": 0.8
+            },
+            {
+              "kind": "linear",
+              "source": "ballast-variac.fine",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "ballast-variac.cut-out",
+              "weight": -1.0
+            }
+          ],
+          "gates": [
+            {
+              "source": "varistance-isolator.mains",
+              "threshold": 0.5
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "governor-flyweights",
@@ -701,7 +6184,118 @@
     ],
     "provenance": "invented",
     "frequency": "one-off",
-    "sources": []
+    "sources": [],
+    "manufacturer": {
+      "name": "Bonk Industries",
+      "origin": "United States",
+      "model": "Model 5 Flyball Governor",
+      "pairing": "invented"
+    },
+    "visual_description": "A brass flyball governor from a steam engine spins behind a porthole in an orange 2U panel, the balls lifting as it speeds up. An oil plunger sits beside it.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "setpoint",
+          "kind": "knob",
+          "label": "SETPOINT",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "lockout",
+          "kind": "toggle",
+          "label": "LOCKOUT",
+          "cell": [0, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "oil",
+          "kind": "plunger",
+          "label": "OIL",
+          "cell": [3, 1],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "balls",
+          "kind": "viewport",
+          "label": "GOVERNOR",
+          "cell": [1, 0],
+          "shows": "governor-flyweights.limit",
+          "span": [2, 2]
+        },
+        {
+          "id": "limit",
+          "kind": "analogue-meter",
+          "label": "LIMIT",
+          "cell": [4, 0],
+          "shows": "governor-flyweights.limit",
+          "span": [2, 2]
+        },
+        {
+          "id": "hunting",
+          "kind": "annunciator",
+          "label": "HUNTING",
+          "cell": [6, 0],
+          "shows": "governor-flyweights.limit",
+          "threshold": 0.85,
+          "span": [2, 1]
+        },
+        {
+          "id": "oiled",
+          "kind": "lamp",
+          "label": "OIL",
+          "cell": [6, 1],
+          "shows": "governor-flyweights.oil",
+          "threshold": 0.5,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "limit",
+          "label": "Governor limiting",
+          "unit": "%",
+          "scale": 100,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 1.0,
+          "noise": 0.01,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "governor-flyweights.setpoint",
+              "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "phase-spindle.rpm",
+              "weight": 0.4
+            },
+            {
+              "kind": "linear",
+              "source": "governor-flyweights.oil",
+              "weight": -0.05
+            }
+          ],
+          "gates": [
+            {
+              "source": "governor-flyweights.lockout",
+              "threshold": 0.5,
+              "invert": true
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "bell-jar-shroud",
@@ -717,7 +6311,127 @@
     "consequences": ["the jar now holds one more bolt than it did"],
     "provenance": "invented",
     "frequency": "one-off",
-    "sources": []
+    "sources": [],
+    "manufacturer": {
+      "name": "Volt Xoccula",
+      "origin": "United States",
+      "model": "BJ-1 Bell-Jar Shroud",
+      "pairing": "invented"
+    },
+    "visual_description": "A heavy glass bell jar sits on a ground-steel plate on top of a grey 2U base, with a key-switched lift and a vacuum gauge. Something small and important lives under it.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "pump",
+          "kind": "toggle",
+          "label": "PUMP",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "vent",
+          "kind": "push-button",
+          "label": "VENT",
+          "cell": [0, 1],
+          "span": [1, 1]
+        },
+        {
+          "id": "seal",
+          "kind": "knob",
+          "label": "SEAL",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "lift",
+          "kind": "key-switch",
+          "label": "LIFT",
+          "cell": [1, 1],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "jar",
+          "kind": "viewport",
+          "label": "BELL JAR",
+          "cell": [2, 0],
+          "shows": "bell-jar-shroud.vacuum",
+          "span": [2, 2]
+        },
+        {
+          "id": "vacuum",
+          "kind": "analogue-meter",
+          "label": "VAC",
+          "cell": [4, 0],
+          "shows": "bell-jar-shroud.vacuum",
+          "span": [2, 2]
+        },
+        {
+          "id": "sealed",
+          "kind": "lamp",
+          "label": "SEALED",
+          "cell": [6, 0],
+          "shows": "bell-jar-shroud.vacuum",
+          "threshold": 0.5,
+          "span": [1, 1]
+        },
+        {
+          "id": "stress",
+          "kind": "annunciator",
+          "label": "STRESS",
+          "cell": [7, 0],
+          "shows": "bell-jar-shroud.vacuum",
+          "threshold": 0.95,
+          "span": [2, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "vacuum",
+          "label": "Bell-jar vacuum",
+          "unit": "%",
+          "scale": 100,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 6,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "bell-jar-shroud.pump",
+              "weight": 0.6
+            },
+            {
+              "kind": "linear",
+              "source": "bell-jar-shroud.seal",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "baltovsky-chamber.pressure",
+              "weight": -0.3
+            },
+            {
+              "kind": "linear",
+              "source": "bell-jar-shroud.vent",
+              "weight": -0.8
+            },
+            {
+              "kind": "linear",
+              "source": "bell-jar-shroud.lift",
+              "weight": -1.0
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "heterodyne-patch-bay",
@@ -733,7 +6447,110 @@
     "consequences": ["a neighbour's radio picks up the rig's hum"],
     "provenance": "invented",
     "frequency": "one-off",
-    "sources": []
+    "sources": [],
+    "manufacturer": {
+      "name": "Trager-Feinstein Laboratory",
+      "origin": "United States",
+      "model": "Type 600 Heterodyne Patch Bay",
+      "pairing": "invented"
+    },
+    "visual_description": "A black 2U telephone-exchange style patch panel with cloth-covered cords hanging in loops. A local-oscillator vernier and a small scope show the beat between the spindle and the oscillator.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "local-osc",
+          "kind": "vernier-dial",
+          "label": "LOCAL OSC",
+          "cell": [0, 0],
+          "span": [2, 2]
+        },
+        {
+          "id": "mix",
+          "kind": "chicken-head",
+          "label": "MIX",
+          "cell": [2, 0],
+          "positions": ["USB", "LSB", "DSB"],
+          "span": [1, 1]
+        },
+        {
+          "id": "patch",
+          "kind": "dip-bank",
+          "label": "PATCH",
+          "cell": [2, 1],
+          "span": [2, 1]
+        },
+        {
+          "id": "mute",
+          "kind": "toggle",
+          "label": "MUTE",
+          "cell": [4, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "beat",
+          "kind": "oscilloscope",
+          "label": "BEAT",
+          "cell": [5, 0],
+          "shows": "heterodyne-patch-bay.beat",
+          "span": [3, 2]
+        },
+        {
+          "id": "beat-meter",
+          "kind": "vu-meter",
+          "label": "BEAT",
+          "cell": [8, 0],
+          "shows": "heterodyne-patch-bay.beat",
+          "span": [2, 1]
+        },
+        {
+          "id": "zero-beat",
+          "kind": "lamp",
+          "label": "ZERO BEAT",
+          "cell": [8, 1],
+          "shows": "heterodyne-patch-bay.beat",
+          "threshold": 0.1,
+          "invert": true,
+          "span": [1, 1]
+        },
+        {
+          "id": "beat-hz",
+          "kind": "nixie",
+          "label": "Hz",
+          "cell": [9, 1],
+          "shows": "heterodyne-patch-bay.beat",
+          "digits": 3,
+          "span": [3, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "beat",
+          "label": "Beat frequency",
+          "unit": "Hz",
+          "scale": 999,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 0.3,
+          "influences": [
+            {
+              "kind": "difference",
+              "a": "phase-spindle.rpm",
+              "b": "heterodyne-patch-bay.local-osc",
+              "weight": 1.0
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "condensate-trap-coil",
@@ -749,7 +6566,139 @@
     "consequences": ["frost forms on the inside of the garage door in July"],
     "provenance": "invented",
     "frequency": "one-off",
-    "sources": []
+    "sources": [],
+    "manufacturer": {
+      "name": "Synclex",
+      "origin": "Tucson",
+      "model": "CT-3 Condensate Trap",
+      "pairing": "invented"
+    },
+    "visual_description": "A 1U strip with a sight window onto a copper refrigeration coil furred with frost. A drain button drips into a tin tray on the floor below.",
+    "panel": {
+      "units": 1,
+      "grid": {
+        "columns": 12,
+        "rows": 1
+      },
+      "controls": [
+        {
+          "id": "chill",
+          "kind": "knob",
+          "label": "CHILL",
+          "cell": [0, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "defrost",
+          "kind": "toggle",
+          "label": "DEFROST",
+          "cell": [1, 0],
+          "span": [1, 1]
+        },
+        {
+          "id": "drain",
+          "kind": "push-button",
+          "label": "DRAIN",
+          "cell": [2, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "frost",
+          "kind": "edge-meter",
+          "label": "FROST",
+          "cell": [3, 0],
+          "shows": "condensate-trap-coil.frost",
+          "span": [2, 1]
+        },
+        {
+          "id": "flow",
+          "kind": "vu-meter",
+          "label": "FLOW",
+          "cell": [5, 0],
+          "shows": "condensate-trap-coil.flow",
+          "span": [2, 1]
+        },
+        {
+          "id": "iced",
+          "kind": "annunciator",
+          "label": "ICED",
+          "cell": [7, 0],
+          "shows": "condensate-trap-coil.frost",
+          "threshold": 0.7,
+          "span": [2, 1]
+        },
+        {
+          "id": "drips",
+          "kind": "dekatron",
+          "label": "DRIPS",
+          "cell": [9, 0],
+          "shows": "condensate-trap-coil.flow",
+          "span": [1, 1]
+        },
+        {
+          "id": "flowing",
+          "kind": "lamp",
+          "label": "FLOW",
+          "cell": [10, 0],
+          "shows": "condensate-trap-coil.flow",
+          "threshold": 0.3,
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "frost",
+          "label": "Coil frost",
+          "unit": "mm",
+          "scale": 10,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 30,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "condensate-trap-coil.chill",
+              "weight": 0.7
+            },
+            {
+              "kind": "linear",
+              "source": "condensate-trap-coil.defrost",
+              "weight": -0.6
+            }
+          ]
+        },
+        {
+          "id": "flow",
+          "label": "Condensate flow",
+          "unit": "ml/min",
+          "scale": 50,
+          "mode": "lag",
+          "base": 0.0,
+          "lag": 2,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "condensate-trap-coil.chill",
+              "weight": 0.6
+            },
+            {
+              "kind": "linear",
+              "source": "condensate-trap-coil.frost",
+              "weight": -0.5
+            },
+            {
+              "kind": "linear",
+              "source": "condensate-trap-coil.drain",
+              "weight": 0.2
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "id": "chirality-indicator",
@@ -765,6 +6714,127 @@
     "consequences": ["the bench screws now tighten anticlockwise"],
     "provenance": "invented",
     "frequency": "one-off",
-    "sources": []
+    "sources": [],
+    "manufacturer": {
+      "name": "Trager-Feinstein Laboratory",
+      "origin": "United States",
+      "model": "Type 7 Chirality Indicator",
+      "pairing": "invented"
+    },
+    "visual_description": "A glass vial of sugar solution between two polarising filters, lit from behind, set into a black 1U strip. LEFT and RIGHT lamps flank a centre-zero meter.",
+    "panel": {
+      "units": 1,
+      "grid": {
+        "columns": 12,
+        "rows": 1
+      },
+      "controls": [
+        {
+          "id": "sense",
+          "kind": "chicken-head",
+          "label": "SENSE",
+          "cell": [0, 0],
+          "positions": ["L", "AUTO", "R"],
+          "span": [1, 1]
+        },
+        {
+          "id": "test",
+          "kind": "push-button",
+          "label": "TEST",
+          "cell": [1, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "chirality",
+          "kind": "edge-meter",
+          "label": "CHIRALITY",
+          "cell": [2, 0],
+          "shows": "chirality-indicator.chirality",
+          "span": [2, 1]
+        },
+        {
+          "id": "left",
+          "kind": "lamp",
+          "label": "LEFT",
+          "cell": [4, 0],
+          "shows": "chirality-indicator.chirality",
+          "threshold": 0.4,
+          "invert": true,
+          "span": [1, 1]
+        },
+        {
+          "id": "right",
+          "kind": "lamp",
+          "label": "RIGHT",
+          "cell": [5, 0],
+          "shows": "chirality-indicator.chirality",
+          "threshold": 0.6,
+          "span": [1, 1]
+        },
+        {
+          "id": "flipped",
+          "kind": "flag",
+          "label": "FLIPPED",
+          "cell": [6, 0],
+          "shows": "chirality-indicator.chirality",
+          "threshold": 0.9,
+          "span": [1, 1]
+        },
+        {
+          "id": "events",
+          "kind": "counter",
+          "label": "EVENTS",
+          "cell": [7, 0],
+          "shows": "chirality-indicator.chirality",
+          "span": [2, 1]
+        },
+        {
+          "id": "chi",
+          "kind": "magic-eye",
+          "label": "χ",
+          "cell": [9, 0],
+          "shows": "chirality-indicator.chirality",
+          "span": [1, 1]
+        }
+      ]
+    },
+    "model": {
+      "variables": [
+        {
+          "id": "chirality",
+          "label": "Ambient chirality",
+          "unit": "χ",
+          "scale": 1,
+          "mode": "lag",
+          "base": 0.5,
+          "lag": 3,
+          "noise": 0.02,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "bohr-schreiffer-phase-cell.phase",
+              "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "antiacclimator.bias",
+              "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.instability",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "chirality-indicator.sense",
+              "weight": 0.0
+            }
+          ]
+        }
+      ]
+    }
   }
 ]

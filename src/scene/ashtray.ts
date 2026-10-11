@@ -135,7 +135,7 @@ export function createAshtray() {
         );
         sprite.scale.setScalar(0.035 + age * 0.26);
         const fadeIn = Math.min(1, age / 0.08);
-        sprite.material.opacity = fadeIn * (1 - age) * 0.42;
+        sprite.material.opacity = fadeIn * (1 - age) * 0.62;
       });
     },
     dispose() {

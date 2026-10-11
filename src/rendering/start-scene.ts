@@ -9,6 +9,7 @@ import {
   Group,
   Mesh,
   NearestFilter,
+  OctahedronGeometry,
   OrthographicCamera,
   PerspectiveCamera,
   PlaneGeometry,
@@ -33,6 +34,11 @@ import {
 } from '../game/rack-controls';
 import { createRig, deltaScore, stepRig } from '../game/rig';
 import {
+  createSafetyTelltales,
+  stepSafetyTelltales,
+} from '../game/safety-telltales';
+import {
+  createCanvasTexture,
   createDialTexture,
   createLabelTexture,
   createNixieScreen,
@@ -40,11 +46,14 @@ import {
 } from '../scene/screens';
 import { createWorldMapTexture } from '../scene/world-map';
 import { createAshtray } from '../scene/ashtray';
+import { createXenonCylinders } from '../scene/xenon-cylinders';
 import { createPanelHeader, createPanelLivery } from '../scene/panel-livery';
 import { createPs1Material, ps1Uniforms } from './ps1-material';
 
 const U = 0.48;
 const panelWidth = 4.35;
+// The handles occupy the outer edges of a panel. Instruments stay between them.
+const instrumentSafeRight = 1.72;
 
 export function startScene(canvas: HTMLCanvasElement) {
   const renderer = new WebGLRenderer({ canvas, antialias: false });
@@ -70,6 +79,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   const actions = new Map<number, () => void>();
   const dynamic: Array<() => void> = [];
   const rig = createRig();
+  const telltales = createSafetyTelltales();
   const settings = createRackControls();
   const audio = createSoundEngine();
   const modules = assembleRack();
@@ -518,6 +528,117 @@ export function startScene(canvas: HTMLCanvasElement) {
     '#e3d4ab',
     '#323f39',
   );
+  // Wall-mounted supply audit meter: the needle shows load, the register totals kWh.
+  const meterY = wallDisplayTop - 4.18;
+  cube(lab, 2.9, 1.66, 0.24, '#4b5650', wallDisplayX, meterY, -3.46);
+  cube(lab, 2.68, 1.47, 0.045, '#d6cbaa', wallDisplayX, meterY, -3.31);
+  label(
+    lab,
+    'POWER DRAW / KILOWATT HOURS',
+    wallDisplayX,
+    meterY + 0.59,
+    -3.275,
+    10,
+    '#343f39',
+    '#d6cbaa',
+  );
+  disc(lab, 0.53, '#594e3c', wallDisplayX - 0.69, meterY - 0.06, -3.27);
+  disc(lab, 0.46, '#e9dfbf', wallDisplayX - 0.69, meterY - 0.06, -3.25);
+  for (let tick = 0; tick <= 8; tick++) {
+    const angle = -Math.PI * 0.75 + (tick / 8) * Math.PI * 1.5;
+    const x = wallDisplayX - 0.69 + Math.sin(angle) * 0.37;
+    const y = meterY - 0.06 + Math.cos(angle) * 0.37;
+    disc(lab, tick % 2 === 0 ? 0.026 : 0.014, '#4b5044', x, y, -3.235);
+  }
+  const loadNeedle = cube(
+    lab,
+    0.026,
+    0.34,
+    0.015,
+    '#a94b38',
+    wallDisplayX - 0.69,
+    meterY - 0.06,
+    -3.21,
+  );
+  loadNeedle.geometry.translate(0, 0.16, 0);
+  disc(lab, 0.045, '#4b4135', wallDisplayX - 0.69, meterY - 0.06, -3.195);
+  label(lab, 'LOAD kW', wallDisplayX - 0.69, meterY - 0.52, -3.22, 8);
+  cube(
+    lab,
+    1.16,
+    0.46,
+    0.06,
+    '#2f332e',
+    wallDisplayX + 0.62,
+    meterY - 0.08,
+    -3.25,
+  );
+  const register = createCanvasTexture(160, 48);
+  textures.push(register.texture);
+  const registerFace = new Mesh(
+    new PlaneGeometry(1.08, 0.34),
+    createPs1Material({ map: register.texture }, true),
+  );
+  materials.push(registerFace.material);
+  registerFace.position.set(wallDisplayX + 0.62, meterY - 0.08, -3.205);
+  lab.add(registerFace);
+  label(lab, 'TOTAL kWh', wallDisplayX + 0.62, meterY - 0.45, -3.23, 8);
+  let lastRegister = '';
+  dynamic.push(() => {
+    loadNeedle.rotation.z =
+      Math.PI * (0.75 - Math.min(1, telltales.powerKw / 8) * 1.5);
+    const reading = telltales.energyKwh.toFixed(4).padStart(9, '0');
+    if (reading === lastRegister) return;
+    lastRegister = reading;
+    register.context.fillStyle = '#1a231f';
+    register.context.fillRect(0, 0, 160, 48);
+    register.context.fillStyle = '#e4c875';
+    register.context.font = 'bold 24px monospace';
+    register.context.textAlign = 'center';
+    register.context.textBaseline = 'middle';
+    register.context.fillText(reading, 80, 25);
+    register.texture.needsUpdate = true;
+  });
+
+  // Prismatic tell-tale for the connected field: dim at rest, occasional pulses in operation.
+  const crystalY = wallDisplayTop - 6.17;
+  cube(lab, 1.82, 1.62, 0.13, '#495a55', wallDisplayX, crystalY, -3.5);
+  cube(lab, 1.58, 1.38, 0.028, '#263d3e', wallDisplayX, crystalY, -3.42);
+  label(lab, 'TIME DILATION', wallDisplayX, crystalY + 0.62, -3.385, 12);
+  disc(lab, 0.48, '#657873', wallDisplayX, crystalY - 0.11, -3.37);
+  disc(lab, 0.4, '#172f36', wallDisplayX, crystalY - 0.11, -3.35);
+  const crystalMaterial = material('#467888');
+  const crystal = new Mesh(new OctahedronGeometry(0.4, 0), crystalMaterial);
+  crystal.scale.set(0.72, 1.28, 0.56);
+  crystal.rotation.z = 0.24;
+  crystal.position.set(wallDisplayX, crystalY - 0.11, -3.13);
+  lab.add(crystal);
+  const crystalLamp = disc(
+    lab,
+    0.09,
+    '#425c5c',
+    wallDisplayX + 0.61,
+    crystalY - 0.5,
+    -3.38,
+  );
+  dynamic.push(() => {
+    const pulse = telltales.crystalPulse;
+    crystalMaterial.color.setRGB(
+      0.18 + pulse * 0.48,
+      0.35 + pulse * 0.46,
+      0.4 + pulse * 0.55,
+    );
+    (crystalLamp.material as ReturnType<typeof material>).color.setRGB(
+      0.18 + pulse * 0.55,
+      0.33 + pulse * 0.52,
+      0.33 + pulse * 0.62,
+    );
+    crystal.scale.set(
+      0.72,
+      1.28 * (reducedMotion.matches ? 1 : 1 + pulse * 0.12),
+      0.56,
+    );
+  });
   cube(lab, 2.4, 0.1, 0.25, '#a4aaa0', -4.45, totalHeight / 2 + 0.55, -3.45);
   cube(lab, 2.25, 0.055, 0.04, '#e5d6a7', -4.45, totalHeight / 2 + 0.45, -3.3);
 
@@ -548,6 +669,22 @@ export function startScene(canvas: HTMLCanvasElement) {
   dynamic.push(() =>
     ashtray.update(performance.now() / 1000, reducedMotion.matches),
   );
+
+  // Xenon supply: cylinders against the wall left of the bench, with a thick
+  // hose run behind the bench to a bulkhead on the back of the main cabinet.
+  const xenonFloor = floorY + 0.05;
+  const xenon = createXenonCylinders({
+    floorY,
+    x: -6.6,
+    z: -3.3,
+    hoseVia: [
+      new Vector3(-5.6, xenonFloor, -2.55),
+      new Vector3(-3.0, xenonFloor, -2.6),
+      new Vector3(-2.2, xenonFloor, -1.6),
+    ],
+    hoseEnd: new Vector3(-1.6, floorY + 1.3, -0.86),
+  });
+  lab.add(xenon.group);
 
   // The wall outlet and the trailing rubber mains lead are visible at rack base.
   const socketX = -5.6;
@@ -879,7 +1016,10 @@ export function startScene(canvas: HTMLCanvasElement) {
     }
     const instrumentY = module.units >= 4 ? 0.15 : -0.05;
     for (const [index, instrument] of module.instruments.entries()) {
-      const x = module.instruments.length === 1 ? 1.27 : 1.0 + index * 0.75;
+      const x =
+        module.instruments.length === 1
+          ? 1.17
+          : Math.min(instrumentSafeRight - 0.38, 0.8 + index * 0.58);
       if (instrument === 'scope') {
         const scope = createScopeScreen(96, 64);
         textures.push(scope.texture);
@@ -888,7 +1028,7 @@ export function startScene(canvas: HTMLCanvasElement) {
           createPs1Material({ map: scope.texture }, true),
         );
         materials.push(screen.material);
-        screen.position.set(1.15, instrumentY, 0.29);
+        screen.position.set(1.1, instrumentY, 0.29);
         panel.add(screen);
         dynamic.push(() => {
           const points: [number, number][] = Array.from(
@@ -913,7 +1053,7 @@ export function startScene(canvas: HTMLCanvasElement) {
           createPs1Material({ map: nixie.texture }, true),
         );
         materials.push(screen.material);
-        screen.position.set(1.36, instrumentY - 0.75, 0.29);
+        screen.position.set(1.1, instrumentY - 0.75, 0.29);
         panel.add(screen);
         dynamic.push(() =>
           nixie.draw(
@@ -1222,6 +1362,7 @@ export function startScene(canvas: HTMLCanvasElement) {
         write(event.text);
       }
     }
+    stepSafetyTelltales(telltales, rig, settings, delta);
     audio.update(rig, settings, reducedMotion.matches);
     if (!reducedMotion.matches) carousel.rotation.z -= rig.spindle * delta * 4;
     status.textContent = !rig.controls.mains
@@ -1264,6 +1405,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     document.removeEventListener('visibilitychange', visibility);
     audio.dispose();
     ashtray.dispose();
+    xenon.dispose();
     overlay.remove();
     scene.traverse((object) => {
       if (object instanceof Mesh) object.geometry.dispose();
