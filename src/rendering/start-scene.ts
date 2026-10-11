@@ -48,6 +48,7 @@ import { createWorldMapTexture } from '../scene/world-map';
 import { createAshtray } from '../scene/ashtray';
 import { createXenonCylinders } from '../scene/xenon-cylinders';
 import { createHotlinePhone } from '../scene/hotline-phone';
+import { createTeleprinter } from '../scene/teleprinter';
 import { createPanelHeader, createPanelLivery } from '../scene/panel-livery';
 import { createPs1Material, ps1Uniforms } from './ps1-material';
 
@@ -150,16 +151,21 @@ export function startScene(canvas: HTMLCanvasElement) {
   const lab = new Group();
   scene.add(lab);
   const floorY = -totalHeight / 2 - 0.23;
-  cube(lab, 20, totalHeight + 4, 0.18, '#626f68', 0, 0, -3.9);
-  cube(lab, 20, 3.4, 0.2, '#3d5750', 0, floorY + 1.7, -3.79);
-  cube(lab, 20, 0.11, 0.29, '#d0c3a0', 0, floorY + 3.4, -3.66);
-  cube(lab, 20, 0.2, 0.32, '#373d38', 0, floorY + 0.12, -3.65);
-  cube(lab, 20, 0.3, 9, '#706d60', 0, floorY - 0.18, -0.15);
-  for (let x = -9; x <= 9; x += 1.5) {
+  cube(lab, 25, totalHeight + 4, 0.18, '#626f68', 0, 0, -3.9);
+  cube(lab, 25, 3.4, 0.2, '#3d5750', 0, floorY + 1.7, -3.79);
+  cube(lab, 25, 0.11, 0.29, '#d0c3a0', 0, floorY + 3.4, -3.66);
+  cube(lab, 25, 0.2, 0.32, '#373d38', 0, floorY + 0.12, -3.65);
+  // The room turns at the right: the teleprinter hangs on this dark side wall.
+  cube(lab, 0.2, totalHeight + 4, 9, '#626f68', 12.5, 0, 0.55);
+  cube(lab, 0.22, 3.4, 9, '#344d48', 12.39, floorY + 1.7, 0.55);
+  cube(lab, 0.29, 0.11, 9, '#d0c3a0', 12.3, floorY + 3.4, 0.55);
+  cube(lab, 0.3, 0.2, 9, '#373d38', 12.3, floorY + 0.12, 0.55);
+  cube(lab, 25, 0.3, 9, '#706d60', 0, floorY - 0.18, -0.15);
+  for (let x = -12; x <= 12; x += 1.5) {
     cube(lab, 0.025, 0.008, 9, '#56594f', x, floorY - 0.02, -0.15);
   }
   for (let z = -4; z <= 4; z += 1.5) {
-    cube(lab, 20, 0.008, 0.025, '#56594f', 0, floorY - 0.02, z);
+    cube(lab, 25, 0.008, 0.025, '#56594f', 0, floorY - 0.02, z);
   }
   // A separate six-station ferrocore carousel feeds the rack by a heavy conduit.
   const drum = new Group();
@@ -693,6 +699,13 @@ export function startScene(canvas: HTMLCanvasElement) {
   // Oversized so the sign reads at the PS1 render resolution.
   hotline.group.scale.setScalar(1.8);
   lab.add(hotline.group);
+
+  const teleprinter = createTeleprinter();
+  teleprinter.group.position.set(11.52, floorY + 2.5, 1.25);
+  teleprinter.group.rotation.y = -1.05;
+  for (const y of [floorY + 2.2, floorY + 2.85])
+    cube(lab, 0.94, 0.09, 0.12, '#67736c', 12.02, y, 1.25);
+  lab.add(teleprinter.group);
 
   // The wall outlet and the trailing rubber mains lead are visible at rack base.
   const socketX = -5.6;
@@ -1259,7 +1272,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     panX = Math.max(-4, panX - 0.75);
   });
   overlay.querySelector('[data-pan="right"]')!.addEventListener('click', () => {
-    panX = Math.min(6, panX + 0.75);
+    panX = Math.min(9.5, panX + 0.75);
   });
   overlay.querySelector('[data-zoom="in"]')!.addEventListener('click', () => {
     cameraZoom = Math.min(1.8, cameraZoom + 0.15);
@@ -1274,7 +1287,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   const wheel = (event: WheelEvent) => {
     event.preventDefault();
     const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
-    panX = Math.max(-4, Math.min(6, panX + event.deltaX * scale * 0.005));
+    panX = Math.max(-4, Math.min(9.5, panX + event.deltaX * scale * 0.005));
     panTo(pan - event.deltaY * scale * 0.004);
   };
   canvas.addEventListener('wheel', wheel, { passive: false });
@@ -1415,6 +1428,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     ashtray.dispose();
     xenon.dispose();
     hotline.dispose();
+    teleprinter.dispose();
     overlay.remove();
     scene.traverse((object) => {
       if (object instanceof Mesh) object.geometry.dispose();
