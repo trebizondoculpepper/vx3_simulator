@@ -676,7 +676,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   const xenonFloor = floorY + 0.05;
   const xenon = createXenonCylinders({
     floorY,
-    x: -6.6,
+    x: -7.4,
     z: -3.3,
     hoseVia: [
       new Vector3(-5.6, xenonFloor, -2.55),

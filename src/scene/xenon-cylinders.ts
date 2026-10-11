@@ -27,8 +27,8 @@ export interface XenonBankOptions {
   hoseVia: Vector3[];
 }
 
-const CYLINDER_HEIGHT = 2.3;
-const CYLINDER_RADIUS = 0.17;
+const CYLINDER_HEIGHT = 3.15;
+const CYLINDER_RADIUS = 0.29;
 
 /**
  * Three tall xenon cylinders chained to the wall, linked by a brass manifold
@@ -88,12 +88,12 @@ export function createXenonCylinders(options: XenonBankOptions) {
       new CylinderGeometry(
         CYLINDER_RADIUS,
         CYLINDER_RADIUS,
-        CYLINDER_HEIGHT - 0.2,
+        CYLINDER_HEIGHT - 0.29,
         10,
       ),
       '#3f5664',
       x,
-      base + (CYLINDER_HEIGHT - 0.2) / 2,
+      base + (CYLINDER_HEIGHT - 0.29) / 2,
       z,
     );
     const shoulder = mesh(
@@ -108,7 +108,7 @@ export function createXenonCylinders(options: XenonBankOptions) {
       ),
       '#3f5664',
       x,
-      base + CYLINDER_HEIGHT - 0.2,
+      base + CYLINDER_HEIGHT - 0.29,
       z,
     );
     shoulder.scale.y = 0.9;
@@ -116,12 +116,12 @@ export function createXenonCylinders(options: XenonBankOptions) {
       new CylinderGeometry(
         CYLINDER_RADIUS + 0.004,
         CYLINDER_RADIUS + 0.004,
-        0.26,
+        0.36,
         10,
       ),
       '#d8d2b8',
       x,
-      top - 0.5,
+      top - 0.68,
       z,
     );
     const band = createLabelTexture('XENON', {
@@ -134,31 +134,31 @@ export function createXenonCylinders(options: XenonBankOptions) {
       band.width / 150,
       band.height / 150,
       x,
-      top - 0.5,
+      top - 0.68,
       z + CYLINDER_RADIUS + 0.008,
     );
     // Brass cylinder valve and its little handwheel.
     mesh(
-      new CylinderGeometry(0.045, 0.055, 0.14, 6),
+      new CylinderGeometry(0.07, 0.08, 0.17, 6),
       '#b8913f',
       x,
       top + 0.04,
       z,
     );
     const wheel = mesh(
-      new TorusGeometry(0.055, 0.012, 4, 8),
+      new TorusGeometry(0.085, 0.014, 4, 8),
       '#2c2c28',
       x,
-      top + 0.13,
+      top + 0.16,
       z,
     );
     wheel.rotation.x = Math.PI / 2;
     // Short copper pigtail up to the manifold.
     mesh(
-      new CylinderGeometry(0.014, 0.014, 0.18, 5),
+      new CylinderGeometry(0.022, 0.022, 0.23, 5),
       '#c07a45',
       x,
-      top + 0.24,
+      top + 0.29,
       z,
     );
   }
@@ -169,7 +169,7 @@ export function createXenonCylinders(options: XenonBankOptions) {
     new BoxGeometry(spacing * 2 + 0.6, 0.12, 0.06),
     '#55554c',
     options.x,
-    base + 1.45,
+    base + 2.05,
     wallZ,
   );
   for (let link = 0; link < 14; link++) {
@@ -178,14 +178,14 @@ export function createXenonCylinders(options: XenonBankOptions) {
       new TorusGeometry(0.03, 0.008, 3, 6),
       '#8a8a80',
       options.x - spacing - 0.22 + t * (spacing * 2 + 0.44),
-      base + 1.45 - Math.sin(t * Math.PI) * 0.06,
+      base + 2.05 - Math.sin(t * Math.PI) * 0.06,
       options.z + CYLINDER_RADIUS + 0.03,
     );
     chain.rotation.y = link % 2 ? Math.PI / 2 : 0;
   }
 
   // Brass manifold bar joining the three valves.
-  const manifoldY = top + 0.34;
+  const manifoldY = top + 0.4;
   const manifold = mesh(
     new CylinderGeometry(0.028, 0.028, spacing * 2 + 0.12, 6),
     '#c9a24e',
@@ -198,6 +198,7 @@ export function createXenonCylinders(options: XenonBankOptions) {
   // Regulator: a brass body with high- and low-pressure gauges and a T-handle.
   const regulator = new Group();
   regulator.position.set(options.x, manifoldY + 0.13, options.z + 0.02);
+  regulator.scale.setScalar(1.4);
   group.add(regulator);
   mesh(new BoxGeometry(0.2, 0.2, 0.16), '#b8913f', 0, 0, 0, regulator);
   const bonnet = mesh(
