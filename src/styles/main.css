@@ -107,13 +107,43 @@ canvas {
   background: #756343;
   color: #fff4cf;
 }
+.sound-controls {
+  position: absolute;
+  top: 166px;
+  left: 22px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px;
+  border: 2px solid #777965;
+  background: #292d29e8;
+  font-size: 10px;
+}
+.sound-controls button {
+  border: 1px solid #7f846e;
+  background: #3d433a;
+  color: #e4d0a1;
+  font:
+    bold 10px 'Courier New',
+    monospace;
+  padding: 7px;
+}
+.sound-controls button[aria-pressed='true'] {
+  color: #b9b29c;
+}
+.sound-controls input {
+  width: 70px;
+  accent-color: #d5b171;
+  pointer-events: auto;
+  cursor: pointer;
+}
 .rack-nav {
   position: absolute;
   left: 22px;
   bottom: 38px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   padding: 5px;
   background: #292d29e8;
   border: 2px solid #777965;
@@ -128,6 +158,9 @@ canvas {
     bold 18px 'Courier New',
     monospace;
   padding: 7px 11px;
+}
+.rack-nav button {
+  padding: 7px 8px;
 }
 .rack-nav button:hover,
 .notebook-tab:hover {
@@ -209,6 +242,45 @@ canvas {
   font-size: 10px;
   letter-spacing: 0.08em;
 }
+.manual-sheet {
+  pointer-events: auto;
+  position: absolute;
+  top: 12%;
+  right: 4%;
+  width: min(480px, 88vw);
+  max-height: 76dvh;
+  overflow: auto;
+  padding: 22px 25px;
+  border: 2px solid #9a815e;
+  box-shadow: 10px 12px 0 #111511a8;
+  background: #e8ddbd;
+  color: #293d39;
+  text-shadow: none;
+}
+.manual-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 3px double #5f736a;
+  font-size: 17px;
+}
+.manual-head button {
+  border: 0;
+  background: transparent;
+  color: #8e4939;
+  font-size: 26px;
+}
+.manual-sheet pre {
+  white-space: pre-wrap;
+  font:
+    13px/1.55 'Courier New',
+    monospace;
+}
+.manual-sheet small {
+  color: #745c49;
+  font-size: 10px;
+}
 [hidden] {
   display: none !important;
 }
@@ -229,6 +301,10 @@ canvas {
   .view-switch {
     left: 8px;
     top: 94px;
+  }
+  .sound-controls {
+    left: 8px;
+    top: 142px;
   }
   .logbook {
     top: auto;

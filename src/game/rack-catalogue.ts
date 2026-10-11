@@ -3,7 +3,14 @@ import type { KnobId, ToggleId } from './rack-controls';
 export type PanelControl =
   | { kind: 'mains'; label: string; x: number }
   | { kind: 'toggle'; id: ToggleId; label: string; x: number }
-  | { kind: 'knob'; id: KnobId; label: string; x: number };
+  | { kind: 'knob'; id: KnobId; label: string; x: number }
+  | { kind: 'selector'; label: string; x: number }
+  | {
+      kind: 'button';
+      id: 'reset' | 'purge' | 'do-not';
+      label: string;
+      x: number;
+    };
 
 export type Instrument =
   'heater' | 'spindle' | 'field' | 'stability' | 'scope' | 'nixie';
@@ -19,12 +26,13 @@ export interface RackModule {
   provenance: 'invented';
 }
 
+/** Panel designs and maker-to-part pairings are invented; sourced names are indexed in doc/lore/. */
 const catalogue: Record<string, RackModule[]> = {
   supply: [
     {
       id: 'supply-a',
-      maker: 'CROWTHER',
-      title: 'MAINS & HEATER SUPPLY',
+      maker: 'VOLT XOCCULA',
+      title: 'VARISTANCE ISOLATOR / HEATERS',
       units: 3,
       finish: '#4d534b',
       controls: [
@@ -37,8 +45,8 @@ const catalogue: Record<string, RackModule[]> = {
     },
     {
       id: 'supply-b',
-      maker: 'BELLWETHER',
-      title: 'PRIMARY DISTRIBUTION',
+      maker: 'WONSHOU LABS',
+      title: 'PLYNOST MODULATION RECTIFIER',
       units: 3,
       finish: '#574b3e',
       controls: [
@@ -53,8 +61,8 @@ const catalogue: Record<string, RackModule[]> = {
   valves: [
     {
       id: 'valves-a',
-      maker: 'MERRITT',
-      title: 'VALVE & AUXILIARY BANK',
+      maker: 'NEUMANN DYNAMIK',
+      title: 'FERROCORE / PHOTON TUBE BANK',
       units: 4,
       finish: '#354842',
       controls: [
@@ -68,8 +76,8 @@ const catalogue: Record<string, RackModule[]> = {
     },
     {
       id: 'valves-b',
-      maker: 'NORTH ARC',
-      title: 'CRYSTAL SELECTION BANK',
+      maker: 'SYNCLEX',
+      title: 'CHROMOCORE SELECTION BANK',
       units: 4,
       finish: '#48505a',
       controls: [
@@ -85,8 +93,8 @@ const catalogue: Record<string, RackModule[]> = {
   spindle: [
     {
       id: 'spindle-a',
-      maker: 'BELLWETHER',
-      title: 'PHASE SPINDLE DRIVE',
+      maker: 'BONK INDUSTRIES',
+      title: 'ENCABULATOR DRIVE',
       units: 4,
       finish: '#555048',
       controls: [
@@ -99,8 +107,8 @@ const catalogue: Record<string, RackModule[]> = {
     },
     {
       id: 'spindle-b',
-      maker: 'MERRITT',
-      title: 'SPINDLE GOVERNOR',
+      maker: 'VOLT XOCCULA',
+      title: 'ENCABULATOR GOVERNOR',
       units: 4,
       finish: '#435451',
       controls: [
@@ -115,8 +123,8 @@ const catalogue: Record<string, RackModule[]> = {
   field: [
     {
       id: 'field-a',
-      maker: 'CROWTHER',
-      title: 'HELMHOLTZ–BLATZ REGULATOR',
+      maker: 'VOLT XOCCULA',
+      title: 'HOLTZMANN RESONANCE COIL',
       units: 4,
       finish: '#3e4d58',
       controls: [
@@ -130,8 +138,8 @@ const catalogue: Record<string, RackModule[]> = {
     },
     {
       id: 'field-b',
-      maker: 'NORTH ARC',
-      title: 'H–B FIELD CORRECTOR',
+      maker: 'GORSKIY',
+      title: 'META-STABLE FLUX PLASMA INDUCER',
       units: 4,
       finish: '#5a5147',
       controls: [
@@ -147,8 +155,8 @@ const catalogue: Record<string, RackModule[]> = {
   monitor: [
     {
       id: 'monitor-a',
-      maker: 'MERRITT',
-      title: 'FIELD MONITOR & COUNTER',
+      maker: 'VOLT XOCCULA',
+      title: 'BALTOVSKY CHAMBER MONITOR',
       units: 4,
       finish: '#36433f',
       controls: [
@@ -160,8 +168,8 @@ const catalogue: Record<string, RackModule[]> = {
     },
     {
       id: 'monitor-b',
-      maker: 'BELLWETHER',
-      title: 'RESONANCE INDICATOR',
+      maker: 'NEUMANN DYNAMIK',
+      title: 'FROMITZ / HYPERFINE DETECTOR',
       units: 4,
       finish: '#4b4548',
       controls: [
@@ -172,17 +180,48 @@ const catalogue: Record<string, RackModule[]> = {
       provenance: 'invented',
     },
   ],
+  service: [
+    {
+      id: 'service-a',
+      maker: 'VOLT XOCCULA',
+      title: 'MAIN BUS CONTROLLER',
+      units: 3,
+      finish: '#565247',
+      controls: [
+        { kind: 'selector', label: 'BAND', x: -1.55 },
+        { kind: 'button', id: 'reset', label: 'RESET', x: -0.55 },
+        { kind: 'button', id: 'purge', label: 'PURGE', x: 0.45 },
+        { kind: 'button', id: 'do-not', label: 'DO NOT', x: 1.42 },
+      ],
+      instruments: [],
+      provenance: 'invented',
+    },
+    {
+      id: 'service-b',
+      maker: 'GORSKIY',
+      title: 'ION INSULATION PLATE CHECK',
+      units: 3,
+      finish: '#4b5551',
+      controls: [
+        { kind: 'selector', label: 'BAND', x: -1.55 },
+        { kind: 'button', id: 'reset', label: 'RESET', x: -0.55 },
+        { kind: 'button', id: 'purge', label: 'PURGE', x: 0.45 },
+        { kind: 'button', id: 'do-not', label: 'DO NOT', x: 1.42 },
+      ],
+      instruments: [],
+      provenance: 'invented',
+    },
+  ],
 };
 
-/** One recognisable panel from each role, with variable makers and middle order. */
-export function assembleRack(random: () => number = Math.random): RackModule[] {
-  const select = (role: string) => {
-    const choices = catalogue[role];
-    return choices[
-      Math.min(choices.length - 1, Math.floor(random() * choices.length))
-    ];
-  };
-  const middle = [select('valves'), select('spindle'), select('field')];
-  if (random() < 0.5) [middle[0], middle[1]] = [middle[1], middle[0]];
-  return [select('supply'), ...middle, select('monitor')];
+/** Fixed power-to-measurement path; later behaviour can depend on exact neighbours. */
+export function assembleRack(): RackModule[] {
+  return [
+    catalogue.supply[1],
+    catalogue.valves[1],
+    catalogue.spindle[0],
+    catalogue.field[0],
+    catalogue.monitor[1],
+    catalogue.service[1],
+  ];
 }

@@ -33,6 +33,7 @@ export type RigEvent =
   | { kind: 'incident'; text: string };
 
 export const WARNING_LEVEL = 0.55;
+export const YALGETH_LIMIT = 0.88;
 const HEATER_SECONDS = 6;
 const SPINDLE_SECONDS = 2.5;
 const FIELD_SECONDS = 3;
@@ -53,6 +54,14 @@ export function createRig(): RigState {
 /** Trim setting at which the field sits in equilibrium. */
 export function idealTrim(state: RigState): number {
   return clamp(0.2 + state.spindle * 0.35 + state.field * 0.3 + state.drift);
+}
+
+/** Workstation estimate of Delta, bounded by Yalgeth's reported four-dimensional limit. */
+export function deltaScore(state: RigState): number {
+  return Math.min(
+    YALGETH_LIMIT,
+    state.field * (1 - state.instability * 0.8) * YALGETH_LIMIT,
+  );
 }
 
 /**

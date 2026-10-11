@@ -8,17 +8,22 @@ import {
   DirectionalLight,
   Group,
   Mesh,
+  NearestFilter,
   OrthographicCamera,
   PerspectiveCamera,
   PlaneGeometry,
   Raycaster,
   Scene,
+  SRGBColorSpace,
+  TextureLoader,
+  TorusGeometry,
   TubeGeometry,
   Vector2,
   Vector3,
   WebGLRenderer,
 } from 'three';
 import type { Material, Object3D, Texture } from 'three';
+import { createSoundEngine } from '../audio/sound-engine';
 import { assembleRack } from '../game/rack-catalogue';
 import {
   applyRack,
@@ -26,13 +31,16 @@ import {
   knobLine,
   toggleLine,
 } from '../game/rack-controls';
-import { createRig, stepRig } from '../game/rig';
+import { createRig, deltaScore, stepRig } from '../game/rig';
 import {
   createDialTexture,
   createLabelTexture,
   createNixieScreen,
   createScopeScreen,
 } from '../scene/screens';
+import { createWorldMapTexture } from '../scene/world-map';
+import { createAshtray } from '../scene/ashtray';
+import { createPanelHeader, createPanelLivery } from '../scene/panel-livery';
 import { createPs1Material, ps1Uniforms } from './ps1-material';
 
 const U = 0.48;
@@ -63,6 +71,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   const dynamic: Array<() => void> = [];
   const rig = createRig();
   const settings = createRackControls();
+  const audio = createSoundEngine();
   const modules = assembleRack();
   const totalHeight =
     modules.reduce((sum, module) => sum + module.units * U + 0.045, 0) + 0.35;
@@ -141,19 +150,373 @@ export function startScene(canvas: HTMLCanvasElement) {
   for (let z = -4; z <= 4; z += 1.5) {
     cube(lab, 20, 0.008, 0.025, '#56594f', 0, floorY - 0.02, z);
   }
+  // A separate six-station ferrocore carousel feeds the rack by a heavy conduit.
+  const drum = new Group();
+  drum.position.set(3.15, floorY + 1.55, 0.25);
+  lab.add(drum);
+  for (const x of [-0.68, 0.68]) {
+    cube(drum, 0.16, 1.58, 0.22, '#69736c', x, -0.72, -0.23);
+    cube(drum, 0.35, 0.08, 0.53, '#3a403a', x, -1.49, -0.18);
+  }
+  cube(drum, 1.6, 0.13, 0.55, '#353c38', 0, -0.67, -0.22);
+  const barrel = new Mesh(
+    new CylinderGeometry(0.7, 0.7, 0.52, 12),
+    material('#444943'),
+  );
+  barrel.rotation.x = Math.PI / 2;
+  barrel.position.z = 0.07;
+  drum.add(barrel);
+  const carousel = new Group();
+  drum.add(carousel);
+  disc(carousel, 0.59, '#826953', 0, 0, 0.36);
+  disc(carousel, 0.49, '#283733', 0, 0, 0.371);
+  for (let station = 0; station < 6; station++) {
+    const angle = (station / 6) * Math.PI * 2;
+    const x = Math.sin(angle) * 0.4;
+    const y = Math.cos(angle) * 0.4;
+    disc(carousel, 0.145, '#b08a57', x, y, 0.385);
+    disc(carousel, 0.11, '#2e3835', x, y, 0.392);
+    const core = new Mesh(
+      new TorusGeometry(0.072, 0.035, 4, 8),
+      material(station < 4 ? '#d6c6a0' : '#918d72'),
+    );
+    core.position.set(x, y, 0.413);
+    carousel.add(core);
+  }
+  disc(carousel, 0.115, '#e0a752', 0, 0, 0.4);
+  disc(carousel, 0.055, '#413b2c', 0, 0, 0.409);
+  cube(drum, 0.16, 0.34, 0.13, '#c49b5c', 0.82, 0.07, 0.28);
+  disc(drum, 0.065, '#c6d7ba', 0.82, 0.31, 0.37);
+  label(drum, 'FERROCORE DRUM / 1-6', 0, 0.89, 0.33, 10);
+  const coreConduit = new Mesh(
+    new TubeGeometry(
+      new CatmullRomCurve3([
+        new Vector3(2.1, floorY + 2.22, 0.06),
+        new Vector3(2.55, floorY + 2.13, 0.12),
+        new Vector3(2.67, floorY + 1.67, 0.18),
+        new Vector3(2.48, floorY + 1.48, 0.25),
+      ]),
+      14,
+      0.085,
+      6,
+      false,
+    ),
+    material('#262b28'),
+  );
+  lab.add(coreConduit);
+  // The side cabinet carries the downstream amplifier, emitter and cooler.
+  const sideCabinet = new Group();
+  sideCabinet.position.set(5.35, floorY + 1.83, -0.15);
+  lab.add(sideCabinet);
+  cube(sideCabinet, 2.32, 3.72, 0.68, '#323c38', 0, 0, -0.15);
+  cube(sideCabinet, 2.36, 0.15, 0.75, '#727a69', 0, 1.82, -0.13);
+  cube(sideCabinet, 2.36, 0.15, 0.75, '#727a69', 0, -1.82, -0.13);
+  for (const x of [-1.07, 1.07]) {
+    cube(sideCabinet, 0.15, 3.55, 0.22, '#7d806f', x, 0, 0.25);
+    for (const y of [-1.62, -0.55, 0.55, 1.62])
+      disc(sideCabinet, 0.045, '#d5bd87', x, y, 0.37);
+  }
+  const sideUnits = [
+    { maker: 'NEUMANN DYNAMIK', title: '7-STAGE BETAFORM AMP', y: 1.1 },
+    { maker: 'VOLT XOCCULA', title: 'ISOLATED-FRAME FLUX EMITTER', y: 0 },
+    { maker: 'SYNCLEX', title: 'NANOCORE B-E RADIATOR', y: -1.1 },
+  ];
+  for (const unit of sideUnits) {
+    cube(sideCabinet, 2.02, 1.03, 0.11, '#424b45', 0, unit.y, 0.25);
+    const skin = createPanelLivery(unit.maker, '#424b45', 3);
+    textures.push(skin);
+    const skinMesh = new Mesh(
+      new PlaneGeometry(1.96, 1),
+      createPs1Material({ map: skin }, true),
+    );
+    materials.push(skinMesh.material);
+    skinMesh.position.set(0, unit.y, 0.31);
+    sideCabinet.add(skinMesh);
+    label(sideCabinet, unit.maker, -0.33, unit.y + 0.37, 0.35, 8);
+    label(sideCabinet, unit.title, 0, unit.y + 0.19, 0.36, 7);
+  }
+  for (let stage = 0; stage < 7; stage++) {
+    const x = -0.77 + stage * 0.25;
+    const lamp = disc(sideCabinet, 0.075, '#413b30', x, 0.96, 0.39);
+    dynamic.push(() => {
+      (lamp.material as ReturnType<typeof material>).color.set(
+        rig.heater > (stage + 1) / 8 ? '#f3b157' : '#413b30',
+      );
+    });
+  }
+  const ampKnob = new Mesh(
+    new CylinderGeometry(0.13, 0.13, 0.12, 10),
+    material('#293330'),
+  );
+  ampKnob.rotation.x = Math.PI / 2;
+  ampKnob.position.set(0.73, 0.7, 0.43);
+  sideCabinet.add(ampKnob);
+  bind(ampKnob, () => {
+    settings.knobs.gain = (settings.knobs.gain + 0.1) % 1.01;
+    audio.play('knob');
+    write(`Betaform stage gain to ${(settings.knobs.gain * 10).toFixed(1)}.`);
+  });
+  disc(sideCabinet, 0.25, '#d7ad6b', 0, -0.11, 0.39);
+  disc(sideCabinet, 0.16, '#273d3e', 0, -0.11, 0.4);
+  const emitterLamp = disc(sideCabinet, 0.09, '#33433e', 0, -0.11, 0.41);
+  dynamic.push(() => {
+    (emitterLamp.material as ReturnType<typeof material>).color.set(
+      rig.field > 0.2 ? '#7ce5c5' : '#33433e',
+    );
+  });
+  for (let fin = 0; fin < 9; fin++)
+    cube(
+      sideCabinet,
+      0.09,
+      0.28,
+      0.12,
+      '#a2ad9d',
+      -0.72 + fin * 0.18,
+      -1.2,
+      0.4,
+    );
+  const sideConduit = new Mesh(
+    new TubeGeometry(
+      new CatmullRomCurve3([
+        new Vector3(3.84, floorY + 1.55, 0),
+        new Vector3(4.28, floorY + 1.95, 0.03),
+        new Vector3(4.2, floorY + 2.72, 0),
+      ]),
+      12,
+      0.07,
+      6,
+      false,
+    ),
+    material('#272d2a'),
+  );
+  lab.add(sideConduit);
+  // Steel document cabinet for the reconstructed operating papers.
+  const fileCabinet = new Group();
+  fileCabinet.position.set(7.45, floorY + 1.23, -0.1);
+  lab.add(fileCabinet);
+  cube(fileCabinet, 1.52, 2.48, 1.08, '#81918d', 0, 0, -0.13);
+  cube(fileCabinet, 1.62, 0.1, 1.16, '#a8b5ab', 0, 1.23, -0.13);
+  for (const x of [-0.54, 0.54])
+    cube(fileCabinet, 0.1, 0.08, 0.1, '#444e48', x, -1.25, 0.26);
+  const drawerNames = [
+    'OPERATING GUIDE',
+    'INSTRUCTION MANUAL',
+    'CIRCUIT DIAGRAMS',
+  ];
+  const drawers: Group[] = [];
+  let openDrawer = -1;
+  let showManual: (index: number) => void = () => undefined;
+  for (let index = 0; index < 3; index++) {
+    const drawer = new Group();
+    drawer.position.y = 0.73 - index * 0.78;
+    fileCabinet.add(drawer);
+    drawers.push(drawer);
+    const front = cube(drawer, 1.32, 0.67, 0.08, '#a7b5ae', 0, 0, 0.47);
+    cube(drawer, 0.55, 0.13, 0.07, '#515e56', 0, -0.13, 0.53);
+    label(drawer, drawerNames[index], 0, 0.14, 0.53, 8, '#344139', '#e2dbc6');
+    bind(front, () => {
+      openDrawer = openDrawer === index ? -1 : index;
+      drawers.forEach((item, itemIndex) => {
+        item.position.z = itemIndex === openDrawer ? 0.2 : 0;
+      });
+      audio.play('paper');
+      if (openDrawer >= 0) showManual(openDrawer);
+    });
+  }
+  label(fileCabinet, 'VX3 REFERENCE FILES', 0, 1.36, 0.44, 10);
+  const pinBoard = new Group();
+  pinBoard.position.set(5.37, floorY + 5.2, -3.55);
+  lab.add(pinBoard);
+  cube(pinBoard, 2.8, 1.6, 0.11, '#5d4a32', 0, 0, 0);
+  cube(pinBoard, 2.58, 1.4, 0.02, '#a5835a', 0, 0, 0.07);
+  cube(pinBoard, 1.18, 1.15, 0.012, '#e7dcc0', -0.62, 0.06, 0.09);
+  label(pinBoard, 'VX LAB SAFETY', -0.62, 0.42, 0.11, 13, '#b44334', '#e7dcc0');
+  label(
+    pinBoard,
+    'NO LIVE CORE CHANGES',
+    -0.62,
+    0.12,
+    0.11,
+    8,
+    '#303b35',
+    '#e7dcc0',
+  );
+  label(
+    pinBoard,
+    'RETROCHECK FIRST',
+    -0.62,
+    -0.12,
+    0.11,
+    8,
+    '#303b35',
+    '#e7dcc0',
+  );
+  label(
+    pinBoard,
+    'REPORT ALL GLOW',
+    -0.62,
+    -0.36,
+    0.11,
+    8,
+    '#303b35',
+    '#e7dcc0',
+  );
+  cube(pinBoard, 1.02, 0.56, 0.012, '#d9ccaa', 0.73, 0.32, 0.09);
+  label(pinBoard, 'SHIFT ROTA', 0.73, 0.43, 0.11, 9, '#374745', '#d9ccaa');
+  label(pinBoard, 'A / B / C', 0.73, 0.22, 0.11, 9, '#374745', '#d9ccaa');
+  cube(pinBoard, 1.02, 0.48, 0.012, '#e6b887', 0.76, -0.39, 0.1);
+  label(
+    pinBoard,
+    'CORE 5: QUARANTINE',
+    0.76,
+    -0.38,
+    0.12,
+    8,
+    '#5a3328',
+    '#e6b887',
+  );
+  for (const [x, y] of [
+    [-1.08, 0.6],
+    [0.33, 0.56],
+    [0.34, -0.16],
+  ])
+    disc(pinBoard, 0.04, '#c34b39', x, y, 0.14);
+  const posterLoader = new TextureLoader();
+  for (const [index, name] of [
+    'volt-xoccula',
+    'neumann-dynamik',
+    'bonk-industries',
+  ].entries()) {
+    const x = 3.72 + index * 1.65;
+    const y = floorY + 7.08;
+    cube(lab, 1.38, 2.02, 0.035, '#4b3e31', x, y, -3.5);
+    const poster = posterLoader.load(`/posters/${name}.png`);
+    poster.colorSpace = SRGBColorSpace;
+    poster.magFilter = NearestFilter;
+    textures.push(poster);
+    const printedFace = new Mesh(
+      new PlaneGeometry(1.25, 1.88),
+      createPs1Material({ map: poster }, true),
+    );
+    materials.push(printedFace.material);
+    printedFace.position.set(x, y, -3.46);
+    lab.add(printedFace);
+  }
   for (let x = -8.5; x <= 8.5; x += 2.4) {
     cube(lab, 0.025, totalHeight + 4, 0.025, '#77847a', x, 0, -3.77);
   }
-  cube(lab, 2.6, 0.62, 0.08, '#c2b493', -5.35, totalHeight / 2 - 0.8, -3.69);
+  const wallDisplayX = -6.05;
+  const wallDisplayTop = totalHeight / 2 - 0.42;
+  const clockY = wallDisplayTop - 0.28;
+  disc(lab, 0.49, '#594f3b', wallDisplayX, clockY, -3.6);
+  disc(lab, 0.41, '#e4dac0', wallDisplayX, clockY, -3.58);
+  for (let hour = 0; hour < 12; hour++) {
+    const angle = (hour / 12) * Math.PI * 2;
+    disc(
+      lab,
+      hour % 3 === 0 ? 0.034 : 0.02,
+      '#4c5245',
+      wallDisplayX + Math.sin(angle) * 0.34,
+      clockY + Math.cos(angle) * 0.34,
+      -3.56,
+    );
+  }
+  const clockHand = (length: number, width: number) => {
+    const hand = cube(
+      lab,
+      width,
+      length,
+      0.012,
+      '#303c38',
+      wallDisplayX,
+      clockY,
+      -3.54,
+    );
+    hand.geometry.translate(0, length / 2, 0);
+    return hand;
+  };
+  const hourHand = clockHand(0.21, 0.033);
+  const minuteHand = clockHand(0.3, 0.019);
+  disc(lab, 0.04, '#a37149', wallDisplayX, clockY, -3.52);
+  dynamic.push(() => {
+    const now = new Date();
+    hourHand.rotation.z =
+      (-((now.getHours() % 12) + now.getMinutes() / 60) * Math.PI) / 6;
+    minuteHand.rotation.z =
+      (-(now.getMinutes() + now.getSeconds() / 60) * Math.PI) / 30;
+  });
+  cube(
+    lab,
+    2.85,
+    0.34,
+    0.08,
+    '#323f39',
+    wallDisplayX,
+    wallDisplayTop - 1.05,
+    -3.65,
+  );
+  label(
+    lab,
+    'GLOBAL FLUX CORRELATIONS',
+    wallDisplayX,
+    wallDisplayTop - 1.05,
+    -3.59,
+    12,
+    '#e3d4ab',
+    '#323f39',
+  );
+  cube(
+    lab,
+    2.94,
+    1.47,
+    0.09,
+    '#564f3c',
+    wallDisplayX,
+    wallDisplayTop - 2.04,
+    -3.65,
+  );
+  const worldMap = createWorldMapTexture();
+  textures.push(worldMap);
+  const mapFace = new Mesh(
+    new PlaneGeometry(2.8, 1.34),
+    createPs1Material({ map: worldMap }, true),
+  );
+  materials.push(mapFace.material);
+  mapFace.position.set(wallDisplayX, wallDisplayTop - 2.04, -3.58);
+  lab.add(mapFace);
+  const ledPins: [number, number][] = [
+    [0.2, 0.7],
+    [0.27, 0.39],
+    [0.47, 0.74],
+    [0.53, 0.46],
+    [0.63, 0.72],
+    [0.75, 0.55],
+    [0.84, 0.31],
+  ];
+  ledPins.forEach(([u, v], index) => {
+    const x = wallDisplayX + (u - 0.5) * 2.8;
+    const y = wallDisplayTop - 2.04 + (v - 0.5) * 1.34;
+    disc(lab, 0.068, '#46443a', x, y, -3.55);
+    const light = disc(lab, 0.038, '#f0b85b', x, y, -3.53);
+    dynamic.push(() => {
+      (light.material as ReturnType<typeof material>).color.set(
+        Math.sin(performance.now() * 0.0013 + index * 1.8) > -0.45
+          ? rig.field > 0.5 && index % 3 === 0
+            ? '#ff7252'
+            : '#ffd47c'
+          : '#776b4e',
+      );
+    });
+  });
   label(
     lab,
     'LABORATORY 3 / PHASE STUDIES',
-    -5.35,
-    totalHeight / 2 - 0.8,
-    -3.63,
-    11,
-    '#343b34',
-    '#c2b493',
+    wallDisplayX,
+    wallDisplayTop - 3.08,
+    -3.57,
+    9,
+    '#e3d4ab',
+    '#323f39',
   );
   cube(lab, 2.4, 0.1, 0.25, '#a4aaa0', -4.45, totalHeight / 2 + 0.55, -3.45);
   cube(lab, 2.25, 0.055, 0.04, '#e5d6a7', -4.45, totalHeight / 2 + 0.45, -3.3);
@@ -178,18 +541,27 @@ export function startScene(canvas: HTMLCanvasElement) {
   for (let i = 0; i < 4; i++)
     cube(bench, 0.57, 0.025, 0.38, '#e0d4af', 0.47, 1.45 + i * 0.025, 0.36);
 
+  // A 1970s ashtray at the far end of the bench, one cigarette still burning.
+  const ashtray = createAshtray();
+  ashtray.group.position.set(-1.12, 1.38, 0.42);
+  bench.add(ashtray.group);
+  dynamic.push(() =>
+    ashtray.update(performance.now() / 1000, reducedMotion.matches),
+  );
+
   // The wall outlet and the trailing rubber mains lead are visible at rack base.
-  cube(lab, 0.52, 0.7, 0.08, '#c9bf9f', -5, floorY + 2.5, -3.62);
-  cube(lab, 0.35, 0.45, 0.018, '#eee2bd', -5, floorY + 2.5, -3.56);
-  for (const x of [-5.08, -4.92]) {
+  const socketX = -5.6;
+  cube(lab, 0.52, 0.7, 0.08, '#c9bf9f', socketX, floorY + 2.5, -3.62);
+  cube(lab, 0.35, 0.45, 0.018, '#eee2bd', socketX, floorY + 2.5, -3.56);
+  for (const x of [socketX - 0.08, socketX + 0.08]) {
     disc(lab, 0.037, '#3c3b31', x, floorY + 2.56, -3.54);
   }
-  disc(lab, 0.045, '#3c3b31', -5, floorY + 2.4, -3.54);
-  cube(lab, 0.18, 0.15, 0.13, '#403f36', -5, floorY + 2.24, -3.46);
+  disc(lab, 0.045, '#3c3b31', socketX, floorY + 2.4, -3.54);
+  cube(lab, 0.18, 0.15, 0.13, '#403f36', socketX, floorY + 2.24, -3.46);
   label(
     lab,
     '240 V / ISOLATED',
-    -5,
+    socketX,
     floorY + 3.03,
     -3.58,
     8,
@@ -199,8 +571,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   const cable = new Mesh(
     new TubeGeometry(
       new CatmullRomCurve3([
-        new Vector3(-5, floorY + 2.24, -3.4),
-        new Vector3(-5, floorY + 1.45, -3.05),
+        new Vector3(socketX, floorY + 2.24, -3.4),
+        new Vector3(socketX, floorY + 1.45, -3.05),
         new Vector3(-4.35, floorY + 0.04, -1.75),
         new Vector3(-4.15, floorY + 0.04, -0.2),
         new Vector3(-3.2, floorY + 0.04, 0.55),
@@ -277,6 +649,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
 
   let top = totalHeight / 2 - 0.2;
+  let band = 2;
+  const bands = ['A', 'B', 'C', 'D', 'E', 'Ω'];
   for (const module of modules) {
     const h = module.units * U;
     const y = top - h / 2;
@@ -284,6 +658,15 @@ export function startScene(canvas: HTMLCanvasElement) {
     panel.position.y = y;
     rack.add(panel);
     cube(panel, panelWidth, h - 0.055, 0.27, module.finish, 0, 0, 0.04);
+    const livery = createPanelLivery(module.maker, module.finish, module.units);
+    textures.push(livery);
+    const faceplate = new Mesh(
+      new PlaneGeometry(panelWidth - 0.22, h - 0.055),
+      createPs1Material({ map: livery }, true),
+    );
+    materials.push(faceplate.material);
+    faceplate.position.z = 0.182;
+    panel.add(faceplate);
     cube(panel, 4.1, 0.025, 0.015, '#adb0a0', 0, h / 2 - 0.1, 0.19);
     for (const x of [-2.1, 2.1]) {
       cube(panel, 0.2, h - 0.04, 0.32, '#6c7169', x, 0, 0.1);
@@ -304,16 +687,15 @@ export function startScene(canvas: HTMLCanvasElement) {
         );
       }
     }
-    label(
-      panel,
-      `${module.maker}  /  ${module.title}`,
-      0,
-      h / 2 - 0.27,
-      0.235,
-      11,
-      '#eadcbd',
-      '#252d2a',
+    const header = createPanelHeader(module.maker, module.title);
+    textures.push(header);
+    const headerPlate = new Mesh(
+      new PlaneGeometry(4.05, 0.3),
+      createPs1Material({ map: header }, true),
     );
+    materials.push(headerPlate.material);
+    headerPlate.position.set(0, h / 2 - 0.27, 0.235);
+    panel.add(headerPlate);
     label(
       panel,
       module.id.toUpperCase(),
@@ -337,11 +719,13 @@ export function startScene(canvas: HTMLCanvasElement) {
       );
 
     if (module.id.startsWith('valves')) {
-      for (const x of [-1.35, -0.55, 0.25, 1.05]) {
+      const tubeSwitches = ['aux1', 'xtalA', 'xtalB', 'xtalC'] as const;
+      for (const [index, x] of [-1.35, -0.55, 0.25, 1.05].entries()) {
         cube(panel, 0.28, 0.07, 0.19, '#252823', x, 0.09, 0.31);
+        const glassMaterial = material('#40342b');
         const glass = new Mesh(
           new CylinderGeometry(0.1, 0.1, 0.2, 8),
-          material('#40342b'),
+          glassMaterial,
         );
         glass.position.set(x, 0.22, 0.34);
         panel.add(glass);
@@ -355,9 +739,31 @@ export function startScene(canvas: HTMLCanvasElement) {
           0.37,
           0.46,
         );
+        const filamentMaterial = filament.material as ReturnType<
+          typeof material
+        >;
+        let glowLevel = 0;
         dynamic.push(() => {
-          (filament.material as ReturnType<typeof material>).color.set(
-            rig.heater > 0.3 && settings.toggles.ht ? '#ef8b35' : '#4f2f19',
+          const target =
+            rig.heater *
+            (settings.toggles.ht ? 1 : 0.03) *
+            (settings.toggles[tubeSwitches[index]] ? 1 : 0.08);
+          glowLevel += (target - glowLevel) * 0.075;
+          const time = performance.now() * 0.001;
+          const flutter =
+            0.86 +
+            0.1 * Math.sin(time * (9.7 + index * 1.4) + index * 2.1) +
+            0.04 * Math.sin(time * (31 + index * 3.3));
+          const brightness = Math.max(0, glowLevel * flutter);
+          filamentMaterial.color.setRGB(
+            0.2 + brightness * 0.8,
+            0.1 + brightness * 0.36,
+            0.04 + brightness * 0.08,
+          );
+          glassMaterial.color.setRGB(
+            0.24 + brightness * 0.19,
+            0.19 + brightness * 0.09,
+            0.14 + brightness * 0.025,
           );
         });
       }
@@ -366,11 +772,11 @@ export function startScene(canvas: HTMLCanvasElement) {
     for (const control of module.controls) {
       const x = control.x;
       const cy = module.units >= 4 ? -0.28 : -0.2;
-      if (control.kind === 'knob') {
+      if (control.kind === 'knob' || control.kind === 'selector') {
         disc(panel, 0.26, '#1e2422', x, cy, 0.25);
         const knob = new Mesh(
           new CylinderGeometry(0.18, 0.2, 0.13, 12),
-          material('#252928'),
+          material(control.kind === 'selector' ? '#8b7853' : '#252928'),
         );
         knob.rotation.x = Math.PI / 2;
         knob.position.set(x, cy, 0.35);
@@ -385,15 +791,49 @@ export function startScene(canvas: HTMLCanvasElement) {
           cy + 0.11,
           0.43,
         );
-        const id = control.id;
+        const id = control.kind === 'knob' ? control.id : null;
         const update = () => {
-          mark.rotation.z = -(settings.knobs[id] - 0.5) * 4.4;
+          mark.rotation.z = -((id ? settings.knobs[id] : band / 5) - 0.5) * 4.4;
         };
         dynamic.push(update);
         bind(knob, () => {
-          settings.knobs[id] = (settings.knobs[id] + 0.1) % 1.01;
-          applyRack(settings, rig.controls);
-          write(knobLine(id, settings.knobs[id]));
+          if (id) {
+            settings.knobs[id] = (settings.knobs[id] + 0.1) % 1.01;
+            applyRack(settings, rig.controls);
+            audio.play('knob');
+            write(knobLine(id, settings.knobs[id]));
+          } else {
+            band = (band + 1) % bands.length;
+            settings.knobs.ratio = band / 5;
+            audio.play('selector');
+            write(`Band ${bands[band]} selected.`);
+          }
+        });
+      } else if (control.kind === 'button') {
+        disc(panel, 0.24, '#202521', x, cy, 0.25);
+        const color =
+          control.id === 'reset'
+            ? '#638960'
+            : control.id === 'purge'
+              ? '#b29952'
+              : '#ad5946';
+        const button = cube(panel, 0.26, 0.2, 0.12, color, x, cy, 0.35);
+        bind(button, () => {
+          audio.play('button');
+          if (control.id === 'reset') {
+            Object.assign(rig, createRig());
+            applyRack(settings, rig.controls);
+            write('RESET pressed. Rig reset, mostly.');
+          } else if (control.id === 'purge') {
+            rig.strain = Math.max(0, rig.strain - 0.35);
+            rig.drift *= 0.5;
+            audio.play('purge');
+            write('PURGE pressed. Hiss from behind the wall.');
+          } else {
+            if (rig.controls.mains) rig.strain = Math.min(1, rig.strain + 0.15);
+            audio.play('spark');
+            write('Pressed DO NOT. The annotation was unspecific.');
+          }
         });
       } else {
         const id = control.kind === 'toggle' ? control.id : null;
@@ -420,9 +860,13 @@ export function startScene(canvas: HTMLCanvasElement) {
           if (id) {
             settings.toggles[id] = !settings.toggles[id];
             applyRack(settings, rig.controls);
+            audio.play(settings.toggles[id] ? 'toggle-up' : 'toggle-down');
             write(toggleLine(id, settings.toggles[id]));
           } else {
             rig.controls.mains = !rig.controls.mains;
+            audio.play(rig.controls.mains ? 'breaker-on' : 'breaker-off');
+            if (rig.controls.mains)
+              window.setTimeout(() => audio.play('relay'), 110);
             write(
               rig.controls.mains
                 ? 'Mains closed. Heaters warming.'
@@ -433,7 +877,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       }
       label(panel, control.label, x, cy - 0.38, 0.28, 9);
     }
-    const instrumentY = module.units >= 4 ? 0.28 : -0.05;
+    const instrumentY = module.units >= 4 ? 0.15 : -0.05;
     for (const [index, instrument] of module.instruments.entries()) {
       const x = module.instruments.length === 1 ? 1.27 : 1.0 + index * 0.75;
       if (instrument === 'scope') {
@@ -452,9 +896,11 @@ export function startScene(canvas: HTMLCanvasElement) {
             (_, i) => [
               i / 39,
               0.5 +
-                Math.sin(i * 0.7 + performance.now() * 0.003) *
+                Math.sin(
+                  i * (0.45 + settings.knobs.ratio) + performance.now() * 0.003,
+                ) *
                   rig.field *
-                  (0.18 + rig.instability * 0.15),
+                  (0.08 + settings.knobs.gain * 0.2 + rig.instability * 0.15),
             ],
           );
           scope.draw(points, rig.controls.mains);
@@ -471,7 +917,13 @@ export function startScene(canvas: HTMLCanvasElement) {
         panel.add(screen);
         dynamic.push(() =>
           nixie.draw(
-            String(Math.round(rig.spindle * 3600)).padStart(6, '0'),
+            String(
+              Math.round(
+                module.id.startsWith('monitor')
+                  ? 38 + rig.instability * 400
+                  : rig.spindle * 3600,
+              ),
+            ).padStart(6, '0'),
             rig.controls.mains,
           ),
         );
@@ -492,20 +944,118 @@ export function startScene(canvas: HTMLCanvasElement) {
 
   const overlay = document.createElement('div');
   overlay.className = 'rack-ui';
-  overlay.innerHTML = `<div class="rack-heading"><strong>VX3 / FULL RIG</strong><small>VALVE-ERA ANALOGUE COMPUTOR · c. 1960</small><span id="rig-status">RIG COLD</span></div><div class="view-switch" role="group" aria-label="Camera view"><button type="button" data-view="perspective" aria-pressed="true">PERSPECTIVE</button><button type="button" data-view="isometric" aria-pressed="false">ISOMETRIC</button></div><div class="rack-nav"><button type="button" data-pan="up" aria-label="Scroll up the rack">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Scroll down the rack">▼</button></div><aside class="logbook"><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log" hidden>▤ LOG <span id="unread-count"></span></button><p class="rack-help">WHEEL OR DRAG TO SCROLL · CLICK CONTROLS</p>`;
+  overlay.innerHTML = `<div class="rack-heading"><strong>VX3 / FULL RIG</strong><small>EARLY-1970s ANALOGUE APPARATUS</small><span id="rig-status">RIG COLD</span><span id="delta-readout">δ 0.000 / 0.880</span></div><div class="view-switch" role="group" aria-label="Camera view"><button type="button" data-view="perspective" aria-pressed="true">PERSPECTIVE</button><button type="button" data-view="isometric" aria-pressed="false">ISOMETRIC</button></div><div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Pan and zoom"><button type="button" data-pan="left" aria-label="Pan left">◀</button><button type="button" data-pan="up" aria-label="Pan up">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Pan down">▼</button><button type="button" data-pan="right" aria-label="Pan right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook"><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log" hidden>▤ LOG <span id="unread-count"></span></button><p class="rack-help">WHEEL TO SCROLL · DRAG TO LOOK · CLICK CONTROLS</p>`;
+  const manualSheet = document.createElement('aside');
+  manualSheet.className = 'manual-sheet';
+  manualSheet.hidden = true;
+  manualSheet.innerHTML = `<div class="manual-head"><strong id="manual-title"></strong><button type="button" aria-label="Close reference sheet">×</button></div><pre id="manual-content"></pre><small>VX3 WORKSTATION RECONSTRUCTION · FOR EDUCATIONAL USE ONLY</small>`;
+  overlay.append(manualSheet);
   canvas.parentElement?.append(overlay);
+  const manualPages = [
+    {
+      title: 'OPERATING GUIDE / VX3',
+      content:
+        '1  Close the varistance-isolated mains breaker.\n2  Allow the valve heaters to reach temperature.\n3  Start the Encabulator and advance drive gradually.\n4  Raise the Holtzmann coil field; trim for a steady Delta.\n5  Observe the Baltovsky chamber and ferrocore drum.\n6  Open the breaker if the retrocheck warns of strain.',
+    },
+    {
+      title: 'INSTRUCTION MANUAL / CORE HANDLING',
+      content:
+        'SIX-STATION FERROCORE DRUM\n\nFit four to six ceramic-collared cores before excitation. Keep the drum guard shut in motion. A bright yellow Baltovsky chamber may indicate a spent core. Do not exchange cores under load. Record the core position and varistor reading after each run.',
+    },
+    {
+      title: 'CIRCUIT DIAGRAM / SIGNAL PATH',
+      content:
+        'MAINS\n  |\nVARISTANCE ISOLATOR -- HEATER SUPPLY\n  |                         |\nFERROCORE BANK ----> ENCABULATOR DRIVE\n  |                         |\n  +----> HOLTZMANN COIL ----+\n                |\n      BALTOVSKY CHAMBER\n                |\n       FROMITZ DETECTOR\n                |\n      MAIN BUS CONTROLLER\n\nSIDE RACK: BETAFORM AMP / FLUX EMITTER / B-E RADIATOR',
+    },
+  ];
+  const manualTitle = manualSheet.querySelector<HTMLElement>('#manual-title')!;
+  const manualContent =
+    manualSheet.querySelector<HTMLElement>('#manual-content')!;
+  showManual = (index) => {
+    manualTitle.textContent = manualPages[index].title;
+    manualContent.textContent = manualPages[index].content;
+    manualSheet.hidden = false;
+  };
+  manualSheet.querySelector('button')!.addEventListener('click', () => {
+    audio.play('paper');
+    manualSheet.hidden = true;
+    openDrawer = -1;
+    drawers.forEach((drawer) => (drawer.position.z = 0));
+  });
   const status = overlay.querySelector<HTMLElement>('#rig-status')!;
+  const deltaReadout = overlay.querySelector<HTMLElement>('#delta-readout')!;
   const entries = overlay.querySelector<HTMLOListElement>('#log-entries')!;
   const unitReadout = overlay.querySelector<HTMLElement>('#unit-readout')!;
   const logbook = overlay.querySelector<HTMLElement>('.logbook')!;
   const tab = overlay.querySelector<HTMLButtonElement>('#open-log')!;
   const unread = overlay.querySelector<HTMLElement>('#unread-count')!;
+  const muteButton = overlay.querySelector<HTMLButtonElement>('#mute-sound')!;
+  const volumeInput = overlay.querySelector<HTMLInputElement>('#sound-volume')!;
+  let soundVolume = 0.55;
+  let soundMuted = false;
+  try {
+    const stored = JSON.parse(localStorage.getItem('vx3-sound') ?? 'null') as {
+      volume?: number;
+      muted?: boolean;
+    } | null;
+    if (typeof stored?.volume === 'number' && Number.isFinite(stored.volume))
+      soundVolume = Math.max(0, Math.min(1, stored.volume));
+    if (typeof stored?.muted === 'boolean') soundMuted = stored.muted;
+  } catch {
+    /* Private browsing may deny storage. */
+  }
+  const refreshSoundUi = () => {
+    muteButton.textContent = soundMuted ? 'SOUND OFF' : 'SOUND ON';
+    muteButton.setAttribute('aria-pressed', String(soundMuted));
+    volumeInput.value = String(Math.round(soundVolume * 100));
+    audio.setMix(soundVolume, soundMuted);
+  };
+  const saveSound = () => {
+    try {
+      localStorage.setItem(
+        'vx3-sound',
+        JSON.stringify({ volume: soundVolume, muted: soundMuted }),
+      );
+    } catch {
+      /* The current session still keeps the selected mix. */
+    }
+  };
+  refreshSoundUi();
+  muteButton.addEventListener('click', () => {
+    if (!soundMuted) audio.play('button');
+    soundMuted = !soundMuted;
+    refreshSoundUi();
+    if (!soundMuted) audio.play('button');
+    saveSound();
+  });
+  let lastVolumeClick = 0;
+  volumeInput.addEventListener('input', () => {
+    soundVolume = Number(volumeInput.value) / 100;
+    refreshSoundUi();
+    const now = performance.now();
+    if (now - lastVolumeClick > 70) {
+      audio.play('knob');
+      lastVolumeClick = now;
+    }
+    saveSound();
+  });
+  let interacted = false;
+  const gesture = () => {
+    interacted = true;
+    void audio.unlock();
+  };
+  overlay.addEventListener('pointerdown', gesture);
+  canvas.addEventListener('pointerdown', gesture);
+  document.addEventListener('keydown', gesture);
+  const visibility = () => audio.setVisible(!document.hidden);
+  document.addEventListener('visibilitychange', visibility);
   let logOpen = true;
   let unseen = 0;
   const write = (line: string) => {
     const item = document.createElement('li');
     item.textContent = `${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}  ${line}`;
     entries.prepend(item);
+    if (interacted) audio.play('pencil');
     while (entries.children.length > 25) entries.lastElementChild?.remove();
     if (!logOpen) {
       unseen++;
@@ -513,13 +1063,15 @@ export function startScene(canvas: HTMLCanvasElement) {
       tab.setAttribute('aria-label', `Open logbook, ${unseen} new entries`);
     }
   };
-  write('Rack opened. Historical full VX3 cold. No two standard racks alike.');
+  write('Rack opened. Historical full VX3 cold. For educational use only.');
   overlay.querySelector('#close-log')!.addEventListener('click', () => {
+    audio.play('paper');
     logOpen = false;
     logbook.hidden = true;
     tab.hidden = false;
   });
   tab.addEventListener('click', () => {
+    audio.play('paper');
     logOpen = true;
     logbook.hidden = false;
     tab.hidden = true;
@@ -530,6 +1082,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     '[data-view]',
   )) {
     button.addEventListener('click', () => {
+      audio.play('selector');
       view = button.dataset.view === 'isometric' ? 'isometric' : 'perspective';
       for (const option of overlay.querySelectorAll<HTMLButtonElement>(
         '[data-view]',
@@ -541,33 +1094,72 @@ export function startScene(canvas: HTMLCanvasElement) {
 
   const halfTravel = Math.max(0, (totalHeight - 3.2) / 2);
   let pan = halfTravel;
+  let panX = 0;
+  let cameraZoom = 1;
   const panTo = (value: number) => {
     pan = Math.max(-halfTravel, Math.min(halfTravel, value));
     unitReadout.textContent = `U ${String(Math.max(1, Math.floor((halfTravel - pan) / U) + 1)).padStart(2, '0')} / ${Math.round(totalHeight / U)}`;
   };
   panTo(pan);
-  overlay
-    .querySelector('[data-pan="up"]')!
-    .addEventListener('click', () => panTo(pan + 1.5));
-  overlay
-    .querySelector('[data-pan="down"]')!
-    .addEventListener('click', () => panTo(pan - 1.5));
+  overlay.querySelector('[data-pan="up"]')!.addEventListener('click', () => {
+    panTo(pan + 1.5);
+  });
+  overlay.querySelector('[data-pan="down"]')!.addEventListener('click', () => {
+    panTo(pan - 1.5);
+  });
+  overlay.querySelector('[data-pan="left"]')!.addEventListener('click', () => {
+    panX = Math.max(-4, panX - 0.75);
+  });
+  overlay.querySelector('[data-pan="right"]')!.addEventListener('click', () => {
+    panX = Math.min(6, panX + 0.75);
+  });
+  overlay.querySelector('[data-zoom="in"]')!.addEventListener('click', () => {
+    cameraZoom = Math.min(1.8, cameraZoom + 0.15);
+    isometricCamera.zoom = cameraZoom;
+    isometricCamera.updateProjectionMatrix();
+  });
+  overlay.querySelector('[data-zoom="out"]')!.addEventListener('click', () => {
+    cameraZoom = Math.max(0.65, cameraZoom - 0.15);
+    isometricCamera.zoom = cameraZoom;
+    isometricCamera.updateProjectionMatrix();
+  });
   const wheel = (event: WheelEvent) => {
     event.preventDefault();
-    panTo(pan - event.deltaY * 0.004);
+    const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
+    panX = Math.max(-4, Math.min(6, panX + event.deltaX * scale * 0.005));
+    panTo(pan - event.deltaY * scale * 0.004);
   };
   canvas.addEventListener('wheel', wheel, { passive: false });
   const raycaster = new Raycaster();
   const pointer = new Vector2();
-  let drag: { y: number; pan: number; moved: boolean } | null = null;
+  let orbitYaw = 0;
+  let orbitPitch = 0;
+  let drag: {
+    x: number;
+    y: number;
+    yaw: number;
+    pitch: number;
+    moved: boolean;
+  } | null = null;
   const down = (event: PointerEvent) => {
     canvas.setPointerCapture(event.pointerId);
-    drag = { y: event.clientY, pan, moved: false };
+    drag = {
+      x: event.clientX,
+      y: event.clientY,
+      yaw: orbitYaw,
+      pitch: orbitPitch,
+      moved: false,
+    };
   };
   const move = (event: PointerEvent) => {
     if (!drag) return;
-    if (Math.abs(event.clientY - drag.y) > 5) drag.moved = true;
-    if (drag.moved) panTo(drag.pan + (event.clientY - drag.y) * 0.008);
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) drag.moved = true;
+    if (drag.moved) {
+      orbitYaw = Math.max(-1.15, Math.min(1.15, drag.yaw - dx * 0.004));
+      orbitPitch = Math.max(-0.35, Math.min(0.65, drag.pitch - dy * 0.003));
+    }
   };
   const up = (event: PointerEvent) => {
     if (!drag) return;
@@ -612,13 +1204,26 @@ export function startScene(canvas: HTMLCanvasElement) {
     const delta = last ? Math.min(0.1, (time - last) / 1000) : 0;
     last = time;
     for (const event of stepRig(rig, delta)) {
-      if (event.kind === 'warmed')
+      if (event.kind === 'warmed') {
+        audio.play('relay');
         write('Heaters at temperature. The cabinet smells like dust.');
-      if (event.kind === 'field-locked') write('H-B field locked. Lovely hum.');
-      if (event.kind === 'warning')
+      }
+      if (event.kind === 'field-locked') {
+        audio.play('field-locked');
+        write('H-B field locked. Lovely hum.');
+      }
+      if (event.kind === 'warning') {
+        audio.play('warning');
         write('H-B field wandering. Strain rising.');
-      if (event.kind === 'incident') write(event.text);
+      }
+      if (event.kind === 'incident') {
+        audio.play('incident');
+        window.setTimeout(() => audio.play('breaker-off'), 180);
+        write(event.text);
+      }
     }
+    audio.update(rig, settings, reducedMotion.matches);
+    if (!reducedMotion.matches) carousel.rotation.z -= rig.spindle * delta * 4;
     status.textContent = !rig.controls.mains
       ? 'RIG COLD'
       : rig.instability > 0.55
@@ -629,12 +1234,21 @@ export function startScene(canvas: HTMLCanvasElement) {
             ? 'FIELD WANDERING'
             : 'HEATERS / NO FIELD';
     status.dataset.alert = rig.instability > 0.55 ? 'true' : 'false';
+    deltaReadout.textContent = `δ ${deltaScore(rig).toFixed(3)} / 0.880`;
     for (const update of dynamic) update();
     const sway = reducedMotion.matches ? 0 : Math.sin(time / 5000) * 0.05;
-    perspectiveCamera.position.set(1.25 + sway, pan + 0.22, 8.8);
-    perspectiveCamera.lookAt(0, pan, 0);
-    isometricCamera.position.set(5.5, pan + 3.5, 7.5);
-    isometricCamera.lookAt(0, pan, 0);
+    perspectiveCamera.position.set(
+      panX + Math.sin(0.14 + orbitYaw) * (8.9 / cameraZoom) + sway,
+      pan + 0.22 + Math.sin(orbitPitch) * (8.9 / cameraZoom),
+      Math.cos(0.14 + orbitYaw) * (8.9 / cameraZoom),
+    );
+    perspectiveCamera.lookAt(panX, pan, 0);
+    isometricCamera.position.set(
+      panX + Math.sin(0.63 + orbitYaw) * 9.3,
+      pan + 3.5 + Math.sin(orbitPitch) * 9.3,
+      Math.cos(0.63 + orbitYaw) * 9.3,
+    );
+    isometricCamera.lookAt(panX, pan, 0);
     ps1Uniforms.snapPixels.value = reducedMotion.matches ? 0 : 1;
     renderer.render(scene, camera());
   });
@@ -643,8 +1257,13 @@ export function startScene(canvas: HTMLCanvasElement) {
     observer.disconnect();
     canvas.removeEventListener('wheel', wheel);
     canvas.removeEventListener('pointerdown', down);
+    canvas.removeEventListener('pointerdown', gesture);
     canvas.removeEventListener('pointermove', move);
     canvas.removeEventListener('pointerup', up);
+    document.removeEventListener('keydown', gesture);
+    document.removeEventListener('visibilitychange', visibility);
+    audio.dispose();
+    ashtray.dispose();
     overlay.remove();
     scene.traverse((object) => {
       if (object instanceof Mesh) object.geometry.dispose();

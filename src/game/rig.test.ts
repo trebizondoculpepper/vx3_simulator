@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createRig, idealTrim, stepRig } from './rig';
+import {
+  createRig,
+  deltaScore,
+  idealTrim,
+  stepRig,
+  YALGETH_LIMIT,
+} from './rig';
 import type { RigEvent, RigState } from './rig';
 
 const still = () => 0.5;
@@ -12,6 +18,13 @@ function run(state: RigState, seconds: number, random = still) {
 }
 
 describe('stepRig', () => {
+  it('keeps Delta below Yalgeth’s limit and discounts an unstable field', () => {
+    const rig = createRig();
+    rig.field = 1;
+    expect(deltaScore(rig)).toBe(YALGETH_LIMIT);
+    rig.instability = 0.75;
+    expect(deltaScore(rig)).toBeLessThan(YALGETH_LIMIT);
+  });
   it('stays cold and dark with the mains off', () => {
     const rig = createRig();
     rig.controls.spindle = 1;
