@@ -1,6 +1,7 @@
 import {
   AmbientLight,
   BoxGeometry,
+  CatmullRomCurve3,
   CircleGeometry,
   Color,
   CylinderGeometry,
@@ -12,7 +13,9 @@ import {
   PlaneGeometry,
   Raycaster,
   Scene,
+  TubeGeometry,
   Vector2,
+  Vector3,
   WebGLRenderer,
 } from 'three';
 import type { Material, Object3D, Texture } from 'three';
@@ -123,6 +126,96 @@ export function startScene(canvas: HTMLCanvasElement) {
     actions.set(object.id, action);
   };
 
+  // The cabinet belongs to a room: painted masonry, benches and old test gear.
+  const lab = new Group();
+  scene.add(lab);
+  const floorY = -totalHeight / 2 - 0.23;
+  cube(lab, 20, totalHeight + 4, 0.18, '#626f68', 0, 0, -3.9);
+  cube(lab, 20, 3.4, 0.2, '#3d5750', 0, floorY + 1.7, -3.79);
+  cube(lab, 20, 0.11, 0.29, '#d0c3a0', 0, floorY + 3.4, -3.66);
+  cube(lab, 20, 0.2, 0.32, '#373d38', 0, floorY + 0.12, -3.65);
+  cube(lab, 20, 0.3, 9, '#706d60', 0, floorY - 0.18, -0.15);
+  for (let x = -9; x <= 9; x += 1.5) {
+    cube(lab, 0.025, 0.008, 9, '#56594f', x, floorY - 0.02, -0.15);
+  }
+  for (let z = -4; z <= 4; z += 1.5) {
+    cube(lab, 20, 0.008, 0.025, '#56594f', 0, floorY - 0.02, z);
+  }
+  for (let x = -8.5; x <= 8.5; x += 2.4) {
+    cube(lab, 0.025, totalHeight + 4, 0.025, '#77847a', x, 0, -3.77);
+  }
+  cube(lab, 2.6, 0.62, 0.08, '#c2b493', -5.35, totalHeight / 2 - 0.8, -3.69);
+  label(
+    lab,
+    'LABORATORY 3 / PHASE STUDIES',
+    -5.35,
+    totalHeight / 2 - 0.8,
+    -3.63,
+    11,
+    '#343b34',
+    '#c2b493',
+  );
+  cube(lab, 2.4, 0.1, 0.25, '#a4aaa0', -4.45, totalHeight / 2 + 0.55, -3.45);
+  cube(lab, 2.25, 0.055, 0.04, '#e5d6a7', -4.45, totalHeight / 2 + 0.45, -3.3);
+
+  // A workbench with a CRT, calibration source and stacked paper records.
+  const bench = new Group();
+  bench.position.set(-4.3, floorY, -1.6);
+  lab.add(bench);
+  cube(bench, 2.8, 0.18, 1.35, '#896e50', 0, 1.24, 0);
+  cube(bench, 2.85, 0.035, 1.4, '#c3a477', 0, 1.36, 0);
+  for (const x of [-1.25, 1.25]) {
+    for (const z of [-0.5, 0.5])
+      cube(bench, 0.13, 1.2, 0.13, '#3c453e', x, 0.61, z);
+  }
+  cube(bench, 1.05, 0.65, 0.55, '#6b746b', -0.62, 1.77, -0.18);
+  cube(bench, 0.68, 0.42, 0.02, '#172e2a', -0.65, 1.78, 0.11);
+  const crtGlow = disc(bench, 0.12, '#8bc6a0', -0.65, 1.78, 0.125);
+  crtGlow.scale.set(1.7, 0.4, 1);
+  cube(bench, 0.57, 0.42, 0.45, '#a49b7f', 0.53, 1.65, -0.22);
+  for (const x of [0.37, 0.58, 0.79])
+    disc(bench, 0.045, '#e0ba6d', x, 1.66, 0.02);
+  for (let i = 0; i < 4; i++)
+    cube(bench, 0.57, 0.025, 0.38, '#e0d4af', 0.47, 1.45 + i * 0.025, 0.36);
+
+  // The wall outlet and the trailing rubber mains lead are visible at rack base.
+  cube(lab, 0.52, 0.7, 0.08, '#c9bf9f', -5, floorY + 2.5, -3.62);
+  cube(lab, 0.35, 0.45, 0.018, '#eee2bd', -5, floorY + 2.5, -3.56);
+  for (const x of [-5.08, -4.92]) {
+    disc(lab, 0.037, '#3c3b31', x, floorY + 2.56, -3.54);
+  }
+  disc(lab, 0.045, '#3c3b31', -5, floorY + 2.4, -3.54);
+  cube(lab, 0.18, 0.15, 0.13, '#403f36', -5, floorY + 2.24, -3.46);
+  label(
+    lab,
+    '240 V / ISOLATED',
+    -5,
+    floorY + 3.03,
+    -3.58,
+    8,
+    '#e3d8b7',
+    '#343d38',
+  );
+  const cable = new Mesh(
+    new TubeGeometry(
+      new CatmullRomCurve3([
+        new Vector3(-5, floorY + 2.24, -3.4),
+        new Vector3(-5, floorY + 1.45, -3.05),
+        new Vector3(-4.35, floorY + 0.04, -1.75),
+        new Vector3(-4.15, floorY + 0.04, -0.2),
+        new Vector3(-3.2, floorY + 0.04, 0.55),
+        new Vector3(-2.55, floorY + 0.08, 0.28),
+        new Vector3(-2.4, floorY + 0.28, -0.3),
+      ]),
+      48,
+      0.055,
+      5,
+      false,
+    ),
+    material('#302e2a'),
+  );
+  lab.add(cable);
+
   cube(rack, 5.05, totalHeight + 0.25, 0.65, '#242724', 0, 0, -0.48);
   for (const x of [-2.5, 2.5]) {
     cube(rack, 0.08, totalHeight + 0.25, 0.9, '#313a35', x, 0, -0.45);
@@ -143,6 +236,20 @@ export function startScene(canvas: HTMLCanvasElement) {
   }
   cube(rack, 5.2, 0.18, 0.74, '#3e423b', 0, totalHeight / 2 + 0.08, 0);
   cube(rack, 5.2, 0.18, 0.74, '#30332f', 0, -totalHeight / 2 - 0.08, 0);
+  const antennaX = -1.55;
+  const antennaBaseY = totalHeight / 2 + 0.17;
+  cube(rack, 0.35, 0.12, 0.32, '#d0c49c', antennaX, antennaBaseY, 0);
+  const mast = new Mesh(
+    new CylinderGeometry(0.045, 0.07, 0.85, 7),
+    material('#b6bbb0'),
+  );
+  mast.position.set(antennaX, antennaBaseY + 0.47, 0);
+  rack.add(mast);
+  cube(rack, 0.72, 0.045, 0.045, '#c0c4b8', antennaX, antennaBaseY + 0.65, 0);
+  for (const x of [antennaX - 0.38, antennaX + 0.38]) {
+    cube(rack, 0.04, 0.18, 0.04, '#c0c4b8', x, antennaBaseY + 0.65, 0);
+  }
+  disc(rack, 0.085, '#e4b775', antennaX, antennaBaseY + 0.92, 0.035);
 
   const addGauge = (
     panel: Group,
@@ -360,7 +467,7 @@ export function startScene(canvas: HTMLCanvasElement) {
           createPs1Material({ map: nixie.texture }, true),
         );
         materials.push(screen.material);
-        screen.position.set(1.36, instrumentY - 0.42, 0.29);
+        screen.position.set(1.36, instrumentY - 0.75, 0.29);
         panel.add(screen);
         dynamic.push(() =>
           nixie.draw(
