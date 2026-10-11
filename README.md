@@ -23,6 +23,10 @@ The fixed rack includes a varistance-isolated supply, a chromocore and valve ban
 
 The surrounding laboratory includes an analogue wall clock, a map of global flux correlations, a test bench, an isolated wall socket, a floor mains lead, the cabinet aerial and a safety notice board. Three period advertisements above the board offer differing accounts of VX equipment and its likely operators. Three reference drawers hold the operating guide, core-handling instructions and reconstructed signal path. Neither the wall map nor its pin lights is a substitute for local measurement.
 
+## Contributions from fellow VX Junkies
+
+Fellow VX Junkies are invited to contribute apparatus, operating notes, circuit diagrams, incident reports or corrections. Simply open a pull request with your proposed addition to the workstation record. Please distinguish observed community lore from reconstructed details so the next operator knows which readings have actually been taken.
+
 ## Verification procedure
 
 Before recording a change to the workstation, run:
