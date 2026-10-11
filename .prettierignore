@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.kittify/
+.agents/
+.claude/
+.codex/
+.github/
+.idea/
+.venv/
+AGENTS.md
+CLAUDE.md
+docs/build-brief.txt
+package-lock.json
+public/
+doc/design/

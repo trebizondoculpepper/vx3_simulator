@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VX3 rack</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=IBM+Plex+Mono:wght@400;600&amp;family=Caveat:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#ffb020}a:hover{color:#ffd27a}
+button{cursor:pointer}
+button:focus-visible{outline:3px solid #ffb020;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; background: #16130f; font-family: 'Barlow Condensed', sans-serif; color: #e9e1c8; overflow: hidden; user-select: none">
+
+<!-- Cabinet interior (fixed) -->
+<div style="position: absolute; left: {{cabinetLeft}}px; top: 52px; width: 1100px; height: 848px; background: #0b0a08; transition: left 0.35s ease-out"></div>
+
+<!-- ============ RACK (scrolls vertically) ============ -->
+<div onPointerDown="{{dragStart}}" onPointerMove="{{dragMove}}" onPointerUp="{{dragEnd}}" onPointerLeave="{{dragEnd}}" onWheel="{{wheel}}" style="position: absolute; left: {{rackLeft}}px; top: 52px; width: 1040px; height: 2210px; transform: translateY({{stageY}}px); transition: {{stageTransition}}; cursor: grab">
+
+  <!-- Cabinet posts with square cage-nut holes -->
+  <div style="position: absolute; left: -20px; top: 0; width: 16px; height: 2210px; background-color: #2e2b26; background-image: repeating-linear-gradient(to bottom, transparent 0 6px, #0b0a08 6px 13px, transparent 13px 18.67px); background-size: 8px 100%; background-repeat: no-repeat; background-position: 4px 20px"></div>
+  <div style="position: absolute; left: 1044px; top: 0; width: 16px; height: 2210px; background-color: #2e2b26; background-image: repeating-linear-gradient(to bottom, transparent 0 6px, #0b0a08 6px 13px, transparent 13px 18.67px); background-size: 8px 100%; background-repeat: no-repeat; background-position: 4px 20px"></div>
+
+  <div style="position: absolute; left: 0; top: 20px; width: 1040px; display: flex; flex-direction: column; gap: 3px">
+
+    <!-- 1U · Maker plate -->
+    <div style="position: relative; height: 56px; box-sizing: border-box; padding: 0 70px; background: #b08a3e; color: #2a2210; display: flex; align-items: center; gap: 24px">
+      <span style="font-size: 32px; font-weight: 700; letter-spacing: 0.12em">VX3</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">FULL SPEC · SERIAL 0417 · MFD 1974 · 240 V ~ 50 Hz</span>
+      <span style="margin-left: auto; font-size: 15px; font-weight: 700; letter-spacing: 0.08em">DO NOT OPEN WHILE FIELD IS LOCKED</span>
+    </div>
+
+    <!-- 4U · Oscilloscopes -->
+    <div style="position: relative; height: 224px; box-sizing: border-box; padding: 30px 70px 10px; background: #4f5b63; color: #e9e1c8; display: flex; align-items: center; gap: 26px">
+      <span style="position: absolute; left: 70px; top: 8px; font-size: 13px; letter-spacing: 0.12em">DUAL OSCILLOSCOPE · TYPE 465-VX</span>
+      <svg width="320" height="171" viewBox="0 0 300 160" role="img" aria-label="Oscilloscope A showing the spindle phase">
+        <rect width="300" height="160" rx="14" fill="#0b1a0f"></rect>
+        <path d="M10 40 H290 M10 80 H290 M10 120 H290 M60 10 V150 M110 10 V150 M160 10 V150 M210 10 V150 M260 10 V150" stroke="#1f4a28" stroke-width="1"></path>
+        <polyline points="{{tracePoints}}" fill="none" stroke="#7dff8a" stroke-width="2.5" stroke-linejoin="bevel"></polyline>
+      </svg>
+      <svg width="220" height="171" viewBox="0 0 140 110" role="img" aria-label="Oscilloscope B showing an X-Y Lissajous figure">
+        <rect width="140" height="110" rx="10" fill="#0b1a0f"></rect>
+        <path d="M70 6 V104 M6 55 H134" stroke="#1f4a28" stroke-width="1"></path>
+        <polyline points="{{lissPoints}}" fill="none" stroke="#7dff8a" stroke-width="1.6"></polyline>
+      </svg>
+      <div style="display: flex; flex-direction: column; align-items: center">
+        <button type="button" onClick="{{kn.gain.turn}}" aria-label="{{kn.gain.aria}}" style="width: 96px; height: 96px; padding: 0; border: 0; background: transparent">
+          <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true"><path d="M18.3 77.7 A42 42 0 1 1 77.7 77.7" fill="none" stroke="currentColor" stroke-width="6" stroke-dasharray="1.4 6.4"></path><circle cx="48" cy="48" r="32" fill="#1d1d1a"></circle><circle cx="48" cy="48" r="26" fill="#2c2c27"></circle><g transform="{{kn.gain.rotate}}"><polygon points="48,14 57,46 48,58 39,46" fill="#3b3b34" stroke="#55554c" stroke-width="1"></polygon><line x1="48" y1="19" x2="48" y2="40" stroke="#e9e1c8" stroke-width="3"></line></g></svg>
+        </button>
+        <span style="font-size: 13px; letter-spacing: 0.06em">GAIN</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #ffcf6a">{{kn.gain.value}}</span>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center">
+        <button type="button" onClick="{{kn.ratio.turn}}" aria-label="{{kn.ratio.aria}}" style="width: 96px; height: 96px; padding: 0; border: 0; background: transparent">
+          <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true"><path d="M18.3 77.7 A42 42 0 1 1 77.7 77.7" fill="none" stroke="currentColor" stroke-width="6" stroke-dasharray="1.4 6.4"></path><circle cx="48" cy="48" r="32" fill="#1d1d1a"></circle><circle cx="48" cy="48" r="26" fill="#2c2c27"></circle><g transform="{{kn.ratio.rotate}}"><polygon points="48,14 57,46 48,58 39,46" fill="#3b3b34" stroke="#55554c" stroke-width="1"></polygon><line x1="48" y1="19" x2="48" y2="40" stroke="#e9e1c8" stroke-width="3"></line></g></svg>
+        </button>
+        <span style="font-size: 13px; letter-spacing: 0.06em">X-Y RATIO</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #ffcf6a">{{ratio}}</span>
+      </div>
+      <span style="position: absolute; right: 74px; bottom: 10px; background: #111; color: #f4f4f0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 2px 7px; letter-spacing: 0.14em; transform: rotate(-1.5deg)">CH B IS LYING</span>
+    </div>
+
+    <!-- 3U · Gauges -->
+    <div style="position: relative; height: 168px; box-sizing: border-box; padding: 24px 70px 6px; background: #46523f; color: #e9e1c8; display: flex; align-items: center; justify-content: space-between">
+      <span style="position: absolute; left: 70px; top: 7px; font-size: 13px; letter-spacing: 0.12em">METERING UNIT · MU-4</span>
+      <sc-for list="{{gauges}}" as="g" hint-placeholder-count="4">
+        <div style="display: flex; flex-direction: column; align-items: center">
+          <svg width="140" height="122" viewBox="0 0 160 140" role="img" aria-label="{{g.aria}}">
+            <circle cx="80" cy="80" r="74" fill="#2a2a22"></circle>
+            <circle cx="80" cy="80" r="68" fill="#e6dfc6"></circle>
+            <path d="M36.16 123.84 A62 62 0 1 1 123.84 123.84" fill="none" stroke="#2a2a22" stroke-width="10" stroke-dasharray="1.6 8.2"></path>
+            <path d="M142 80 A62 62 0 0 1 123.84 123.84" fill="none" stroke="#c43a22" stroke-width="6"></path>
+            <text x="80" y="112" text-anchor="middle" font-family="IBM Plex Mono" font-size="13" fill="#2a2a22">{{g.unit}}</text>
+            <g transform="{{g.needle}}"><polygon points="78,82 80,24 82,82" fill="#1a1a14"></polygon></g>
+            <circle cx="80" cy="80" r="7" fill="#b08a3e"></circle>
+          </svg>
+          <div style="display: flex; gap: 8px; align-items: baseline; font-size: 14px; letter-spacing: 0.08em"><span>{{g.label}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #ffcf6a">{{g.readout}}</span></div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- 1U · Vent blank -->
+    <div style="position: relative; height: 56px; box-sizing: border-box; padding: 0 70px; background: #23221f; display: flex; align-items: center">
+      <div aria-hidden="true" style="width: 100%; height: 24px; background-image: repeating-linear-gradient(to right, #0b0a08 0 34px, transparent 34px 44px)"></div>
+    </div>
+
+    <!-- 2U · Nixie + signal generator -->
+    <div style="position: relative; height: 112px; box-sizing: border-box; padding: 24px 70px 8px; background: #1f1f1c; color: #e9e1c8; display: flex; align-items: center; gap: 28px">
+      <span style="position: absolute; left: 70px; top: 6px; font-size: 13px; letter-spacing: 0.12em">PHASE COUNTER</span>
+      <div style="display: flex; gap: 5px">
+        <sc-for list="{{nixies}}" as="n" hint-placeholder-count="6">
+          <div style="width: 38px; height: 70px; box-sizing: border-box; border-radius: 16px 16px 3px 3px; background: #1b1410; border: 2px solid #5a5040; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 42px; color: {{nixieColor}}; text-shadow: 0 0 10px {{nixieGlow}}">{{n.d}}</div>
+        </sc-for>
+      </div>
+      <span style="position: absolute; left: 520px; top: 6px; font-size: 13px; letter-spacing: 0.12em">SIGNAL GENERATOR · 61-B</span>
+      <div style="margin-left: 60px; background: #0d140f; padding: 6px 14px; font-family: 'IBM Plex Mono', monospace; font-size: 38px; color: #7dffb0; text-shadow: 0 0 8px #3aff8a; letter-spacing: 0.06em">{{sigFreq}}</div>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">kHz · OUT → BLATZ L</span>
+    </div>
+
+    <!-- 4U · Helmholtz-Blatz chamber -->
+    <div style="position: relative; height: 224px; box-sizing: border-box; padding: 28px 70px 8px; background: #c9c2a8; color: #2a2a22; display: flex; align-items: center; gap: 30px">
+      <span style="position: absolute; left: 70px; top: 8px; font-size: 13px; font-weight: 700; letter-spacing: 0.12em">HELMHOLTZ-BLATZ CHAMBER · H-B 2</span>
+      <svg width="260" height="172" viewBox="0 0 260 172" role="img" aria-label="Viewing port onto the Helmholtz-Blatz field between two copper coils">
+        <circle cx="130" cy="86" r="80" fill="#0b0f12" stroke="#7a6a3a" stroke-width="10"></circle>
+        <circle cx="130" cy="86" r="60" fill="{{fieldColor}}" opacity="{{fieldGlow}}"></circle>
+        <ellipse cx="82" cy="86" rx="14" ry="50" fill="none" stroke="#b8692e" stroke-width="12"></ellipse>
+        <g transform="{{fieldTransform}}">
+          <polygon points="0,-30 26,-15 26,15 0,30 -26,15 -26,-15" fill="none" stroke="{{fieldColor}}" stroke-width="2.5"></polygon>
+          <polyline points="-26,-15 0,0 26,-15" fill="none" stroke="{{fieldColor}}" stroke-width="2"></polyline>
+          <line x1="0" y1="0" x2="0" y2="30" stroke="{{fieldColor}}" stroke-width="2"></line>
+          <polyline points="-26,15 0,-30 26,15" fill="none" stroke="{{fieldColor}}" stroke-width="1" opacity="0.6"></polyline>
+        </g>
+        <ellipse cx="178" cy="86" rx="14" ry="50" fill="none" stroke="#c97a3a" stroke-width="12"></ellipse>
+        <circle cx="130" cy="6" r="4" fill="#55554c"></circle><circle cx="130" cy="166" r="4" fill="#55554c"></circle><circle cx="50" cy="86" r="4" fill="#55554c"></circle><circle cx="210" cy="86" r="4" fill="#55554c"></circle>
+      </svg>
+      <div style="display: flex; flex-direction: column; align-items: center">
+        <button type="button" onClick="{{kn.field.turn}}" aria-label="{{kn.field.aria}}" style="width: 96px; height: 96px; padding: 0; border: 0; background: transparent">
+          <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true"><path d="M18.3 77.7 A42 42 0 1 1 77.7 77.7" fill="none" stroke="currentColor" stroke-width="6" stroke-dasharray="1.4 6.4"></path><circle cx="48" cy="48" r="32" fill="#1d1d1a"></circle><circle cx="48" cy="48" r="26" fill="#2c2c27"></circle><g transform="{{kn.field.rotate}}"><polygon points="48,14 57,46 48,58 39,46" fill="#3b3b34" stroke="#55554c" stroke-width="1"></polygon><line x1="48" y1="19" x2="48" y2="40" stroke="#e9e1c8" stroke-width="3"></line></g></svg>
+        </button>
+        <span style="font-size: 13px; font-weight: 700; letter-spacing: 0.06em">H-B FIELD</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #7a2a1a">{{kn.field.value}}</span>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center">
+        <button type="button" onClick="{{kn.trim.turn}}" aria-label="{{kn.trim.aria}}" style="width: 96px; height: 96px; padding: 0; border: 0; background: transparent">
+          <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true"><path d="M18.3 77.7 A42 42 0 1 1 77.7 77.7" fill="none" stroke="currentColor" stroke-width="6" stroke-dasharray="1.4 6.4"></path><circle cx="48" cy="48" r="32" fill="#7a2412"></circle><circle cx="48" cy="48" r="26" fill="#9a3a22"></circle><g transform="{{kn.trim.rotate}}"><polygon points="48,14 57,46 48,58 39,46" fill="#5a1a0c" stroke="#3a1006" stroke-width="1"></polygon><line x1="48" y1="19" x2="48" y2="40" stroke="#ffe8c0" stroke-width="3"></line></g></svg>
+        </button>
+        <span style="font-size: 13px; font-weight: 700; letter-spacing: 0.06em">BLATZ TRIM</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #7a2a1a">{{kn.trim.value}}</span>
+      </div>
+      <svg width="250" height="166" viewBox="0 0 260 172" role="img" aria-label="Three faceted resonance crystals in brass clamps: cyan, violet and amber">
+        <rect x="6" y="150" width="248" height="16" fill="#2a2a22"></rect>
+        <rect x="0" y="0" width="260" height="150" fill="#1a1a16"></rect>
+        <circle cx="50" cy="90" r="46" fill="#7fe9ff" opacity="{{xtal.aGlow}}"></circle>
+        <circle cx="130" cy="90" r="46" fill="#c08cff" opacity="{{xtal.bGlow}}"></circle>
+        <circle cx="210" cy="90" r="46" fill="#ffc35a" opacity="{{xtal.cGlow}}"></circle>
+        <g opacity="{{xtal.a}}"><polygon points="28,140 28,70 43,40 43,140" fill="#3bb8d8"></polygon><polygon points="43,140 43,40 50,26 57,40 57,140" fill="#bff4ff"></polygon><polygon points="57,140 57,40 72,70 72,140" fill="#1f6f88"></polygon></g>
+        <g opacity="{{xtal.b}}"><polygon points="110,140 110,64 124,34 124,140" fill="#9a62e0"></polygon><polygon points="124,140 124,34 130,18 136,34 136,140" fill="#e2c8ff"></polygon><polygon points="136,140 136,34 150,64 150,140" fill="#5a3290"></polygon></g>
+        <g opacity="{{xtal.c}}"><polygon points="190,140 190,76 204,48 204,140" fill="#e0a032"></polygon><polygon points="204,140 204,48 210,34 216,48 216,140" fill="#ffe2a0"></polygon><polygon points="216,140 216,48 230,76 230,140" fill="#8a5a12"></polygon></g>
+        <rect x="22" y="126" width="56" height="24" fill="#b08a3e"></rect><rect x="102" y="126" width="56" height="24" fill="#b08a3e"></rect><rect x="182" y="126" width="56" height="24" fill="#b08a3e"></rect>
+      </svg>
+      <span style="position: absolute; right: 74px; top: 8px; background: #fff7d0; color: #2a2a22; font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 2px 6px; border: 1px solid #a39a7c">CAL 03/77 · Q-SET 3</span>
+    </div>
+
+    <!-- 3U · Valve bank -->
+    <div style="position: relative; height: 168px; box-sizing: border-box; padding: 26px 70px 8px; background: #5a5a52; color: #e9e1c8; display: flex; align-items: center; gap: 30px">
+      <span style="position: absolute; left: 70px; top: 7px; font-size: 13px; letter-spacing: 0.12em">HT AMPLIFIER · 6 × EL-VX · VIEWING WINDOW</span>
+      <div style="display: flex; gap: 14px; align-items: flex-end; background: #121210; padding: 8px 16px; border: 4px solid #2a2a26">
+        <sc-for list="{{valves}}" as="v" hint-placeholder-count="6">
+          <div style="width: 32px; height: 104px; box-sizing: border-box; border-radius: 16px 16px 4px 4px; border: 2px solid #c9dcd8; background: #2a3534; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 18px {{v.glow}}">
+            <div style="width: 8px; height: 60px; background: {{v.color}}"></div>
+          </div>
+        </sc-for>
+      </div>
+      <div aria-hidden="true" style="width: 220px; height: 112px; background-image: repeating-linear-gradient(to bottom, #2a2a26 0 6px, transparent 6px 14px)"></div>
+      <div style="display: flex; flex-direction: column; align-items: center">
+        <button type="button" onClick="{{kn.bias.turn}}" aria-label="{{kn.bias.aria}}" style="width: 96px; height: 96px; padding: 0; border: 0; background: transparent">
+          <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true"><path d="M18.3 77.7 A42 42 0 1 1 77.7 77.7" fill="none" stroke="currentColor" stroke-width="6" stroke-dasharray="1.4 6.4"></path><circle cx="48" cy="48" r="32" fill="#1d1d1a"></circle><circle cx="48" cy="48" r="26" fill="#2c2c27"></circle><g transform="{{kn.bias.rotate}}"><polygon points="48,14 57,46 48,58 39,46" fill="#3b3b34" stroke="#55554c" stroke-width="1"></polygon><line x1="48" y1="19" x2="48" y2="40" stroke="#e9e1c8" stroke-width="3"></line></g></svg>
+        </button>
+        <span style="font-size: 13px; letter-spacing: 0.06em">GRID BIAS</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #ffcf6a">{{kn.bias.value}}</span>
+      </div>
+    </div>
+
+    <!-- 3U · Circuit select -->
+    <div style="position: relative; height: 168px; box-sizing: border-box; padding: 28px 70px 8px; background: #3a4436; color: #e9e1c8; display: flex; align-items: center; gap: 8px">
+      <span style="position: absolute; left: 70px; top: 7px; font-size: 13px; letter-spacing: 0.12em">CIRCUIT SELECT</span>
+      <sc-for list="{{toggles}}" as="t" hint-placeholder-count="12">
+        <div style="width: 58px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+          <span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 50%; background: {{t.lamp}}; box-shadow: 0 0 8px {{t.lamp}}"></span>
+          <button type="button" onClick="{{t.flip}}" aria-label="{{t.aria}}" aria-pressed="{{t.pressed}}" style="width: 46px; height: 76px; padding: 0; border: 0; background: transparent">
+            <svg width="46" height="76" viewBox="0 0 46 76" aria-hidden="true">
+              <rect x="7" y="22" width="32" height="34" fill="#c9c2a8"></rect>
+              <circle cx="23" cy="39" r="10" fill="#7c7a70"></circle>
+              <line x1="23" y1="39" x2="23" y2="{{t.tip}}" stroke="#e6e6de" stroke-width="7" stroke-linecap="round"></line>
+              <circle cx="23" cy="39" r="4" fill="#3a3a32"></circle>
+            </svg>
+          </button>
+          <span style="font-size: 13px; letter-spacing: 0.04em; white-space: nowrap">{{t.label}}</span>
+        </div>
+      </sc-for>
+      <span style="position: absolute; right: 74px; top: 7px; background: #111; color: #f4f4f0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; padding: 2px 7px; letter-spacing: 0.14em; transform: rotate(1deg)">GND? ASK DAVE</span>
+    </div>
+
+    <!-- 1U · Brush strip -->
+    <div style="position: relative; height: 56px; box-sizing: border-box; padding: 0 70px; background: #23221f; display: flex; align-items: center">
+      <div aria-hidden="true" style="width: 100%; height: 20px; background: #0b0a08; background-image: repeating-linear-gradient(to right, #1e1d1a 0 1px, transparent 1px 4px)"></div>
+    </div>
+
+    <!-- 3U · Spark gap, balance, counter -->
+    <div style="position: relative; height: 168px; box-sizing: border-box; padding: 26px 70px 8px; background: #4f5b63; color: #e9e1c8; display: flex; align-items: center; gap: 24px">
+      <span style="position: absolute; left: 70px; top: 7px; font-size: 13px; letter-spacing: 0.12em">SPARK GAP · 40 kV · AUX 1</span>
+      <svg width="300" height="130" viewBox="0 0 300 130" role="img" aria-label="Two brass spheres on insulated rods with an arc between them when AUX 1 is up">
+        <rect width="300" height="130" fill="#101210"></rect>
+        <rect x="20" y="112" width="260" height="14" fill="#55554c"></rect>
+        <rect x="52" y="60" width="14" height="52" fill="#e9e1c8"></rect>
+        <rect x="234" y="60" width="14" height="52" fill="#e9e1c8"></rect>
+        <rect x="52" y="54" width="44" height="9" fill="#8a8a80"></rect>
+        <rect x="204" y="54" width="44" height="9" fill="#8a8a80"></rect>
+        <polyline points="{{arcPoints}}" fill="none" stroke="#7fb6ff" stroke-width="12" opacity="{{arcGlow}}"></polyline>
+        <polyline points="{{arcPoints}}" fill="none" stroke="#d6e8ff" stroke-width="4" opacity="{{arcOpacity}}"></polyline>
+        <circle cx="110" cy="58" r="22" fill="#b08a3e"></circle><circle cx="103" cy="50" r="7" fill="#e0c070"></circle>
+        <circle cx="190" cy="58" r="22" fill="#b08a3e"></circle><circle cx="183" cy="50" r="7" fill="#e0c070"></circle>
+        <text x="150" y="22" text-anchor="middle" font-family="Barlow Condensed" font-size="14" fill="#ffb020" font-weight="700">KEEP HANDS THIS SIDE OF THE GLASS</text>
+      </svg>
+      <sc-for list="{{vus}}" as="vu" hint-placeholder-count="2">
+        <svg width="152" height="110" viewBox="0 0 152 110" role="img" aria-label="{{vu.aria}}">
+          <rect width="152" height="110" fill="#2a2a22"></rect>
+          <rect x="6" y="6" width="140" height="98" fill="#f2d98a"></rect>
+          <path d="M22 70 A70 70 0 0 1 130 70" fill="none" stroke="#2a2a22" stroke-width="8" stroke-dasharray="1.4 8"></path>
+          <path d="M108 50 A70 70 0 0 1 130 70" fill="none" stroke="#c43a22" stroke-width="5"></path>
+          <text x="76" y="92" text-anchor="middle" font-family="IBM Plex Mono" font-size="13" fill="#2a2a22">{{vu.label}}</text>
+          <g transform="{{vu.needle}}"><rect x="75" y="20" width="2" height="80" fill="#1a1a14"></rect></g>
+        </svg>
+      </sc-for>
+      <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start">
+        <span style="font-size: 13px; letter-spacing: 0.1em">COUNTS / MIN</span>
+        <div style="background: #0d140f; padding: 6px 12px; font-family: 'IBM Plex Mono', monospace; font-size: 32px; color: #ff6a4a; text-shadow: 0 0 8px #ff3a1a">{{cpm}}</div>
+        <span style="font-size: 13px; color: #c9c2a8">Normal for a Tuesday</span>
+      </div>
+    </div>
+
+    <!-- 3U · Chart recorder -->
+    <div style="position: relative; height: 168px; box-sizing: border-box; padding: 26px 70px 8px; background: #d9d1b4; color: #2a2a22; display: flex; align-items: center; gap: 24px">
+      <span style="position: absolute; left: 70px; top: 7px; font-size: 13px; font-weight: 700; letter-spacing: 0.12em">STRIP CHART RECORDER · BLATZ STRAIN · 30 mm/min</span>
+      <svg width="720" height="130" viewBox="0 0 720 130" role="img" aria-label="Paper strip chart drawing the Blatz strain trace">
+        <rect width="720" height="130" fill="#2a2a22"></rect>
+        <rect x="10" y="8" width="700" height="114" fill="#efe7cf"></rect>
+        <path d="M10 36 H710 M10 65 H710 M10 94 H710 M110 8 V122 M210 8 V122 M310 8 V122 M410 8 V122 M510 8 V122 M610 8 V122" stroke="#e0a0a0" stroke-width="1"></path>
+        <rect x="10" y="8" width="700" height="24" fill="#c43a22" opacity="0.1"></rect>
+        <polyline points="{{chartPoints}}" fill="none" stroke="#2b3a6b" stroke-width="2"></polyline>
+        <rect x="694" y="{{penY}}" width="14" height="8" fill="#7a2a1a"></rect>
+      </svg>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.4">PEN 1<br>STRAIN</span>
+    </div>
+
+    <!-- 3U · Spindle + band -->
+    <div style="position: relative; height: 168px; box-sizing: border-box; padding: 26px 70px 8px; background: #46523f; color: #e9e1c8; display: flex; align-items: center; gap: 30px">
+      <span style="position: absolute; left: 70px; top: 7px; font-size: 13px; letter-spacing: 0.12em">PHASE SPINDLE DRIVE · MK II</span>
+      <svg width="316" height="130" viewBox="0 0 316 130" role="img" aria-label="Phase spindle drum turning between two bearing blocks">
+        <rect width="316" height="130" fill="#1c1f1a"></rect>
+        <rect x="20" y="30" width="44" height="70" fill="#55554c"></rect>
+        <rect x="252" y="30" width="44" height="70" fill="#55554c"></rect>
+        <rect x="64" y="56" width="188" height="18" fill="#8a8a80"></rect>
+        <rect x="92" y="10" width="132" height="110" fill="#d8d0b0"></rect>
+        <rect x="{{stripeX}}" y="10" width="18" height="110" fill="#202020"></rect>
+        <rect x="{{stripeX2}}" y="10" width="18" height="110" fill="#202020"></rect>
+        <rect x="92" y="10" width="12" height="110" fill="#a39a7c"></rect>
+        <rect x="212" y="10" width="12" height="110" fill="#a39a7c"></rect>
+      </svg>
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 13px; letter-spacing: 0.1em">TACHO</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 22px; color: #ffcf6a">{{spindleRpm}}</span>
+        <span style="font-size: 13px; color: #ff8a6a; font-weight: 700">KEEP TIES CLEAR</span>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center">
+        <button type="button" onClick="{{kn.spindle.turn}}" aria-label="{{kn.spindle.aria}}" style="width: 96px; height: 96px; padding: 0; border: 0; background: transparent">
+          <svg width="96" height="96" viewBox="0 0 96 96" aria-hidden="true"><path d="M18.3 77.7 A42 42 0 1 1 77.7 77.7" fill="none" stroke="currentColor" stroke-width="6" stroke-dasharray="1.4 6.4"></path><circle cx="48" cy="48" r="32" fill="#1d1d1a"></circle><circle cx="48" cy="48" r="26" fill="#2c2c27"></circle><g transform="{{kn.spindle.rotate}}"><polygon points="48,14 57,46 48,58 39,46" fill="#3b3b34" stroke="#55554c" stroke-width="1"></polygon><line x1="48" y1="19" x2="48" y2="40" stroke="#e9e1c8" stroke-width="3"></line></g></svg>
+        </button>
+        <span style="font-size: 13px; letter-spacing: 0.06em">SPINDLE</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #ffcf6a">{{kn.spindle.value}}</span>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center">
+        <button type="button" onClick="{{bandTurn}}" aria-label="{{bandAria}}" style="width: 112px; height: 112px; padding: 0; border: 0; background: transparent">
+          <svg width="112" height="112" viewBox="0 0 240 240" aria-hidden="true">
+            <text x="120" y="24" text-anchor="middle" font-family="IBM Plex Mono" font-size="26" fill="#e9e1c8">C</text>
+            <text x="48" y="58" text-anchor="middle" font-family="IBM Plex Mono" font-size="26" fill="#e9e1c8">B</text>
+            <text x="16" y="130" text-anchor="middle" font-family="IBM Plex Mono" font-size="26" fill="#e9e1c8">A</text>
+            <text x="192" y="58" text-anchor="middle" font-family="IBM Plex Mono" font-size="26" fill="#e9e1c8">D</text>
+            <text x="224" y="130" text-anchor="middle" font-family="IBM Plex Mono" font-size="26" fill="#e9e1c8">E</text>
+            <text x="206" y="212" text-anchor="middle" font-family="IBM Plex Mono" font-size="28" fill="#ff6a4a">Ω</text>
+            <circle cx="120" cy="125" r="80" fill="#1d1d1a"></circle>
+            <circle cx="120" cy="125" r="66" fill="#2c2c27"></circle>
+            <g transform="{{bandRotate}}"><rect x="108" y="50" width="24" height="150" rx="6" fill="#3b3b34"></rect><polygon points="120,48 128,64 112,64" fill="#e9e1c8"></polygon></g>
+          </svg>
+        </button>
+        <span style="font-size: 13px; letter-spacing: 0.06em">BAND {{band}}</span>
+      </div>
+    </div>
+
+    <!-- 2U · Patch bay -->
+    <div style="position: relative; height: 112px; box-sizing: border-box; padding: 24px 70px 6px; background: #1f1f1c; color: #e9e1c8; display: flex; align-items: center">
+      <span style="position: absolute; left: 70px; top: 6px; font-size: 13px; letter-spacing: 0.12em">PATCH BAY · DO NOT CROSS 4–7</span>
+      <svg width="900" height="80" viewBox="0 0 900 80" role="img" aria-label="Patch bay of thirty-two jacks with four cables plugged in">
+        <rect width="900" height="80" fill="#2a2a26"></rect>
+        <g fill="#0a0a08" stroke="#8a8a80" stroke-width="2">
+          <circle cx="30" cy="22" r="8"></circle><circle cx="84" cy="22" r="8"></circle><circle cx="138" cy="22" r="8"></circle><circle cx="192" cy="22" r="8"></circle><circle cx="246" cy="22" r="8"></circle><circle cx="300" cy="22" r="8"></circle><circle cx="354" cy="22" r="8"></circle><circle cx="408" cy="22" r="8"></circle><circle cx="462" cy="22" r="8"></circle><circle cx="516" cy="22" r="8"></circle><circle cx="570" cy="22" r="8"></circle><circle cx="624" cy="22" r="8"></circle><circle cx="678" cy="22" r="8"></circle><circle cx="732" cy="22" r="8"></circle><circle cx="786" cy="22" r="8"></circle><circle cx="840" cy="22" r="8"></circle>
+          <circle cx="30" cy="58" r="8"></circle><circle cx="84" cy="58" r="8"></circle><circle cx="138" cy="58" r="8"></circle><circle cx="192" cy="58" r="8"></circle><circle cx="246" cy="58" r="8"></circle><circle cx="300" cy="58" r="8"></circle><circle cx="354" cy="58" r="8"></circle><circle cx="408" cy="58" r="8"></circle><circle cx="462" cy="58" r="8"></circle><circle cx="516" cy="58" r="8"></circle><circle cx="570" cy="58" r="8"></circle><circle cx="624" cy="58" r="8"></circle><circle cx="678" cy="58" r="8"></circle><circle cx="732" cy="58" r="8"></circle><circle cx="786" cy="58" r="8"></circle><circle cx="840" cy="58" r="8"></circle>
+        </g>
+        <path d="M30 22 C 60 78, 260 78, 300 58" fill="none" stroke="#c43a22" stroke-width="6" stroke-linecap="round"></path>
+        <path d="M138 58 C 200 0, 380 0, 462 22" fill="none" stroke="#e8c03a" stroke-width="6" stroke-linecap="round"></path>
+        <path d="M516 22 C 560 80, 700 80, 732 58" fill="none" stroke="#3a7ad8" stroke-width="6" stroke-linecap="round"></path>
+        <path d="M624 58 C 680 4, 800 4, 840 22" fill="none" stroke="#e9e1c8" stroke-width="6" stroke-linecap="round"></path>
+      </svg>
+    </div>
+
+    <!-- 2U · Sequence -->
+    <div style="position: relative; height: 112px; box-sizing: border-box; padding: 22px 70px 6px; background: #5a5a52; color: #e9e1c8; display: flex; align-items: center; gap: 30px">
+      <span style="position: absolute; left: 70px; top: 6px; font-size: 13px; letter-spacing: 0.12em">SEQUENCE</span>
+      <sc-for list="{{pushButtons}}" as="b" hint-placeholder-count="3">
+        <div style="display: flex; align-items: center; gap: 10px">
+          <button type="button" onClick="{{b.press}}" aria-label="{{b.label}}" style="width: 64px; height: 64px; border-radius: 50%; border: 7px solid #1d1d1a; background: {{b.color}}; box-shadow: inset 0 -8px 0 rgba(0,0,0,0.3)"></button>
+          <span style="font-size: 17px; font-weight: 700; letter-spacing: 0.08em">{{b.label}}</span>
+        </div>
+      </sc-for>
+      <div style="margin-left: auto; background: #e9e1c8; color: #7a2a1a; padding: 8px 12px; font-size: 15px; font-weight: 700; letter-spacing: 0.04em; line-height: 1.2; max-width: 260px">DO NOT OPERATE WITHIN 3 m OF ANY CLOCK YOU WISH TO KEEP</div>
+    </div>
+
+    <!-- 3U · Power -->
+    <div style="position: relative; height: 168px; box-sizing: border-box; padding: 26px 70px 8px; background: #3a3a36; color: #e9e1c8; display: flex; align-items: center; gap: 30px">
+      <span style="position: absolute; left: 70px; top: 7px; font-size: 13px; letter-spacing: 0.12em">POWER DISTRIBUTION · 240 V · 30 A</span>
+      <div aria-hidden="true" style="position: absolute; left: 46px; right: 46px; bottom: 0; height: 10px; background-image: repeating-linear-gradient(45deg, #e8c03a 0 12px, #1a1a16 12px 24px)"></div>
+      <button type="button" onClick="{{mains}}" aria-label="Mains breaker" aria-pressed="{{powerPressed}}" style="width: 104px; height: 130px; padding: 0; border: 0; background: transparent">
+        <svg width="104" height="130" viewBox="0 0 120 150" aria-hidden="true">
+          <rect x="20" y="20" width="80" height="120" fill="#1f1f1b"></rect>
+          <rect x="52" y="30" width="16" height="100" fill="#0b0b09"></rect>
+          <g transform="{{leverRotate}}"><rect x="54" y="30" width="12" height="74" fill="#8a8a80"></rect><rect x="40" y="18" width="40" height="22" fill="#c43a22"></rect><rect x="40" y="34" width="40" height="6" fill="#7a2412"></rect></g>
+          <circle cx="60" cy="104" r="12" fill="#55554c"></circle>
+        </svg>
+      </button>
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 24px; font-weight: 700; letter-spacing: 0.08em">MAINS</span>
+        <span style="font-size: 18px; font-weight: 700; letter-spacing: 0.1em; color: {{powerColor}}">{{powerText}}</span>
+        <span style="font-size: 12px; letter-spacing: 0.06em; color: #a89f86">KEY INTERLOCK: BYPASSED</span>
+      </div>
+      <svg width="152" height="110" viewBox="0 0 152 110" role="img" aria-label="{{voltAria}}">
+        <rect width="152" height="110" fill="#2a2a22"></rect>
+        <rect x="6" y="6" width="140" height="98" fill="#e6dfc6"></rect>
+        <path d="M22 70 A70 70 0 0 1 130 70" fill="none" stroke="#2a2a22" stroke-width="8" stroke-dasharray="1.4 8"></path>
+        <text x="76" y="92" text-anchor="middle" font-family="IBM Plex Mono" font-size="13" fill="#2a2a22">V AC</text>
+        <g transform="{{voltNeedle}}"><rect x="75" y="20" width="2" height="80" fill="#1a1a14"></rect></g>
+      </svg>
+      <svg width="120" height="100" viewBox="0 0 120 100" role="img" aria-label="Two IEC outlets, one labelled KETTLE ONLY">
+        <rect x="4" y="10" width="50" height="40" rx="4" fill="#1a1a16"></rect><rect x="66" y="10" width="50" height="40" rx="4" fill="#1a1a16"></rect>
+        <rect x="16" y="22" width="6" height="14" fill="#55554c"></rect><rect x="36" y="22" width="6" height="14" fill="#55554c"></rect>
+        <rect x="78" y="22" width="6" height="14" fill="#55554c"></rect><rect x="98" y="22" width="6" height="14" fill="#55554c"></rect>
+        <rect x="62" y="62" width="58" height="18" fill="#111"></rect>
+        <text x="91" y="75" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#f4f4f0">KETTLE ONLY</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Rack ears: bolts and handles over every panel -->
+  <sc-for list="{{ears}}" as="e" hint-placeholder-count="15">
+    <div style="position: absolute; left: 0; top: {{e.top}}px; width: 1040px; height: {{e.h}}px; pointer-events: none">
+      <div style="position: absolute; left: 46px; top: 0; bottom: 0; width: 2px; background: rgba(0,0,0,0.28)"></div>
+      <div style="position: absolute; left: 992px; top: 0; bottom: 0; width: 2px; background: rgba(0,0,0,0.28)"></div>
+      <sc-for list="{{e.bolts}}" as="b" hint-placeholder-count="2">
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="position: absolute; left: 4px; top: {{b.y}}px">
+          <circle cx="10" cy="10" r="9" fill="#1c1b18"></circle><circle cx="10" cy="10" r="7" fill="#b9b4a6"></circle>
+          <g transform="{{b.turn}}"><rect x="4" y="9" width="12" height="2" fill="#4a463c"></rect><rect x="9" y="4" width="2" height="12" fill="#4a463c"></rect></g>
+        </svg>
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" style="position: absolute; left: 1016px; top: {{b.y}}px">
+          <circle cx="10" cy="10" r="9" fill="#1c1b18"></circle><circle cx="10" cy="10" r="7" fill="#b9b4a6"></circle>
+          <g transform="{{b.turn2}}"><rect x="4" y="9" width="12" height="2" fill="#4a463c"></rect><rect x="9" y="4" width="2" height="12" fill="#4a463c"></rect></g>
+        </svg>
+      </sc-for>
+      <sc-if value="{{e.handle}}" hint-placeholder-val="{{true}}">
+        <div style="position: absolute; left: 26px; top: {{e.hTop}}px; width: 22px; height: 14px; background: #6e6a5e"></div>
+        <div style="position: absolute; left: 26px; top: {{e.hBottom}}px; width: 22px; height: 14px; background: #6e6a5e"></div>
+        <div style="position: absolute; left: 26px; top: {{e.hTop}}px; width: 14px; height: {{e.hLen}}px; border-radius: 7px; background: #d8d6cc; box-shadow: 4px 2px 0 rgba(0,0,0,0.45), inset -3px 0 0 #9a978c"></div>
+        <div style="position: absolute; left: 992px; top: {{e.hTop}}px; width: 22px; height: 14px; background: #6e6a5e"></div>
+        <div style="position: absolute; left: 992px; top: {{e.hBottom}}px; width: 22px; height: 14px; background: #6e6a5e"></div>
+        <div style="position: absolute; left: 1000px; top: {{e.hTop}}px; width: 14px; height: {{e.hLen}}px; border-radius: 7px; background: #d8d6cc; box-shadow: 4px 2px 0 rgba(0,0,0,0.45), inset -3px 0 0 #9a978c"></div>
+      </sc-if>
+    </div>
+  </sc-for>
+</div>
+
+<!-- ============ UI LAYER ============ -->
+<div style="position: absolute; left: 0; top: 0; width: 1440px; height: 52px; box-sizing: border-box; padding: 0 24px; background: #0e0c09; border-bottom: 1px solid #3a3328; display: flex; align-items: center; gap: 18px">
+  <span style="font-size: 28px; font-weight: 700; letter-spacing: 0.1em">VX3 SIMULATOR</span>
+  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #a89f86">RIG 0417 · 38U CABINET</span>
+  <div style="margin-left: 40px; display: flex; align-items: center; gap: 8px">
+    <button type="button" onClick="{{panUp}}" aria-label="Scroll up the rack" style="width: 44px; height: 40px; border: 1px solid #5c6b5a; background: #1f1c16; color: #ffb020; font-size: 18px; opacity: {{upOpacity}}">▲</button>
+    <button type="button" onClick="{{panDown}}" aria-label="Scroll down the rack" style="width: 44px; height: 40px; border: 1px solid #5c6b5a; background: #1f1c16; color: #ffb020; font-size: 18px; opacity: {{downOpacity}}">▼</button>
+    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #c9c2a8">{{uReadout}}</span>
+  </div>
+  <div style="margin-left: auto; display: flex; align-items: center; gap: 10px">
+    <span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 50%; background: {{status.color}}; box-shadow: 0 0 10px {{status.color}}"></span>
+    <span style="font-size: 19px; font-weight: 700; letter-spacing: 0.1em">{{status.text}}</span>
+  </div>
+</div>
+
+<!-- Logbook: open -->
+<sc-if value="{{logOpen}}" hint-placeholder-val="{{true}}">
+  <section aria-label="Logbook" style="position: absolute; right: 24px; top: 68px; bottom: 24px; width: 320px; box-sizing: border-box; padding: 12px 16px 14px 40px; background-color: #efe7cf; background-image: repeating-linear-gradient(transparent 0 25px, #c8d3e6 25px 26px); background-position: 0 10px; box-shadow: 0 8px 0 #2a2218, 0 0 0 1px #2a2218; color: #2b3a6b; overflow: hidden; display: flex; flex-direction: column">
+    <div aria-hidden="true" style="position: absolute; left: 28px; top: 0; bottom: 0; width: 2px; background: #e0a0a0"></div>
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <h2 style="margin: 0; font-size: 16px; letter-spacing: 0.12em; color: #7a2a1a">LOGBOOK · RIG 0417</h2>
+      <button type="button" onClick="{{closeLog}}" aria-label="Put the logbook away" style="width: 44px; height: 44px; border: 0; background: transparent; color: #7a2a1a">
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4 L16 16 M16 4 L4 16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></path></svg>
+      </button>
+    </div>
+    <ol aria-live="polite" style="margin: 0; padding: 0; list-style: none; font-family: Caveat, cursive; font-size: 20px; line-height: 26px">
+      <sc-for list="{{log}}" as="entry" hint-placeholder-count="10">
+        <li>{{entry.text}}</li>
+      </sc-for>
+    </ol>
+  </section>
+</sc-if>
+
+<!-- Logbook: put away -->
+<sc-if value="{{logClosed}}" hint-placeholder-val="{{false}}">
+  <button type="button" onClick="{{openLog}}" aria-label="{{notebookAria}}" style="position: absolute; right: 24px; bottom: 24px; width: 84px; height: 96px; padding: 0; border: 0; background: transparent">
+    <svg width="84" height="96" viewBox="0 0 84 96" aria-hidden="true">
+      <rect x="10" y="8" width="64" height="84" fill="#1a1a16"></rect>
+      <rect x="6" y="4" width="64" height="84" fill="#2b3a6b"></rect>
+      <rect x="6" y="4" width="10" height="84" fill="#1f2b52"></rect>
+      <rect x="52" y="4" width="6" height="84" fill="#111"></rect>
+      <rect x="22" y="26" width="26" height="16" fill="#efe7cf"></rect>
+      <text x="35" y="38" text-anchor="middle" font-family="Barlow Condensed" font-size="11" font-weight="700" fill="#7a2a1a">LOG</text>
+    </svg>
+    <sc-if value="{{hasUnread}}" hint-placeholder-val="{{false}}">
+      <span style="position: absolute; right: 0; top: -4px; min-width: 26px; height: 26px; border-radius: 13px; background: #c43a22; color: #fff4e0; font-family: 'IBM Plex Mono', monospace; font-size: 14px; display: flex; align-items: center; justify-content: center">{{unread}}</span>
+    </sc-if>
+  </button>
+</sc-if>
+
+<div aria-hidden="true" style="position: absolute; inset: 0; pointer-events: none; opacity: 0.07; background-image: repeating-linear-gradient(0deg, #000 0 1px, transparent 1px 3px)"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      power: true,
+      toggles: [true, true, false, false, true, true, true, true, false, true, false, false],
+      knobs: [15, 45, 15, -45, 75, -15],
+      band: 2,
+      pan: 0,
+      dragging: false,
+      logOpen: true,
+      unread: 0,
+      minute: 42,
+      tick: 0,
+      log: [
+        { text: '21:42  H-B field locked. Lovely hum.' },
+        { text: '21:41  Spindle at 2200. Stripe blurry in the right way.' },
+        { text: '21:40  Crystal C seated. Smells faintly of pine.' },
+        { text: '21:39  Heaters at temperature.' },
+        { text: '21:37  Mains closed. Told Carol not to use the toaster.' },
+        { text: '21:36  Rack opened. VX3 cold.' },
+      ],
+    };
+    this.drag = null;
+    // Panel heights in rack units (1U = 56 px), top to bottom.
+    this.units = [1, 4, 3, 1, 2, 4, 3, 3, 1, 3, 3, 3, 2, 2, 3];
+    this.maxPan = 2210 - 848;
+  }
+
+  componentDidMount() {
+    this.timer = setInterval(() => this.setState({ tick: this.state.tick + 1 }), 90);
+  }
+
+  componentWillUnmount() {
+    clearInterval(this.timer);
+  }
+
+  clampPan(y) {
+    return Math.max(0, Math.min(this.maxPan, y));
+  }
+
+  metrics(s) {
+    const k = s.knobs.map((a) => (a + 135) / 270);
+    const p = s.power;
+    const spindle = p && s.toggles[4] ? k[0] : 0;
+    const field = p && s.toggles[5] && spindle > 0.1 ? k[1] : 0;
+    const ideal = Math.min(1, Math.max(0, 0.15 + spindle * 0.35 + field * 0.3 + (s.toggles[10] ? -0.05 : 0.05) + (s.toggles[11] ? 0.08 : 0) + (s.band - 2) * 0.03));
+    const inst = Math.min(1, Math.abs(k[2] - ideal) * 3.5 * field);
+    const heater = p ? (s.toggles[0] ? 0.93 : 0.55) : 0.03;
+    return { k, p, spindle, field, inst, heater };
+  }
+
+  write(next, lines) {
+    let minute = this.state.minute;
+    let log = this.state.log;
+    let added = 0;
+    for (const line of lines) {
+      minute += 1;
+      const time = minute >= 60 ? '22:' + String(minute - 60).padStart(2, '0') : '21:' + minute;
+      log = [{ text: time + '  ' + line }].concat(log);
+      added += 1;
+    }
+    const m = this.metrics(Object.assign({}, this.state, next));
+    if (m.inst > 0.85) { log = [{ text: 'Field collapse imminent. Moved the cat.' }].concat(log); added += 1; }
+    else if (m.inst > 0.55) { log = [{ text: 'H-B field wandering. Strain rising.' }].concat(log); added += 1; }
+    const unread = this.state.logOpen ? 0 : this.state.unread + added;
+    this.setState(Object.assign({}, next, { minute, unread, log: log.slice(0, 28) }));
+  }
+
+  renderVals() {
+    const s = this.state;
+    const m = this.metrics(s);
+    const t = s.tick;
+    const labels = ['HT', 'LT', 'AUX 1', 'AUX 2', 'SPIN', 'H-B', 'BLATZ', 'XTAL A', 'XTAL B', 'XTAL C', 'DAMP', 'GND?'];
+    const quips = {
+      2: ['AUX 1 up. Spark gap is talking.', 'AUX 1 down. Ears ringing.'],
+      3: ['AUX 2 up. Nothing happened. Suspicious.', 'AUX 2 down. Something un-happened.'],
+      8: ['Crystal B in circuit. Humming in a minor key.', 'Crystal B out. Relief, somehow.'],
+      11: ['GND? up. Still not sure what it grounds.', 'GND? down. The fridge stopped humming.'],
+    };
+    const bands = ['A', 'B', 'C', 'D', 'E', 'Ω'];
+
+    const status = !m.p
+      ? { text: 'RIG COLD', color: '#4a4538' }
+      : m.inst > 0.55
+        ? { text: 'FIELD UNSTABLE', color: '#ff3a1a' }
+        : m.field > 0.1 && m.inst < 0.1
+          ? { text: 'FIELD LOCKED', color: '#3aff6a' }
+          : m.field > 0.1
+            ? { text: 'FIELD WANDERING', color: '#ffb020' }
+            : { text: 'WARM · NO FIELD', color: '#ffb020' };
+
+    const gauges = [
+      { label: 'HEATERS', unit: '°K', v: m.heater, max: 1000 },
+      { label: 'SPINDLE', unit: 'rpm', v: m.spindle, max: 3600 },
+      { label: 'H-B FIELD', unit: 'mBz', v: m.field, max: 400 },
+      { label: 'BLATZ DRIFT', unit: '%', v: m.inst, max: 100 },
+    ].map((g, i) => {
+      const angle = -135 + 270 * g.v + m.inst * 7 * Math.sin(t * 1.7 + i * 2);
+      const readout = Math.round(g.v * g.max) + ' ' + g.unit;
+      return { label: g.label, unit: g.unit, readout, needle: 'rotate(' + angle.toFixed(1) + ' 80 80)', aria: g.label + ' gauge reading ' + readout };
+    });
+
+    const amp = m.p ? 8 + m.field * 46 * (0.4 + m.k[4]) : 0;
+    const freq = 0.12 + m.spindle * 0.4;
+    const trace = [];
+    for (let i = 0; i <= 70; i++) {
+      const y = 80 - amp * Math.sin(i * freq + t * 0.45) + m.inst * 16 * Math.sin(i * 2.7 + t * 1.3);
+      trace.push((10 + i * 4) + ',' + Math.max(6, Math.min(154, y)).toFixed(1));
+    }
+
+    const chart = [];
+    let penY = 100;
+    for (let i = 0; i <= 57; i++) {
+      const phase = i - t * 0.5;
+      const y = 100 - m.inst * 70 - 12 * Math.sin(phase * 0.21) - 6 * Math.sin(phase * 0.73) + (m.p ? 0 : 14);
+      penY = Math.max(10, Math.min(118, y));
+      chart.push((12 + i * 12) + ',' + penY.toFixed(1));
+    }
+
+    const a = 1 + Math.round(m.k[3] * 4);
+    const liss = [];
+    for (let i = 0; i <= 120; i++) {
+      const u = (i / 120) * Math.PI * 2;
+      const r = m.p ? 1 : 0.04;
+      liss.push((70 + 52 * r * Math.sin(a * u + t * 0.04)).toFixed(1) + ',' + (55 + 40 * r * Math.sin((a + 1) * u)).toFixed(1));
+    }
+
+    const arcOn = m.p && s.toggles[2];
+    const arc = [];
+    for (let i = 0; i <= 8; i++) {
+      const jitter = i === 0 || i === 8 ? 0 : 12 * Math.sin(t * 3.1 + i * 2.3) * Math.cos(t * 1.7 + i);
+      arc.push((132 + i * 4.5).toFixed(1) + ',' + (58 + jitter).toFixed(1));
+    }
+
+    const stripeTravel = (t * (2 + m.spindle * 40)) % 132;
+    const count = String(m.p ? (31247 + t * 13) % 1000000 : 0).padStart(6, '0');
+
+    const valves = [0, 1, 2, 3, 4, 5].map((i) => {
+      const hot = m.p && s.toggles[0];
+      const flicker = hot && Math.sin(t * 0.9 + i * 3) > 0.92;
+      return {
+        color: hot ? (flicker ? '#ffc070' : '#ff8a2a') : m.p ? '#7a3a14' : '#2a2420',
+        glow: hot ? 'rgba(255,138,42,0.55)' : 'transparent',
+      };
+    });
+
+    const lit = (i) => m.p && s.toggles[i];
+    const xtal = {
+      a: lit(7) ? 1 : 0.35, b: lit(8) ? 1 : 0.35, c: lit(9) ? 1 : 0.35,
+      aGlow: lit(7) ? 0.28 + 0.08 * Math.sin(t * 0.3) : 0,
+      bGlow: lit(8) ? 0.28 + 0.08 * Math.sin(t * 0.37) : 0,
+      cGlow: lit(9) ? 0.28 + 0.08 * Math.sin(t * 0.23) : 0,
+    };
+
+    const fieldColor = m.inst < 0.3 ? '#9fe9ff' : m.inst < 0.6 ? '#ffd27a' : '#ff5a3a';
+    const scale = m.field > 0 ? (0.4 + m.field * 1.2) * (1 + m.inst * 0.2 * Math.sin(t * 2.1)) : 0.01;
+
+    const vus = ['L', 'R'].map((side, i) => {
+      const v = m.p ? Math.min(1, m.field * 0.7 + (i ? m.inst : -m.inst) * 0.3 + 0.08 * Math.sin(t * (0.9 + i * 0.4))) : 0;
+      return { label: 'BLATZ ' + side, needle: 'rotate(' + (-40 + 80 * Math.max(0, v)).toFixed(1) + ' 76 100)', aria: 'Blatz ' + side + ' balance meter' };
+    });
+
+    const toggles = labels.map((label, i) => {
+      const up = s.toggles[i];
+      return {
+        label,
+        tip: up ? 8 : 70,
+        lamp: up && m.p ? (i === 11 ? '#ff3a1a' : '#ffb020') : '#3a3428',
+        pressed: up ? 'true' : 'false',
+        aria: label + ' switch',
+        flip: () => {
+          const next = s.toggles.slice();
+          next[i] = !next[i];
+          const quip = quips[i] ? quips[i][next[i] ? 0 : 1] : label + (next[i] ? ' up.' : ' down.');
+          this.write({ toggles: next }, [quip]);
+        },
+      };
+    });
+
+    const knob = (i, label) => ({
+      value: (m.k[i] * 10).toFixed(1),
+      rotate: 'rotate(' + s.knobs[i] + ' 48 48)',
+      aria: label + ' knob, ' + (m.k[i] * 10).toFixed(1) + ' of 10. Click to turn.',
+      turn: () => {
+        const next = s.knobs.slice();
+        next[i] = next[i] + 30 > 135 ? -135 : next[i] + 30;
+        this.write({ knobs: next }, [label + ' to ' + (((next[i] + 135) / 270) * 10).toFixed(1) + '.']);
+      },
+    });
+    const kn = {
+      spindle: knob(0, 'SPINDLE'),
+      field: knob(1, 'H-B FIELD'),
+      trim: knob(2, 'BLATZ TRIM'),
+      ratio: knob(3, 'X-Y RATIO'),
+      gain: knob(4, 'GAIN'),
+      bias: knob(5, 'GRID BIAS'),
+    };
+
+    const pushButtons = [
+      { label: 'RESET', color: '#3a9a4a', line: 'RESET pressed. Rig reset, mostly.' },
+      { label: 'PURGE', color: '#e8c03a', line: 'PURGE pressed. Hiss from behind the wall.' },
+      { label: 'DO NOT', color: '#c43a22', line: 'Pressed DO NOT. Nothing yet.' },
+    ].map((b) => ({ label: b.label, color: b.color, press: () => this.write({}, [b.line]) }));
+
+    // Ear hardware for every panel: two bolts per ear, handles on 2U and up.
+    let top = 20;
+    const ears = this.units.map((u, i) => {
+      const h = u * 56;
+      const e = {
+        top,
+        h,
+        bolts: [{ y: 8 }, { y: h - 28 }].map((b, j) => ({ y: b.y, turn: 'rotate(' + ((i * 37 + j * 71) % 90) + ' 10 10)', turn2: 'rotate(' + ((i * 53 + j * 29) % 90) + ' 10 10)' })),
+        handle: u >= 2,
+        hTop: 32,
+        hBottom: h - 46,
+        hLen: h - 64,
+      };
+      top += h + 3;
+      return e;
+    });
+
+    const uPitch = 59.4;
+    const firstU = Math.max(1, Math.floor(s.pan / uPitch) + 1);
+    const lastU = Math.min(38, Math.floor((s.pan + 828) / uPitch));
+    const pad = (n) => String(n).padStart(2, '0');
+
+    return {
+      status,
+      gauges,
+      tracePoints: trace.join(' '),
+      chartPoints: chart.join(' '),
+      penY: (penY - 4).toFixed(1),
+      lissPoints: liss.join(' '),
+      arcPoints: arc.join(' '),
+      arcOpacity: arcOn ? (Math.sin(t * 2.3) > -0.6 ? 1 : 0.2) : 0,
+      arcGlow: arcOn ? 0.35 : 0,
+      ratio: a + ':' + (a + 1),
+      stripeX: (92 + stripeTravel).toFixed(1),
+      stripeX2: (92 + ((stripeTravel + 66) % 132)).toFixed(1),
+      spindleRpm: Math.round(m.spindle * 3600) + ' rpm',
+      nixies: count.split('').map((d) => ({ d })),
+      nixieColor: m.p ? '#ff9a3c' : '#3a2a1c',
+      nixieGlow: m.p ? '#ff7a1a' : 'transparent',
+      valves,
+      xtal,
+      fieldColor,
+      fieldGlow: m.field > 0 ? (0.12 + m.inst * 0.25).toFixed(2) : 0,
+      fieldTransform: 'translate(130 86) rotate(' + ((t * (3 + m.inst * 30)) % 360).toFixed(1) + ') scale(' + scale.toFixed(2) + ')',
+      vus,
+      cpm: String(m.p ? 38 + Math.round(m.inst * 400 + 6 * Math.abs(Math.sin(t * 0.7))) : 31).padStart(4, '0'),
+      toggles,
+      kn,
+      pushButtons,
+      band: bands[s.band],
+      bandAria: 'Band select, position ' + bands[s.band] + '. Click to advance.',
+      bandRotate: 'rotate(' + (-90 + s.band * 45) + ' 120 125)',
+      bandTurn: () => {
+        const next = (s.band + 1) % bands.length;
+        this.write({ band: next }, [next === 5 ? 'Band Ω. Lights dimmed on their own.' : 'Band ' + bands[next] + '.']);
+      },
+      sigFreq: (12.5 + m.k[3] * 87.5 + (s.band - 2) * 3.3).toFixed(3),
+      mains: () => this.write({ power: !s.power }, [s.power ? 'Mains opened. Rig settling. Ticking noises.' : 'Mains closed. Heaters warming.']),
+      powerPressed: m.p ? 'true' : 'false',
+      powerText: m.p ? 'ON' : 'OFF',
+      powerColor: m.p ? '#ff6a4a' : '#a89f86',
+      leverRotate: m.p ? 'rotate(0 60 104)' : 'rotate(180 60 104)',
+      voltNeedle: 'rotate(' + (m.p ? 18 + 2 * Math.sin(t * 0.5) : -40).toFixed(1) + ' 76 100)',
+      voltAria: m.p ? 'Mains voltmeter reading about 240 volts' : 'Mains voltmeter reading zero',
+      ears,
+      log: s.log,
+      logOpen: s.logOpen,
+      logClosed: !s.logOpen,
+      hasUnread: s.unread > 0,
+      unread: s.unread,
+      notebookAria: s.unread > 0 ? 'Open the logbook, ' + s.unread + ' new entries' : 'Open the logbook',
+      openLog: () => this.setState({ logOpen: true, unread: 0 }),
+      closeLog: () => this.setState({ logOpen: false }),
+      rackLeft: s.logOpen ? 48 : 200,
+      cabinetLeft: s.logOpen ? 18 : 170,
+      stageY: -s.pan,
+      stageTransition: s.dragging ? 'left 0.35s ease-out' : 'transform 0.35s ease-out, left 0.35s ease-out',
+      upOpacity: s.pan <= 0 ? 0.35 : 1,
+      downOpacity: s.pan >= this.maxPan ? 0.35 : 1,
+      uReadout: 'U ' + pad(firstU) + '–' + pad(lastU) + ' OF 38',
+      panUp: () => this.setState({ pan: this.clampPan(s.pan - 420) }),
+      panDown: () => this.setState({ pan: this.clampPan(s.pan + 420) }),
+      dragStart: (e) => {
+        this.drag = { y: e.clientY, pan: this.state.pan };
+      },
+      dragMove: (e) => {
+        if (!this.drag) return;
+        const dy = e.clientY - this.drag.y;
+        if (Math.abs(dy) > 4) this.setState({ dragging: true, pan: this.clampPan(this.drag.pan - dy) });
+      },
+      dragEnd: () => {
+        this.drag = null;
+        if (this.state.dragging) this.setState({ dragging: false });
+      },
+      wheel: (e) => this.setState({ pan: this.clampPan(this.state.pan + e.deltaY) }),
+    };
+  }
+}
+</script>
+</body>
+</html>
