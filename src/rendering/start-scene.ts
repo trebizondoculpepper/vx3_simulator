@@ -47,6 +47,7 @@ import {
 import { createWorldMapTexture } from '../scene/world-map';
 import { createAshtray } from '../scene/ashtray';
 import { createXenonCylinders } from '../scene/xenon-cylinders';
+import { createHotlinePhone } from '../scene/hotline-phone';
 import { createPanelHeader, createPanelLivery } from '../scene/panel-livery';
 import { createPs1Material, ps1Uniforms } from './ps1-material';
 
@@ -685,6 +686,13 @@ export function startScene(canvas: HTMLCanvasElement) {
     hoseEnd: new Vector3(-1.6, floorY + 1.3, -0.86),
   });
   lab.add(xenon.group);
+
+  // A red emergency telephone on the far-right wall, above the filing cabinet.
+  const hotline = createHotlinePhone();
+  hotline.group.position.set(8.25, floorY + 3.05, -3.69);
+  // Oversized so the sign reads at the PS1 render resolution.
+  hotline.group.scale.setScalar(1.8);
+  lab.add(hotline.group);
 
   // The wall outlet and the trailing rubber mains lead are visible at rack base.
   const socketX = -5.6;
@@ -1406,6 +1414,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     audio.dispose();
     ashtray.dispose();
     xenon.dispose();
+    hotline.dispose();
     overlay.remove();
     scene.traverse((object) => {
       if (object instanceof Mesh) object.geometry.dispose();
