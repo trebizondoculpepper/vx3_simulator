@@ -218,9 +218,13 @@ const catalogue: Record<string, RackModule[]> = {
 export function assembleRack(): RackModule[] {
   return [
     catalogue.supply[1],
+    catalogue.valves[0],
     catalogue.valves[1],
     catalogue.spindle[0],
+    catalogue.spindle[1],
     catalogue.field[0],
+    catalogue.field[1],
+    catalogue.monitor[0],
     catalogue.monitor[1],
     catalogue.service[1],
   ];

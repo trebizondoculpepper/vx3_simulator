@@ -141,19 +141,23 @@ export function createTeleprinter() {
   // slightly askew pile on the floor in front of the wall-mounted machine.
   const printed = paperFace();
   face(printed, 1.72, 1.08, 0, -0.52, 0.91).rotation.x = -0.18;
+  const outputPile = new Group();
+  group.add(outputPile);
   for (let sheet = 0; sheet < 12; sheet++) {
     const page = part(
       new BoxGeometry(1.68, 0.017, 0.78),
       sheet % 3 ? '#ded6b6' : '#c8c0a2',
       (sheet % 4) * 0.025 - 0.04,
-      -2.36 + sheet * 0.018,
+      sheet * 0.018,
       1.17 + (sheet % 3) * 0.04,
+      outputPile,
     );
     page.rotation.y = ((sheet % 5) - 2) * 0.018;
   }
 
   return {
     group,
+    outputPile,
     dispose() {
       group.traverse((object) => {
         if (object instanceof Mesh) object.geometry.dispose();

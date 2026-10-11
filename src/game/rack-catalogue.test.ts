@@ -6,9 +6,13 @@ describe('rack assembly', () => {
     const rack = assembleRack();
     expect(rack.map((panel) => panel.id)).toEqual([
       'supply-b',
+      'valves-a',
       'valves-b',
       'spindle-a',
+      'spindle-b',
       'field-a',
+      'field-b',
+      'monitor-a',
       'monitor-b',
       'service-b',
     ]);

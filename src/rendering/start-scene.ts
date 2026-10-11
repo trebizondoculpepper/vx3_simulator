@@ -48,19 +48,24 @@ import { createWorldMapTexture } from '../scene/world-map';
 import { createPedestalAshtray } from '../scene/pedestal-ashtray';
 import { createXenonCylinders } from '../scene/xenon-cylinders';
 import { createHotlinePhone } from '../scene/hotline-phone';
+import { createLabRoom } from '../scene/lab-room';
 import { createTeleprinter } from '../scene/teleprinter';
 import { createPanelHeader, createPanelLivery } from '../scene/panel-livery';
 import { createPs1Material, ps1Uniforms } from './ps1-material';
 
-const U = 0.48;
 const panelWidth = 4.35;
+const worldUnitsPerMetre = panelWidth / 0.4826;
+// A panel is 19 inches across; one rack unit is 1.75 inches high.
+const U = (panelWidth * 1.75) / 19;
+// Ten named instruments and one open 4U inspection bay fill a 42U cabinet.
+const inspectionBayUnits = 4;
 // The handles occupy the outer edges of a panel. Instruments stay between them.
 const instrumentSafeRight = 1.72;
 
 export function startScene(canvas: HTMLCanvasElement) {
   const renderer = new WebGLRenderer({ canvas, antialias: false });
   renderer.setPixelRatio(1);
-  const perspectiveCamera = new PerspectiveCamera(38, 1, 0.1, 100);
+  const perspectiveCamera = new PerspectiveCamera(52, 1, 0.1, 150);
   const isometricCamera = new OrthographicCamera(-4, 4, 4, -4, 0.1, 100);
   let view: 'perspective' | 'isometric' = 'perspective';
   const camera = () =>
@@ -85,9 +90,11 @@ export function startScene(canvas: HTMLCanvasElement) {
   const settings = createRackControls();
   const audio = createSoundEngine();
   const modules = assembleRack();
-  const totalHeight =
-    modules.reduce((sum, module) => sum + module.units * U + 0.045, 0) + 0.35;
+  const rackUnits =
+    modules.reduce((sum, module) => sum + module.units, 0) + inspectionBayUnits;
+  const totalHeight = rackUnits * U + (modules.length + 1) * 0.045 + 0.35;
   const rack = new Group();
+  rack.position.z = 3.8;
   scene.add(rack);
   const material = (color: string, unlit = false) => {
     const result = createPs1Material({ color }, unlit);
@@ -151,25 +158,57 @@ export function startScene(canvas: HTMLCanvasElement) {
   const lab = new Group();
   scene.add(lab);
   const floorY = -totalHeight / 2 - 0.23;
-  cube(lab, 25, totalHeight + 4, 0.18, '#626f68', 0, 0, -3.9);
-  cube(lab, 25, 3.4, 0.2, '#3d5750', 0, floorY + 1.7, -3.79);
-  cube(lab, 25, 0.11, 0.29, '#d0c3a0', 0, floorY + 3.4, -3.66);
-  cube(lab, 25, 0.2, 0.32, '#373d38', 0, floorY + 0.12, -3.65);
-  // The room turns at the right: the teleprinter hangs on this dark side wall.
-  cube(lab, 0.2, totalHeight + 4, 9, '#626f68', 12.5, 0, 0.55);
-  cube(lab, 0.22, 3.4, 9, '#344d48', 12.39, floorY + 1.7, 0.55);
-  cube(lab, 0.29, 0.11, 9, '#d0c3a0', 12.3, floorY + 3.4, 0.55);
-  cube(lab, 0.3, 0.2, 9, '#373d38', 12.3, floorY + 0.12, 0.55);
-  cube(lab, 25, 0.3, 9, '#706d60', 0, floorY - 0.18, -0.15);
-  for (let x = -12; x <= 12; x += 1.5) {
-    cube(lab, 0.025, 0.008, 9, '#56594f', x, floorY - 0.02, -0.15);
-  }
-  for (let z = -4; z <= 4; z += 1.5) {
-    cube(lab, 25, 0.008, 0.025, '#56594f', 0, floorY - 0.02, z);
-  }
-  // A separate six-station ferrocore carousel feeds the rack by a heavy conduit.
+  // The 19-inch panel sets the room scale: 4.5 m wide, 5 m deep, 2.7 m high.
+  const room = {
+    minX: -2.25 * worldUnitsPerMetre,
+    maxX: 2.25 * worldUnitsPerMetre,
+    minZ: -3.81,
+    maxZ: -3.81 + 5 * worldUnitsPerMetre,
+    floorY,
+    ceilingY: floorY + 2.7 * worldUnitsPerMetre,
+    worldUnitsPerMetre,
+  };
+  const backWallHeight = room.ceilingY - floorY;
+  cube(
+    lab,
+    room.maxX - room.minX,
+    backWallHeight,
+    0.18,
+    '#626f68',
+    0,
+    floorY + backWallHeight / 2,
+    -3.9,
+  );
+  cube(lab, room.maxX - room.minX, 3.4, 0.2, '#3d5750', 0, floorY + 1.7, -3.79);
+  cube(
+    lab,
+    room.maxX - room.minX,
+    0.11,
+    0.29,
+    '#d0c3a0',
+    0,
+    floorY + 3.4,
+    -3.66,
+  );
+  cube(
+    lab,
+    room.maxX - room.minX,
+    0.2,
+    0.32,
+    '#373d38',
+    0,
+    floorY + 0.12,
+    -3.65,
+  );
+  const labRoom = createLabRoom(room);
+  lab.add(labRoom.group);
+  dynamic.push(() =>
+    labRoom.update(performance.now() / 1000, reducedMotion.matches),
+  );
+  // A six-station ferrocore carousel occupies the companion rack's open bay.
   const drum = new Group();
-  drum.position.set(3.15, floorY + 1.55, 0.25);
+  drum.position.set(5.35, floorY + 3.1, 2);
+  drum.scale.setScalar(2);
   lab.add(drum);
   for (const x of [-0.68, 0.68]) {
     cube(drum, 0.16, 1.58, 0.22, '#69736c', x, -0.72, -0.23);
@@ -208,13 +247,13 @@ export function startScene(canvas: HTMLCanvasElement) {
   const coreConduit = new Mesh(
     new TubeGeometry(
       new CatmullRomCurve3([
-        new Vector3(2.1, floorY + 2.22, 0.06),
-        new Vector3(2.55, floorY + 2.13, 0.12),
-        new Vector3(2.67, floorY + 1.67, 0.18),
-        new Vector3(2.48, floorY + 1.48, 0.25),
+        new Vector3(2.1, floorY + 3.0, 0.06),
+        new Vector3(2.75, floorY + 2.75, 0.4),
+        new Vector3(3.45, floorY + 2.9, 1.3),
+        new Vector3(3.9, floorY + 3.1, 1.8),
       ]),
       14,
-      0.085,
+      0.12,
       6,
       false,
     ),
@@ -223,13 +262,16 @@ export function startScene(canvas: HTMLCanvasElement) {
   lab.add(coreConduit);
   // The side cabinet carries the downstream amplifier, emitter and cooler.
   const sideCabinet = new Group();
-  sideCabinet.position.set(5.35, floorY + 1.83, -0.15);
+  sideCabinet.position.set(5.35, floorY + 8.85, 2);
   lab.add(sideCabinet);
-  cube(sideCabinet, 2.32, 3.72, 0.68, '#323c38', 0, 0, -0.15);
-  cube(sideCabinet, 2.36, 0.15, 0.75, '#727a69', 0, 1.82, -0.13);
-  cube(sideCabinet, 2.36, 0.15, 0.75, '#727a69', 0, -1.82, -0.13);
-  for (const x of [-1.07, 1.07]) {
-    cube(sideCabinet, 0.15, 3.55, 0.22, '#7d806f', x, 0, 0.25);
+  // A shorter 19-inch companion rack: the three bolted instrument blocks
+  // occupy its top rails, with the lower frame left deliberately empty.
+  cube(sideCabinet, 4.8, 10.6, 0.08, '#1b2522', 0, -3.53, -5.17);
+  cube(sideCabinet, 5.1, 0.15, 5.45, '#727a69', 0, 1.82, -2.5);
+  cube(sideCabinet, 5.1, 0.15, 5.45, '#727a69', 0, -8.85, -2.5);
+  for (const x of [-2.42, 2.42]) {
+    for (const z of [-5.1, 0.2])
+      cube(sideCabinet, 0.15, 10.6, 0.22, '#7d806f', x, -3.53, z);
     for (const y of [-1.62, -0.55, 0.55, 1.62])
       disc(sideCabinet, 0.045, '#d5bd87', x, y, 0.37);
   }
@@ -239,18 +281,28 @@ export function startScene(canvas: HTMLCanvasElement) {
     { maker: 'SYNCLEX', title: 'NANOCORE B-E RADIATOR', y: -1.1 },
   ];
   for (const unit of sideUnits) {
-    cube(sideCabinet, 2.02, 1.03, 0.11, '#424b45', 0, unit.y, 0.25);
+    cube(sideCabinet, panelWidth, 1.03, 3.0, '#424b45', 0, unit.y, -1.25);
     const skin = createPanelLivery(unit.maker, '#424b45', 3);
     textures.push(skin);
     const skinMesh = new Mesh(
-      new PlaneGeometry(1.96, 1),
+      new PlaneGeometry(panelWidth - 0.08, 1),
       createPs1Material({ map: skin }, true),
     );
     materials.push(skinMesh.material);
     skinMesh.position.set(0, unit.y, 0.31);
     sideCabinet.add(skinMesh);
-    label(sideCabinet, unit.maker, -0.33, unit.y + 0.37, 0.35, 8);
-    label(sideCabinet, unit.title, 0, unit.y + 0.19, 0.36, 7);
+    const header = createPanelHeader(unit.maker, unit.title);
+    textures.push(header);
+    const headerMesh = new Mesh(
+      new PlaneGeometry(panelWidth - 0.18, 0.24),
+      createPs1Material({ map: header }, true),
+    );
+    materials.push(headerMesh.material);
+    headerMesh.position.set(0, unit.y + 0.36, 0.36);
+    sideCabinet.add(headerMesh);
+    for (const x of [-2.05, 2.05])
+      for (const y of [unit.y - 0.4, unit.y + 0.4])
+        disc(sideCabinet, 0.06, '#d5bd87', x, y, 0.39);
   }
   for (let stage = 0; stage < 7; stage++) {
     const x = -0.77 + stage * 0.25;
@@ -309,7 +361,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   lab.add(sideConduit);
   // Steel document cabinet for the reconstructed operating papers.
   const fileCabinet = new Group();
-  fileCabinet.position.set(7.45, floorY + 1.23, -0.1);
+  fileCabinet.position.set(10.8, floorY + 4.57, 1.2);
+  fileCabinet.scale.set(2.8, 3.68, 4.8);
   lab.add(fileCabinet);
   cube(fileCabinet, 1.52, 2.48, 1.08, '#81918d', 0, 0, -0.13);
   cube(fileCabinet, 1.62, 0.1, 1.16, '#a8b5ab', 0, 1.23, -0.13);
@@ -342,7 +395,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   }
   label(fileCabinet, 'VX3 REFERENCE FILES', 0, 1.36, 0.44, 10);
   const pinBoard = new Group();
-  pinBoard.position.set(5.37, floorY + 5.2, -3.55);
+  pinBoard.position.set(5.37, floorY + 13.05, -3.55);
+  pinBoard.scale.setScalar(1.8);
   lab.add(pinBoard);
   cube(pinBoard, 2.8, 1.6, 0.11, '#5d4a32', 0, 0, 0);
   cube(pinBoard, 2.58, 1.4, 0.02, '#a5835a', 0, 0, 0.07);
@@ -404,15 +458,15 @@ export function startScene(canvas: HTMLCanvasElement) {
     'neumann-dynamik',
     'bonk-industries',
   ].entries()) {
-    const x = 3.72 + index * 1.65;
-    const y = floorY + 7.08;
-    cube(lab, 1.38, 2.02, 0.035, '#4b3e31', x, y, -3.5);
+    const x = 3.1 + index * 2.9;
+    const y = floorY + 17.3;
+    cube(lab, 2.48, 3.64, 0.035, '#4b3e31', x, y, -3.5);
     const poster = posterLoader.load(`/posters/${name}.png`);
     poster.colorSpace = SRGBColorSpace;
     poster.magFilter = NearestFilter;
     textures.push(poster);
     const printedFace = new Mesh(
-      new PlaneGeometry(1.25, 1.88),
+      new PlaneGeometry(2.25, 3.4),
       createPs1Material({ map: poster }, true),
     );
     materials.push(printedFace.material);
@@ -422,6 +476,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   for (let x = -8.5; x <= 8.5; x += 2.4) {
     cube(lab, 0.025, totalHeight + 4, 0.025, '#77847a', x, 0, -3.77);
   }
+  const wallDisplayStart = lab.children.length;
   const wallDisplayX = -6.05;
   const wallDisplayTop = totalHeight / 2 - 0.42;
   const clockY = wallDisplayTop - 0.28;
@@ -646,12 +701,27 @@ export function startScene(canvas: HTMLCanvasElement) {
       0.56,
     );
   });
+  // Scale the wall display around its lower edge, keeping the clock below the
+  // ceiling while giving the map and safety meters readable physical sizes.
+  const wallDisplay = new Group();
+  const displayScale = 1.8;
+  const displayAnchorY = floorY + 11.2;
+  wallDisplay.scale.setScalar(displayScale);
+  wallDisplay.position.set(
+    -10.3 - wallDisplayX * displayScale,
+    displayAnchorY * (1 - displayScale),
+    -3.6 * (1 - displayScale),
+  );
+  for (const part of lab.children.slice(wallDisplayStart))
+    wallDisplay.add(part);
+  lab.add(wallDisplay);
   cube(lab, 2.4, 0.1, 0.25, '#a4aaa0', -4.45, totalHeight / 2 + 0.55, -3.45);
   cube(lab, 2.25, 0.055, 0.04, '#e5d6a7', -4.45, totalHeight / 2 + 0.45, -3.3);
 
   // A workbench with a CRT, calibration source and stacked paper records.
   const bench = new Group();
-  bench.position.set(-4.3, floorY, -1.6);
+  bench.position.set(-7.9, floorY, -0.8);
+  bench.scale.set(3.7, 5.7, 4.5);
   lab.add(bench);
   cube(bench, 2.8, 0.18, 1.35, '#896e50', 0, 1.24, 0);
   cube(bench, 2.85, 0.035, 1.4, '#c3a477', 0, 1.36, 0);
@@ -659,19 +729,20 @@ export function startScene(canvas: HTMLCanvasElement) {
     for (const z of [-0.5, 0.5])
       cube(bench, 0.13, 1.2, 0.13, '#3c453e', x, 0.61, z);
   }
-  cube(bench, 1.05, 0.65, 0.55, '#6b746b', -0.62, 1.77, -0.18);
-  cube(bench, 0.68, 0.42, 0.02, '#172e2a', -0.65, 1.78, 0.11);
-  const crtGlow = disc(bench, 0.12, '#8bc6a0', -0.65, 1.78, 0.125);
+  cube(bench, 1.05, 0.65, 0.55, '#6b746b', 0.45, 1.77, -0.18);
+  cube(bench, 0.68, 0.42, 0.02, '#172e2a', 0.42, 1.78, 0.11);
+  const crtGlow = disc(bench, 0.12, '#8bc6a0', 0.42, 1.78, 0.125);
   crtGlow.scale.set(1.7, 0.4, 1);
-  cube(bench, 0.57, 0.42, 0.45, '#a49b7f', 0.53, 1.65, -0.22);
-  for (const x of [0.37, 0.58, 0.79])
+  cube(bench, 0.57, 0.42, 0.45, '#a49b7f', -0.55, 1.65, -0.22);
+  for (const x of [-0.71, -0.5, -0.29])
     disc(bench, 0.045, '#e0ba6d', x, 1.66, 0.02);
   for (let i = 0; i < 4; i++)
-    cube(bench, 0.57, 0.025, 0.38, '#e0d4af', 0.47, 1.45 + i * 0.025, 0.36);
+    cube(bench, 0.57, 0.025, 0.38, '#e0d4af', -0.48, 1.45 + i * 0.025, 0.36);
 
   // The brass stand sits left of the xenon bank, cigarette still burning.
   const ashtray = createPedestalAshtray();
-  ashtray.group.position.set(-8.75, floorY, -1.6);
+  ashtray.group.position.set(-19.0, floorY, -1.6);
+  ashtray.group.scale.setScalar(3.3);
   lab.add(ashtray.group);
   dynamic.push(() =>
     ashtray.update(performance.now() / 1000, reducedMotion.matches),
@@ -682,29 +753,49 @@ export function startScene(canvas: HTMLCanvasElement) {
   const xenonFloor = floorY + 0.05;
   const xenon = createXenonCylinders({
     floorY,
-    x: -7.4,
+    x: -16.5,
     z: -3.3,
     hoseVia: [
-      new Vector3(-5.6, xenonFloor, -2.55),
-      new Vector3(-3.0, xenonFloor, -2.6),
+      new Vector3(-13.1, xenonFloor, -2.55),
+      new Vector3(-5.1, xenonFloor, -2.6),
       new Vector3(-2.2, xenonFloor, -1.6),
     ],
     hoseEnd: new Vector3(-1.6, floorY + 1.3, -0.86),
   });
   lab.add(xenon.group);
+  dynamic.push(() =>
+    xenon.update(performance.now() / 1000, reducedMotion.matches),
+  );
+  bind(xenon.regulatorKnob, () => {
+    const setting = xenon.stepRegulator();
+    audio.play('knob');
+    write(
+      setting === 0
+        ? 'Xenon regulator wound shut.'
+        : `Xenon regulator to ${(setting * 4).toFixed(1)} bar; flow settling toward ${(setting * 10).toFixed(1)} SLPM.`,
+    );
+  });
 
-  // A red emergency telephone on the far-right wall, above the filing cabinet.
+  // The emergency telephone is on the east wall at shoulder height.
   const hotline = createHotlinePhone();
-  hotline.group.position.set(8.25, floorY + 3.05, -3.69);
-  // Oversized so the sign reads at the PS1 render resolution.
-  hotline.group.scale.setScalar(1.8);
+  hotline.group.position.set(
+    room.maxX - 0.16,
+    floorY + 1.4 * worldUnitsPerMetre,
+    8,
+  );
+  hotline.group.rotation.y = -Math.PI / 2;
+  // A roughly 18 cm wide wall telephone with a legible hazard sign.
+  hotline.group.scale.setScalar(3.5);
   lab.add(hotline.group);
 
   const teleprinter = createTeleprinter();
-  teleprinter.group.position.set(11.52, floorY + 2.5, 1.25);
-  teleprinter.group.rotation.y = -1.05;
-  for (const y of [floorY + 2.2, floorY + 2.85])
-    cube(lab, 0.94, 0.09, 0.12, '#67736c', 12.02, y, 1.25);
+  const printerY = floorY + 0.95 * worldUnitsPerMetre;
+  teleprinter.group.position.set(room.maxX - 0.42, printerY, 1.25);
+  teleprinter.group.scale.setScalar(2.5);
+  teleprinter.group.rotation.y = -Math.PI / 2;
+  teleprinter.outputPile.position.y = (floorY - printerY) / 2.5 + 0.08;
+  for (const y of [printerY - 1.4, printerY + 0.9])
+    cube(lab, 0.94, 0.09, 0.12, '#67736c', room.maxX - 0.38, y, 1.25);
   lab.add(teleprinter.group);
 
   // The wall outlet and the trailing rubber mains lead are visible at rack base.
@@ -746,11 +837,41 @@ export function startScene(canvas: HTMLCanvasElement) {
   );
   lab.add(cable);
 
-  cube(rack, 5.05, totalHeight + 0.25, 0.65, '#242724', 0, 0, -0.48);
+  // 825 mm deep enclosure, using the published 42U AV rack footprint.
+  const cabinetDepth = 0.825 * worldUnitsPerMetre;
+  const cabinetCentreZ = -0.15 - cabinetDepth / 2;
+  cube(
+    rack,
+    5.05,
+    totalHeight + 0.25,
+    cabinetDepth,
+    '#242724',
+    0,
+    0,
+    cabinetCentreZ,
+  );
   for (const x of [-2.5, 2.5]) {
-    cube(rack, 0.08, totalHeight + 0.25, 0.9, '#313a35', x, 0, -0.45);
+    cube(
+      rack,
+      0.08,
+      totalHeight + 0.25,
+      cabinetDepth,
+      '#313a35',
+      x,
+      0,
+      cabinetCentreZ,
+    );
   }
-  cube(rack, 4.65, totalHeight + 0.12, 0.05, '#111b1a', 0, 0, -0.12);
+  cube(
+    rack,
+    4.65,
+    totalHeight + 0.12,
+    0.05,
+    '#111b1a',
+    0,
+    0,
+    -0.15 - cabinetDepth,
+  );
   for (const x of [-2.38, 2.38]) {
     cube(rack, 0.16, totalHeight + 0.3, 0.54, '#353a37', x, 0, 0.03);
     cube(
@@ -764,8 +885,26 @@ export function startScene(canvas: HTMLCanvasElement) {
       0.13,
     );
   }
-  cube(rack, 5.2, 0.18, 0.74, '#3e423b', 0, totalHeight / 2 + 0.08, 0);
-  cube(rack, 5.2, 0.18, 0.74, '#30332f', 0, -totalHeight / 2 - 0.08, 0);
+  cube(
+    rack,
+    5.2,
+    0.18,
+    cabinetDepth,
+    '#3e423b',
+    0,
+    totalHeight / 2 + 0.08,
+    cabinetCentreZ,
+  );
+  cube(
+    rack,
+    5.2,
+    0.18,
+    cabinetDepth,
+    '#30332f',
+    0,
+    -totalHeight / 2 - 0.08,
+    cabinetCentreZ,
+  );
   const antennaX = -1.55;
   const antennaBaseY = totalHeight / 2 + 0.17;
   cube(rack, 0.35, 0.12, 0.32, '#d0c49c', antennaX, antennaBaseY, 0);
@@ -809,7 +948,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   let top = totalHeight / 2 - 0.2;
   let band = 2;
   const bands = ['A', 'B', 'C', 'D', 'E', 'Ω'];
-  for (const module of modules) {
+  for (const [moduleIndex, module] of modules.entries()) {
     const h = module.units * U;
     const y = top - h / 2;
     const panel = new Group();
@@ -1101,6 +1240,58 @@ export function startScene(canvas: HTMLCanvasElement) {
       }
     }
     top -= h + 0.045;
+    if (moduleIndex !== 4) continue;
+    const bayHeight = inspectionBayUnits * U;
+    const bayY = top - bayHeight / 2;
+    const bay = new Group();
+    bay.position.y = bayY;
+    rack.add(bay);
+    cube(bay, panelWidth, bayHeight - 0.055, 0.08, '#202924', 0, 0, -0.03);
+    for (const x of [-2.12, 2.12]) {
+      cube(bay, 0.17, bayHeight - 0.04, 0.27, '#6c7169', x, 0, 0.08);
+      for (const y of [-bayHeight / 2 + 0.16, bayHeight / 2 - 0.16])
+        disc(bay, 0.055, '#bcaa81', x, y, 0.27);
+    }
+    // A removed inspection panel reveals a dense loom and live field taps.
+    cube(bay, 3.8, bayHeight - 0.22, 0.03, '#0b1517', 0, 0, -0.01);
+    for (let i = 0; i < 13; i++) {
+      const x = -1.7 + i * 0.28;
+      const wire = new Mesh(
+        new TubeGeometry(
+          new CatmullRomCurve3([
+            new Vector3(x, bayHeight / 2 - 0.15, 0.08),
+            new Vector3(x + Math.sin(i * 2.7) * 0.45, 0.25, 0.18),
+            new Vector3(x + Math.cos(i * 1.9) * 0.5, -0.25, 0.12),
+            new Vector3(
+              x + Math.sin(i * 3.1) * 0.3,
+              -bayHeight / 2 + 0.15,
+              0.07,
+            ),
+          ]),
+          18,
+          0.025 + (i % 3) * 0.007,
+          5,
+          false,
+        ),
+        material(['#bc604a', '#d1aa54', '#5c8584', '#aca68c'][i % 4]),
+      );
+      bay.add(wire);
+    }
+    for (const x of [-1.38, 0.18, 1.42]) {
+      const glow = material('#354846', true);
+      const node = new Mesh(new CircleGeometry(0.13, 8), glow);
+      node.position.set(x, -0.25 + x * 0.17, 0.23);
+      bay.add(node);
+      dynamic.push(() => {
+        const pulse = (Math.sin(performance.now() / 580 + x * 3) + 1) / 2;
+        glow.color.set(rig.controls.mains ? '#3fe8c3' : '#354846');
+        glow.color.multiplyScalar(
+          rig.controls.mains ? 0.45 + pulse * 0.55 : 0.6 + pulse * 0.18,
+        );
+      });
+    }
+    label(bay, 'FIELD BUS / PANEL REMOVED', 0, bayHeight / 2 - 0.17, 0.23, 8);
+    top -= bayHeight + 0.045;
   }
 
   const overlay = document.createElement('div');
@@ -1254,7 +1445,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   }
 
   const halfTravel = Math.max(0, (totalHeight - 3.2) / 2);
-  let pan = halfTravel;
+  const eyeY = floorY + 1.8034 * worldUnitsPerMetre;
+  let pan = eyeY - 0.22;
   let panX = 0;
   let cameraZoom = 1;
   const zoomTo = (value: number) => {
@@ -1264,7 +1456,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   const panTo = (value: number) => {
     pan = Math.max(-halfTravel, Math.min(halfTravel, value));
-    unitReadout.textContent = `U ${String(Math.max(1, Math.floor((halfTravel - pan) / U) + 1)).padStart(2, '0')} / ${Math.round(totalHeight / U)}`;
+    unitReadout.textContent = `U ${String(Math.min(rackUnits, Math.max(1, Math.floor((halfTravel - pan) / U) + 1))).padStart(2, '0')} / ${rackUnits}`;
   };
   panTo(pan);
   overlay.querySelector('[data-pan="up"]')!.addEventListener('click', () => {
@@ -1320,8 +1512,10 @@ export function startScene(canvas: HTMLCanvasElement) {
     const dy = event.clientY - drag.y;
     if (Math.abs(dx) > 5 || Math.abs(dy) > 5) drag.moved = true;
     if (drag.moved) {
-      orbitYaw = Math.max(-1.15, Math.min(1.15, drag.yaw - dx * 0.004));
-      orbitPitch = Math.max(-0.35, Math.min(0.65, drag.pitch - dy * 0.003));
+      // Drag the view: turn all the way round, look up to the ceiling or
+      // down toward the floor.
+      orbitYaw = drag.yaw - dx * 0.004;
+      orbitPitch = Math.max(-1.2, Math.min(1.2, drag.pitch + dy * 0.003));
     }
   };
   const up = (event: PointerEvent) => {
@@ -1352,10 +1546,10 @@ export function startScene(canvas: HTMLCanvasElement) {
     ps1Uniforms.resolution.value.set(w, h);
     perspectiveCamera.aspect = width / height;
     perspectiveCamera.updateProjectionMatrix();
-    isometricCamera.left = -3.9 * (width / height);
-    isometricCamera.right = 3.9 * (width / height);
-    isometricCamera.top = 3.9;
-    isometricCamera.bottom = -3.9;
+    isometricCamera.left = -6.5 * (width / height);
+    isometricCamera.right = 6.5 * (width / height);
+    isometricCamera.top = 6.5;
+    isometricCamera.bottom = -6.5;
     isometricCamera.updateProjectionMatrix();
   };
   const observer = new ResizeObserver(resize);
@@ -1401,18 +1595,33 @@ export function startScene(canvas: HTMLCanvasElement) {
     deltaReadout.textContent = `δ ${deltaScore(rig).toFixed(3)} / 0.880`;
     for (const update of dynamic) update();
     const sway = reducedMotion.matches ? 0 : Math.sin(time / 5000) * 0.05;
-    perspectiveCamera.position.set(
-      panX + Math.sin(0.14 + orbitYaw) * (8.9 / cameraZoom) + sway,
-      pan + 0.22 + Math.sin(orbitPitch) * (8.9 / cameraZoom),
-      Math.cos(0.14 + orbitYaw) * (8.9 / cameraZoom),
+    // The perspective camera is an observer standing in the room facing the
+    // cabinet; dragging turns their head. It never leaves the room and never
+    // drops below eye level off the floor.
+    const eye = new Vector3(
+      Math.max(room.minX + 0.5, Math.min(room.maxX - 0.5, panX + sway)),
+      Math.max(floorY + 0.6, Math.min(room.ceilingY - 0.6, pan + 0.22)),
+      Math.max(room.minZ + 1, Math.min(room.maxZ - 0.5, 21 / cameraZoom)),
     );
-    perspectiveCamera.lookAt(panX, pan, 0);
+    perspectiveCamera.position.copy(eye);
+    perspectiveCamera.lookAt(
+      eye.x + Math.sin(orbitYaw) * Math.cos(orbitPitch),
+      eye.y + Math.sin(orbitPitch),
+      eye.z - Math.cos(orbitYaw) * Math.cos(orbitPitch),
+    );
+    // The isometric view keeps its bounded orbit outside the action.
+    const isoYaw = Math.max(-1.15, Math.min(1.15, orbitYaw));
+    const isoPitch = Math.max(-0.35, Math.min(0.65, orbitPitch));
     isometricCamera.position.set(
-      panX + Math.sin(0.63 + orbitYaw) * 9.3,
-      pan + 3.5 + Math.sin(orbitPitch) * 9.3,
-      Math.cos(0.63 + orbitYaw) * 9.3,
+      panX + Math.sin(0.63 + isoYaw) * 9.3,
+      Math.max(
+        floorY + 0.6,
+        Math.min(room.ceilingY - 0.6, pan + 3.5 + Math.sin(isoPitch) * 9.3),
+      ),
+      Math.cos(0.63 + isoYaw) * 9.3,
     );
     isometricCamera.lookAt(panX, pan, 0);
+    labRoom.roof.visible = view === 'perspective';
     ps1Uniforms.snapPixels.value = reducedMotion.matches ? 0 : 1;
     renderer.render(scene, camera());
   });
@@ -1430,6 +1639,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     ashtray.dispose();
     xenon.dispose();
     hotline.dispose();
+    labRoom.dispose();
     teleprinter.dispose();
     overlay.remove();
     scene.traverse((object) => {
