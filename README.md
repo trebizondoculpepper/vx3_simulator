@@ -4,7 +4,7 @@ Operate a historical "full" VX3 rig, racked in a 19-inch cabinet, in your browse
 
 A bench toy in the deadpan tradition of [r/VXJunkies](https://www.reddit.com/r/VXJunkies/), rendered in a PS1 style with Three.js.
 
-**Status:** early. The simulation core works and is tested; the 3D rack is a placeholder. The design mockup lives in `doc/design/`.
+**Status:** playable first slice. A randomised five-panel cabinet has working controls, instruments, scrolling and an operator's logbook. The panel designs are currently invented; community lore research is pending. The design mockup lives in `doc/design/`.
 
 ## Run locally
 
@@ -14,6 +14,8 @@ Use Node.js 22.13.x, 24.x, or 26+ and npm.
 npm ci
 npm run dev
 ```
+
+Open the local address printed by Vite (normally `http://127.0.0.1:5173/`). Click switches and knobs on the rack, then use the mouse wheel, drag, or the arrow buttons to move through the cabinet. Switch between perspective and isometric cameras to compare the PS1-style views. The logbook can be put away and reopened.
 
 ## Checks
 

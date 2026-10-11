@@ -1,28 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyDesk,
-  createDeskControls,
+  applyRack,
+  createRackControls,
   knobLine,
   toggleLine,
-} from './desk-controls';
+} from './rack-controls';
 import { createRig } from './rig';
 
-describe('applyDesk', () => {
+describe('applyRack', () => {
   it('passes the dials through when their switches are up', () => {
-    const desk = createDeskControls();
+    const rackSettings = createRackControls();
     const rig = createRig();
-    Object.assign(desk.knobs, { spindle: 0.6, field: 0.7, trim: 0.4 });
-    applyDesk(desk, rig.controls);
+    Object.assign(rackSettings.knobs, { spindle: 0.6, field: 0.7, trim: 0.4 });
+    applyRack(rackSettings, rig.controls);
     expect(rig.controls).toMatchObject({ spindle: 0.6, field: 0.7, trim: 0.4 });
   });
 
   it('cuts the spindle and field when their switches are down', () => {
-    const desk = createDeskControls();
+    const rackSettings = createRackControls();
     const rig = createRig();
-    Object.assign(desk.knobs, { spindle: 0.6, field: 0.7 });
-    desk.toggles.spin = false;
-    desk.toggles.hb = false;
-    applyDesk(desk, rig.controls);
+    Object.assign(rackSettings.knobs, { spindle: 0.6, field: 0.7 });
+    rackSettings.toggles.spin = false;
+    rackSettings.toggles.hb = false;
+    applyRack(rackSettings, rig.controls);
     expect(rig.controls.spindle).toBe(0);
     expect(rig.controls.field).toBe(0);
   });

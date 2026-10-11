@@ -60,13 +60,13 @@ const quips: Partial<Record<ToggleId, [up: string, down: string]>> = {
   damp: ['DAMP up. Room feels slightly moist.', 'DAMP down.'],
 };
 
-/** Everything on the desk the operator can touch, apart from the mains lever. */
-export interface DeskControls {
+/** Everything on the rack the operator can touch, apart from the mains lever. */
+export interface RackControls {
   toggles: Record<ToggleId, boolean>;
   knobs: Record<KnobId, number>;
 }
 
-export function createDeskControls(): DeskControls {
+export function createRackControls(): RackControls {
   return {
     toggles: {
       ht: true,
@@ -96,8 +96,8 @@ export function knobLine(id: KnobId, value: number): string {
   return `${knobLabels[id]} to ${(value * 10).toFixed(1)}.`;
 }
 
-/** Feed the desk into the rig: SPIN and H-B switches gate their dials. */
-export function applyDesk(desk: DeskControls, controls: RigControls) {
+/** Feed the rack into the rig: SPIN and H-B switches gate their dials. */
+export function applyRack(desk: RackControls, controls: RigControls) {
   controls.spindle = desk.toggles.spin ? desk.knobs.spindle : 0;
   controls.field = desk.toggles.hb ? desk.knobs.field : 0;
   controls.trim = desk.knobs.trim;
