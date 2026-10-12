@@ -48,6 +48,7 @@ import {
   createScopeScreen,
 } from '../scene/screens';
 import { createWorldMapTexture } from '../scene/world-map';
+import { createCubMonitor } from '../scene/cub-monitor';
 import { createPedestalAshtray } from '../scene/pedestal-ashtray';
 import { createXenonCylinders } from '../scene/xenon-cylinders';
 import { createHotlinePhone } from '../scene/hotline-phone';
@@ -837,15 +838,22 @@ export function startScene(canvas: HTMLCanvasElement) {
     for (const z of [-0.5, 0.5])
       cube(bench, 0.13, 1.2, 0.13, '#3c453e', x, 0.61, z);
   }
-  cube(bench, 1.05, 0.65, 0.55, '#6b746b', 0.45, 1.77, -0.18);
-  cube(bench, 0.68, 0.42, 0.02, '#172e2a', 0.42, 1.78, 0.11);
-  const crtGlow = disc(bench, 0.12, '#8bc6a0', 0.42, 1.78, 0.125);
-  crtGlow.scale.set(1.7, 0.4, 1);
   cube(bench, 0.57, 0.42, 0.45, '#a49b7f', -0.55, 1.65, -0.22);
   for (const x of [-0.71, -0.5, -0.29])
     disc(bench, 0.045, '#e0ba6d', x, 1.66, 0.02);
   for (let i = 0; i < 4; i++)
     cube(bench, 0.57, 0.025, 0.38, '#e0d4af', -0.48, 1.45 + i * 0.025, 0.36);
+
+  // A Microvitec Cub on the bench, kept out of the bench's stretched
+  // scale so its proportions stay true.
+  const cub = createCubMonitor(worldUnitsPerMetre);
+  cub.group.position.set(
+    bench.position.x + 0.42 * bench.scale.x,
+    floorY + 1.3775 * bench.scale.y,
+    -1.6,
+  );
+  lab.add(cub.group);
+  dynamic.push(() => cub.update(performance.now() / 1000));
 
   // The brass stand sits left of the xenon bank, cigarette still burning.
   const ashtray = createPedestalAshtray();
@@ -2039,6 +2047,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     labRoom.dispose();
     corridor.dispose();
     toolRack.dispose();
+    cub.dispose();
     workbench.dispose();
     teleprinter.dispose();
     overlay.remove();

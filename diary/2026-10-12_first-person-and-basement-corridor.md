@@ -56,6 +56,8 @@ Each new feature lives in its own module, with small hooks in `src/rendering/sta
   - **Corridor.** The basket and the tray hang side by side under the pipes on one row of trapezes, and a ladder runs near the centre line. The smoke detectors moved between the sprinkler main and the lights. The cooling-water branches would have dropped through the tray, so they became compressed-air drops that slip down between the basket and the tray.
   - **Lab.** A ladder runs alongside the heating pipe on its own trapezes, clear of the fitting rods and the sprinkler drops.
 
+- Microvitec Cub: the placeholder CRT on the low table next to the xenon bank became a Microvitec Cub, in `src/scene/cub-monitor.ts`. It is built in true metres outside the table's stretched scale, at the Science Museum's 415 × 352 × 300 mm. After a first attempt from memory, it was rebuilt from a photo the user supplied (eBay listings refuse automated fetches with HTTP 403, so the user pasted the image). The cabinet is a plain cream box, not tapered, with louvres near the front of each side and a seam a third of the way up. The brown bezel stands slightly proud round a black surround, and the tube has rounded corners and a faint sheen. The MICROVITEC badge sits on a black tab at the bottom left and a bare red power light at the bottom right. The screen shows a BBC Micro's Mode 7 text (BBC Computer 32K, Acorn DFS, BASIC, CHAIN "VX3CAL") with a blinking cursor, and it glows with the room lights off.
+
 ## Outcomes
 
 - All 37 tests pass, and typecheck, lint, format and build are clean.
