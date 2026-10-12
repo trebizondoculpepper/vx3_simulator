@@ -9,6 +9,7 @@ import {
 } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import { createCeilingServices } from './ceiling-services';
 import { createLabelTexture } from './screens';
 
 export interface LabRoomOptions {
@@ -199,12 +200,42 @@ export function createLabRoom(options: LabRoomOptions) {
     floorY + doorHeight + 0.07,
     doorZ - 0.04,
   );
+  // Each leaf hangs on its outer jamb and swings into the room. The centre
+  // astragal rides on the right leaf so the opening is clear when both swing.
   const leafWidth = (doorWidth - 0.12) / 2;
   const glassY = floorY + doorHeight * 0.67;
   const handleY = floorY + doorHeight * 0.45;
+  const leaves: Group[] = [];
+  const doorParts: Mesh[] = [];
   for (const side of [-1, 1]) {
+    const hingeX = doorX + side * (leafWidth + 0.03);
+    const leaf = new Group();
+    leaf.position.set(hingeX, 0, doorZ);
+    leaf.userData.side = side;
+    group.add(leaf);
+    leaves.push(leaf);
+    const part = (
+      w: number,
+      h: number,
+      d: number,
+      color: string,
+      x: number,
+      y: number,
+      z: number,
+    ) => {
+      const result = mesh(
+        new BoxGeometry(w, h, d),
+        color,
+        x - hingeX,
+        y,
+        z - doorZ,
+        leaf,
+      );
+      doorParts.push(result);
+      return result;
+    };
     const leafX = doorX + side * (leafWidth / 2 + 0.03);
-    box(
+    part(
       leafWidth,
       doorHeight - 0.05,
       0.08,
@@ -213,55 +244,91 @@ export function createLabRoom(options: LabRoomOptions) {
       floorY + doorHeight / 2,
       doorZ,
     );
-    box(2.05, 4.2, 0.02, '#1c2724', leafX, glassY, doorZ - 0.05);
-    for (let i = 0; i < 5; i++) {
-      box(
-        2.05,
-        0.012,
-        0.01,
-        '#8b958e',
+    for (const face of [-1, 1]) {
+      const glassZ = doorZ + face * 0.05;
+      part(2.05, 4.2, 0.02, '#1c2724', leafX, glassY, glassZ);
+      for (let i = 0; i < 5; i++) {
+        part(
+          2.05,
+          0.012,
+          0.01,
+          '#8b958e',
+          leafX,
+          glassY - 1.68 + i * 0.84,
+          glassZ + face * 0.015,
+        );
+        part(
+          0.012,
+          4.2,
+          0.01,
+          '#8b958e',
+          leafX - 0.82 + i * 0.41,
+          glassY,
+          glassZ + face * 0.015,
+        );
+      }
+      // Push plate on the lab side, a pull handle on the corridor side.
+      if (face < 0)
+        part(
+          0.85,
+          0.22,
+          0.025,
+          '#b9b6aa',
+          doorX + side * 0.62,
+          handleY,
+          doorZ - 0.06,
+        );
+      else {
+        part(
+          0.08,
+          1.3,
+          0.08,
+          '#c9c6ba',
+          doorX + side * 0.5,
+          handleY,
+          doorZ + 0.17,
+        );
+        for (const dy of [-0.55, 0.55])
+          part(
+            0.06,
+            0.06,
+            0.14,
+            '#c9c6ba',
+            doorX + side * 0.5,
+            handleY + dy,
+            doorZ + 0.1,
+          );
+      }
+      part(
+        leafWidth - 0.18,
+        1.6,
+        0.02,
+        '#8a8a80',
         leafX,
-        glassY - 1.68 + i * 0.84,
-        doorZ - 0.065,
-      );
-      box(
-        0.012,
-        4.2,
-        0.01,
-        '#8b958e',
-        leafX - 0.82 + i * 0.41,
-        glassY,
-        doorZ - 0.065,
+        floorY + 0.85,
+        doorZ + face * 0.05,
       );
     }
-    box(
-      0.85,
-      0.22,
-      0.025,
-      '#b9b6aa',
-      doorX + side * 0.62,
-      handleY,
-      doorZ - 0.06,
-    );
-    box(
-      leafWidth - 0.18,
-      1.6,
-      0.02,
-      '#8a8a80',
-      leafX,
-      floorY + 0.85,
-      doorZ - 0.05,
-    );
+    if (side > 0)
+      part(
+        0.12,
+        doorHeight - 0.05,
+        0.1,
+        '#2c302c',
+        doorX,
+        floorY + doorHeight / 2,
+        doorZ,
+      );
   }
-  box(
-    0.12,
-    doorHeight - 0.05,
-    0.1,
-    '#2c302c',
-    doorX,
-    floorY + doorHeight / 2,
-    doorZ - 0.05,
-  );
+  // The closed door is solid; the walker's collision asks for this.
+  const doorFootprint = {
+    minX: doorX - doorWidth / 2,
+    maxX: doorX + doorWidth / 2,
+    minZ: doorZ - 0.1,
+    maxZ: doorZ + 0.1,
+  };
+  let doorOpen = false;
+  let doorAmount = 0;
   const sign = createLabelTexture('VX LAB  ·  AUTHORISED PERSONNEL ONLY', {
     ink: '#151511',
     plate: '#f2c230',
@@ -320,6 +387,52 @@ export function createLabRoom(options: LabRoomOptions) {
       midZ,
       roof,
     );
+
+  // Basement services cross the ceiling front to back. The deep runs keep to
+  // the gaps between the light fittings; the shallow ones pass above them.
+  const m = worldUnitsPerMetre;
+  const services = createCeilingServices({
+    axis: 'z',
+    from: minZ,
+    to: maxZ,
+    ceilingY,
+    worldUnitsPerMetre: m,
+    lanes: [
+      { kind: 'duct', across: minX + 0.3 * m },
+      { kind: 'round-duct', across: midX, diameter: 0.4 },
+      { kind: 'tray', across: maxX - 0.3 * m, hang: 0.15 },
+      { kind: 'pipe', across: midX - 1.0 * m, color: '#3f5f7a', diameter: 0.1 },
+      {
+        kind: 'pipe',
+        across: midX - 1.25 * m,
+        color: '#4c6b45',
+        diameter: 0.08,
+      },
+      {
+        kind: 'pipe',
+        across: midX + 0.6 * m,
+        color: '#9c2b20',
+        diameter: 0.05,
+      },
+      {
+        kind: 'pipe',
+        across: midX + 1.4 * m,
+        color: '#8a7a52',
+        diameter: 0.06,
+      },
+      { kind: 'trunking', across: midX - 0.6 * m, hang: 0.02 },
+      {
+        kind: 'trunking',
+        across: maxX - 0.75 * m,
+        hang: 0.02,
+        color: '#8e9a8a',
+      },
+      { kind: 'conduit', across: midX + 0.95 * m },
+      { kind: 'conduit', across: midX + 1.0 * m, color: '#7a6a3a' },
+      { kind: 'conduit', across: minX + 0.8 * m, hang: 0.03 },
+    ],
+  });
+  roof.add(services.group);
 
   // Four suspended twin-tube fittings: each T8 tube is 1.2 m long and
   // 26 mm across, at about 2.4 m above the floor.
@@ -409,10 +522,41 @@ export function createLabRoom(options: LabRoomOptions) {
   return {
     group,
     roof,
+    door: {
+      /** Every mesh of both leaves, for clicking. */
+      parts: doorParts as readonly Mesh[],
+      footprint: doorFootprint,
+      width: doorWidth,
+      height: doorHeight,
+      /** World position of the doorway centre at handle height. */
+      handle: { x: doorX, y: handleY, z: doorZ },
+      get open() {
+        return doorOpen;
+      },
+      /** True while the leaves still block the opening. */
+      get blocking() {
+        return doorAmount < 0.75;
+      },
+      toggle() {
+        doorOpen = !doorOpen;
+        return doorOpen;
+      },
+    },
     /** Advance the sway and the occasional flicker. */
     update(seconds: number, reducedMotion: boolean) {
       const delta = last === undefined ? 0 : Math.min(0.1, seconds - last);
       last = seconds;
+      // The leaves swing on their hinges, easing to rest against the stops.
+      const target = doorOpen ? 1 : 0;
+      doorAmount +=
+        Math.sign(target - doorAmount) *
+        Math.min(
+          Math.abs(target - doorAmount),
+          delta * (reducedMotion ? 8 : 1.4),
+        );
+      const eased = doorAmount * doorAmount * (3 - 2 * doorAmount);
+      for (const leaf of leaves)
+        leaf.rotation.y = -(leaf.userData.side as number) * eased * 1.45;
       for (const [index, strip] of telltales.entries())
         strip.rotation.z = reducedMotion
           ? -0.25
@@ -456,6 +600,7 @@ export function createLabRoom(options: LabRoomOptions) {
       }
     },
     dispose() {
+      services.dispose();
       group.traverse((object) => {
         if (object instanceof Mesh) object.geometry.dispose();
       });

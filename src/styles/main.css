@@ -20,6 +20,7 @@ body {
 }
 canvas {
   display: block;
+  touch-action: none;
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
@@ -319,5 +320,110 @@ canvas {
   }
   .rack-help {
     left: 8px;
+  }
+}
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  pointer-events: none;
+  background:
+    linear-gradient(#e8dfc2, #e8dfc2) center / 2px 100% no-repeat,
+    linear-gradient(#e8dfc2, #e8dfc2) center / 100% 2px no-repeat;
+  opacity: 0.7;
+  mix-blend-mode: difference;
+}
+.crosshair[hidden] {
+  display: none;
+}
+.crosshair[data-hot='true'] {
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  background:
+    linear-gradient(#ffab72, #ffab72) center / 2px 100% no-repeat,
+    linear-gradient(#ffab72, #ffab72) center / 100% 2px no-repeat;
+  opacity: 1;
+  mix-blend-mode: normal;
+}
+
+/* Twin thumbsticks: touch input in the first-person view only. */
+.touch-sticks {
+  display: none;
+}
+.rack-ui[data-input='touch'][data-view='perspective'] .touch-sticks {
+  display: block;
+}
+.touch-stick {
+  pointer-events: auto;
+  touch-action: none;
+  position: absolute;
+  bottom: max(28px, env(safe-area-inset-bottom));
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  border: 2px solid #bca575aa;
+  background: radial-gradient(#292d2955, #292d29cc);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.touch-stick-move {
+  left: max(24px, env(safe-area-inset-left));
+}
+.touch-stick-look {
+  right: max(24px, env(safe-area-inset-right));
+}
+.touch-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 50%;
+  border: 2px solid #bca575;
+  background: #3d433acc;
+  pointer-events: none;
+}
+.touch-stick.is-held {
+  border-color: #f6d690;
+}
+.touch-stick.is-held .touch-stick-knob {
+  background: #5a624e;
+}
+/* In touch first person the sticks replace the step buttons, and the
+   logbook and its tab keep clear of the right stick. */
+.rack-ui[data-input='touch'][data-view='perspective'] .rack-nav {
+  display: none;
+}
+.rack-ui[data-input='touch'] .notebook-tab {
+  top: 16px;
+  bottom: auto;
+}
+.rack-ui[data-input='touch'] .logbook {
+  height: min(610px, calc(100dvh - 210px));
+}
+.rack-ui[data-input='touch'] .rack-help {
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  width: max-content;
+  max-width: calc(100% - 340px);
+}
+@media (max-width: 700px) {
+  .rack-ui[data-input='touch'] .logbook {
+    top: 16px;
+    bottom: auto;
+    height: min(310px, calc(100dvh - 220px));
+  }
+  .touch-stick {
+    width: 112px;
+    height: 112px;
+  }
+  .rack-ui[data-input='touch'] .rack-help {
+    max-width: calc(100% - 290px);
   }
 }
