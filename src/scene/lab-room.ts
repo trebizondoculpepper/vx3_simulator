@@ -199,7 +199,9 @@ export function createLabRoom(options: LabRoomOptions) {
   }
   // A full-height equipment entrance: two steel leaves with wired-glass
   // vision panels, push plates and kick plates.
-  const doorZ = maxZ + wallThickness - 0.04 * worldUnitsPerMetre;
+  // Swing from the inner wall face; a hinge buried at the corridor face made
+  // the open leaves cut through the masonry around the opening.
+  const doorZ = maxZ + 0.02 * worldUnitsPerMetre;
   box(
     doorWidth,
     0.025 * worldUnitsPerMetre,

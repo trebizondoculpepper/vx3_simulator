@@ -43,8 +43,10 @@ export const XENON_FULL_SCALE_SLPM = 10;
 const ROTAMETER_LENGTH = 3.4;
 
 /**
- * Three tall xenon cylinders chained to the wall, linked by a brass manifold
- * with a two-gauge regulator on top. The regulator's front knob sets the
+ * Three tall xenon cylinders chained to the wall. Each has its own valve on
+ * the crown, piped by a copper pigtail to an isolating valve on a brass
+ * manifold mounted on the wall above, which feeds a single two-gauge
+ * regulator past the right-hand cylinder. The regulator's front knob sets the
  * delivery pressure; the gas passes through a wall-mounted glass rotameter
  * reading in standard litres per minute, then a thick black hose runs along
  * the floor to the back of the main cabinet.
@@ -98,10 +100,16 @@ export function createXenonCylinders(options: XenonBankOptions) {
   const base = options.floorY - 0.03;
   const top = base + CYLINDER_HEIGHT;
   const shoulderBase = top - CYLINDER_RADIUS * 0.9;
-  const manifoldY = top + 0.4;
-  const manifoldZ = options.z + CYLINDER_RADIUS + 0.2;
   const spacing = CYLINDER_RADIUS * 2 + 0.06;
   const xs = [-spacing, 0, spacing].map((dx) => options.x + dx);
+  // The shoulder reaches the specified cylinder top after its squash.
+  const domeTop = top;
+  const wallZ = options.z - CYLINDER_RADIUS - 0.08;
+  // The cylinders stand hard against the lab's wall, which is about this
+  // far behind their axes; the manifold hangs just in front of it.
+  const wallFace = options.z - 0.5;
+  const headerY = domeTop + 1.35;
+  const headerZ = options.z - 0.18;
 
   for (const [i, x] of xs.entries()) {
     const z = options.z + (i === 1 ? 0.05 : 0);
@@ -159,44 +167,61 @@ export function createXenonCylinders(options: XenonBankOptions) {
       top - 0.68,
       z + CYLINDER_RADIUS + 0.008,
     );
-    // Brass cylinder valve and its little handwheel.
+    // Brass cylinder valve on the crown of the dome: a collar, the valve
+    // body with its outlet facing the wall, and a black handwheel on top.
+    mesh(new CylinderGeometry(0.17, 0.2, 0.12, 8), '#6d6a5e', x, domeTop, z);
     mesh(
-      new CylinderGeometry(0.07, 0.08, 0.17, 6),
+      new CylinderGeometry(0.16, 0.18, 0.5, 6),
       '#b8913f',
       x,
-      top + 0.04,
+      domeTop + 0.3,
+      z,
+    );
+    mesh(
+      new CylinderGeometry(0.04, 0.04, 0.14, 5),
+      '#8d8a7c',
+      x,
+      domeTop + 0.6,
       z,
     );
     const wheel = mesh(
-      new TorusGeometry(0.085, 0.014, 4, 8),
+      new TorusGeometry(0.2, 0.035, 4, 8),
       '#2c2c28',
       x,
-      top + 0.16,
+      domeTop + 0.68,
       z,
     );
     wheel.rotation.x = Math.PI / 2;
-    // Copper pigtail rises above the shoulder and bends to the front manifold.
+    // Side outlet, and a copper pigtail looping up to its inlet on the
+    // manifold above.
+    const outlet = mesh(
+      new CylinderGeometry(0.055, 0.055, 0.22, 6),
+      '#b8913f',
+      x + 0.24,
+      domeTop + 0.32,
+      z,
+    );
+    outlet.rotation.z = Math.PI / 2;
+    const pigtail = new CatmullRomCurve3([
+      new Vector3(x + 0.34, domeTop + 0.32, z),
+      new Vector3(x + 0.58, domeTop + 0.45, z - 0.04),
+      new Vector3(x + 0.55, domeTop + 0.95, headerZ),
+      new Vector3(x + 0.18, headerY - 0.42, headerZ),
+      new Vector3(x, headerY - 0.2, headerZ),
+    ]);
+    mesh(new TubeGeometry(pigtail, 24, 0.045, 5, false), '#c07a45', 0, 0, 0);
+    // Isolating valve where the pigtail meets the manifold.
+    mesh(new BoxGeometry(0.2, 0.2, 0.2), '#b8913f', x, headerY - 0.12, headerZ);
     mesh(
-      new TubeGeometry(
-        new CatmullRomCurve3([
-          new Vector3(x, top + 0.12, z),
-          new Vector3(x, top + 0.3, z + 0.2),
-          new Vector3(x, manifoldY, manifoldZ),
-        ]),
-        12,
-        0.06,
-        5,
-        false,
-      ),
-      '#c07a45',
-      0,
-      0,
-      0,
+      new BoxGeometry(0.06, 0.04, 0.34),
+      '#b8241c',
+      x,
+      headerY - 0.12,
+      headerZ + 0.24,
     );
   }
 
   // Wall bracket and safety chain across the cylinders.
-  const wallZ = options.z - CYLINDER_RADIUS - 0.08;
   mesh(
     new BoxGeometry(spacing * 2 + 0.6, 0.12, 0.06),
     '#55554c',
@@ -216,19 +241,39 @@ export function createXenonCylinders(options: XenonBankOptions) {
     chain.rotation.y = link % 2 ? Math.PI / 2 : 0;
   }
 
-  // Brass manifold bar joining the three valves.
-  const manifold = mesh(
-    new CylinderGeometry(0.12, 0.12, spacing * 2 + 0.12, 8),
+  // Brass manifold on stand-off brackets against the wall, above and behind
+  // the cylinders, running to a single regulator past the right-hand one.
+  const regulatorX = options.x + spacing + CYLINDER_RADIUS + 0.35;
+  const headerFrom = xs[0] - 0.25;
+  const headerTo = regulatorX - 0.2;
+  const header = mesh(
+    new CylinderGeometry(0.08, 0.08, headerTo - headerFrom, 6),
     '#c9a24e',
-    options.x,
-    manifoldY,
-    manifoldZ,
+    (headerFrom + headerTo) / 2,
+    headerY,
+    headerZ,
   );
-  manifold.rotation.z = Math.PI / 2;
+  header.rotation.z = Math.PI / 2;
+  mesh(
+    new CylinderGeometry(0.1, 0.1, 0.06, 6),
+    '#9c7a34',
+    headerFrom,
+    headerY,
+    headerZ,
+  ).rotation.z = Math.PI / 2;
+  for (const bx of [xs[0] - 0.05, xs[2] + 0.4]) {
+    mesh(
+      new BoxGeometry(0.1, 0.3, headerZ - wallFace),
+      '#55554c',
+      bx,
+      headerY,
+      (headerZ + wallFace) / 2,
+    );
+  }
 
   // Regulator: a brass body with high- and low-pressure gauges and a T-handle.
   const regulator = new Group();
-  regulator.position.set(options.x, manifoldY + 0.13, manifoldZ);
+  regulator.position.set(regulatorX, headerY, headerZ + 0.12);
   regulator.scale.setScalar(4);
   group.add(regulator);
   mesh(new BoxGeometry(0.2, 0.2, 0.16), '#b8913f', 0, 0, 0, regulator);
@@ -262,7 +307,22 @@ export function createXenonCylinders(options: XenonBankOptions) {
   );
   pointer.geometry.translate(0, 0.03, 0);
   const regulatorPivot = mountRotaryKnob(regulatorKnob, pointer);
-  for (const part of [regulatorKnob, pointer])
+  // A generous invisible face makes the small Bakelite control usable from
+  // the aisle without making its rendered knob implausibly large.
+  const hitMaterial = createPs1Material({
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  materials.push(hitMaterial);
+  const regulatorHit = new Mesh(
+    new BoxGeometry(0.42, 0.34, 0.015),
+    hitMaterial,
+  );
+  regulatorHit.position.z = 0.18;
+  regulatorPivot.add(regulatorHit);
+  regulatorHit.userData.noCollision = true;
+  for (const part of [regulatorKnob, pointer, regulatorHit])
     designate(part, {
       machine: 'Xenon supply',
       name: 'Flow regulator',
@@ -334,7 +394,7 @@ export function createXenonCylinders(options: XenonBankOptions) {
 
   // Inline rotameter on the wall between the cylinders and the bench: a glass
   // tube over a printed SLPM scale, with a red float riding on the flow.
-  const rotX = options.x + spacing + CYLINDER_RADIUS + 0.65;
+  const rotX = options.x + spacing + CYLINDER_RADIUS + 2.0;
   const rotZ = options.z - 0.28;
   const rotBottom = base + 5.3;
   const rotTop = rotBottom + ROTAMETER_LENGTH;
@@ -396,13 +456,12 @@ export function createXenonCylinders(options: XenonBankOptions) {
   // The thick black hose, in two runs: regulator down into the meter's
   // bottom inlet, then from its top outlet down to the floor, behind the
   // bench, and up to a fitting on the back of the main cabinet.
-  const outletWorld = regulator.position
-    .clone()
-    .add(new Vector3(0, -0.15, 0.06).multiplyScalar(regulator.scale.x));
+  regulator.updateMatrix();
+  const outletWorld = new Vector3(0, -0.2, 0.09).applyMatrix4(regulator.matrix);
   const hoseFloor = options.floorY + 0.22;
   const feed = new CatmullRomCurve3([
     outletWorld,
-    new Vector3(options.x + 0.15, manifoldY - 0.35, manifoldZ + 0.25),
+    new Vector3(outletWorld.x + 0.1, outletWorld.y - 0.5, outletWorld.z + 0.3),
     new Vector3(rotX - 0.1, rotBottom - 0.45, options.z + 0.25),
     new Vector3(rotX, rotBottom - 0.22, rotZ + 0.1),
     new Vector3(rotX, rotBottom - 0.07, rotZ + 0.03),
@@ -464,7 +523,7 @@ export function createXenonCylinders(options: XenonBankOptions) {
     /** The clickable adjusting knob on the regulator. */
     regulatorKnob,
     /** Every mesh of the regulator knob, its pointer included. */
-    regulatorParts: [regulatorKnob, pointer] as readonly Mesh[],
+    regulatorParts: [regulatorKnob, pointer, regulatorHit] as readonly Mesh[],
     /** Delivery setting, 0..1. */
     get setting() {
       return setting;

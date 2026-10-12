@@ -12,6 +12,10 @@ body {
   color: #e9e1c8;
   font-family: system-ui, sans-serif;
 }
+body.mouse-look,
+body.mouse-look * {
+  cursor: none !important;
+}
 #app {
   position: relative;
   width: 100%;

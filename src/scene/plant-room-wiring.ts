@@ -259,6 +259,44 @@ export function addPlantRoomWiring(
     wrap(curve, 0.32 + i * 0.02, 0.025, BLACK);
   }
 
+  // Later cable additions weave beside the joists on both sides of the
+  // fluorescent fittings. They are fixed to wall hooks but sag below the
+  // ceiling, so the tangle remains visible when the roof is hidden.
+  const overheadRuns = [
+    { south: 0.36, colors: [BLACK, BROWN, GREY] },
+    { south: 1.08, colors: [BLUE, EARTH, BLACK] },
+    { south: 4.16, colors: [BLACK, GREY, BROWN] },
+  ];
+  for (const [runIndex, run] of overheadRuns.entries()) {
+    for (const [strand, color] of run.colors.entries()) {
+      const fromSouth = run.south + strand * 0.055;
+      const curve = cable(
+        hang(
+          at(widthM - 0.16, 2.59 - strand * 0.018, fromSouth),
+          at(0.14, 2.57 - strand * 0.018, fromSouth + 0.12),
+          0.12 + runIndex * 0.035 + strand * 0.025,
+          0.035,
+        ),
+        0.009 + strand * 0.001,
+        color,
+      );
+      if (strand === 1) wrap(curve, 0.46, 0.024, TAPE);
+    }
+  }
+  for (const fromEast of [0.24, widthM - 0.22]) {
+    for (const [strand, color] of [BLACK, GREY, BLUE].entries())
+      cable(
+        hang(
+          at(fromEast + strand * 0.045, 2.61, 0.25),
+          at(fromEast + strand * 0.045, 2.58, depthM - 0.28),
+          0.1 + strand * 0.04,
+          0.025,
+        ),
+        0.008,
+        color,
+      );
+  }
+
   // A junction box on the west wall with its lid hanging off one screw and
   // its contents spilling out.
   const box = at(widthM - 0.06, 1.9, 3.0);

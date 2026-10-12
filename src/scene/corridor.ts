@@ -11,6 +11,7 @@ import { MeshStandardMaterial } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { createCeilingServices } from './ceiling-services';
+import { createCorridorBlueprints } from './corridor-blueprints';
 import { createCanvasTexture, createLabelTexture } from './screens';
 
 export interface CorridorOptions {
@@ -306,6 +307,14 @@ export function createCorridor(options: CorridorOptions) {
   });
   group.add(services.group);
 
+  const blueprints = createCorridorBlueprints({
+    doorX,
+    southZ,
+    floorY,
+    worldUnitsPerMetre: m,
+  });
+  group.add(blueprints.group);
+
   // The lab's name over its door.
   sign(
     'UNIVERSITÄT LEIPZIG  ·  HELMHOLTZ-BAU',
@@ -521,6 +530,7 @@ export function createCorridor(options: CorridorOptions) {
     },
     dispose() {
       services.dispose();
+      blueprints.dispose();
       group.traverse((object) => {
         if (object instanceof Mesh) object.geometry.dispose();
       });

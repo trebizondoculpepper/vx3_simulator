@@ -2187,7 +2187,12 @@ export function startScene(canvas: HTMLCanvasElement) {
     const bounds = new Box3();
     const result: Footprint[] = [];
     scene.traverseVisible((object) => {
-      if (!(object instanceof Mesh) || doorParts.has(object)) return;
+      if (
+        !(object instanceof Mesh) ||
+        doorParts.has(object) ||
+        object.userData.noCollision
+      )
+        return;
       if (object.geometry instanceof TubeGeometry) return;
       bounds.setFromObject(object);
       if (bounds.isEmpty() || bounds.max.y < low || bounds.min.y > high) return;
@@ -2277,6 +2282,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   document.addEventListener('mousemove', look);
   const lockChange = () => {
     crosshair.hidden = !locked();
+    document.body.classList.toggle('mouse-look', locked());
     if (!locked()) keys.clear();
   };
   document.addEventListener('pointerlockchange', lockChange);
@@ -2650,6 +2656,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     document.removeEventListener('mousemove', look);
     document.removeEventListener('pointerlockchange', lockChange);
     document.removeEventListener('pointerlockerror', refuseLock);
+    document.body.classList.remove('mouse-look');
     if (locked()) document.exitPointerLock();
     document.removeEventListener('keydown', gesture);
     document.removeEventListener('visibilitychange', visibility);

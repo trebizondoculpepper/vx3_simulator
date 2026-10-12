@@ -101,15 +101,33 @@ export function createPlantRoom(options: {
   );
   for (const x of [minX - wallThickness / 2, maxX + wallThickness / 2])
     box(wallThickness, height, depth, '#626f68', x, floorY + height / 2, midZ);
-  const roof = box(
-    width,
-    0.15,
-    depth,
+  // Match the laboratory's high exposed ceiling: a slab, deep joists and
+  // suspended twin-tube fittings. The overhead cables below stay visible in
+  // the isometric view when only this roof group is hidden.
+  const ceilingY = floorY + height;
+  const roof = new Group();
+  group.add(roof);
+  box(
+    width + 0.4,
+    0.25,
+    depth + 0.4,
     '#3d433f',
     midX,
-    floorY + height + 0.1,
+    ceilingY + 0.12,
     midZ,
+    roof,
   );
+  for (const x of [minX + 0.75 * m, midX, maxX - 0.75 * m])
+    box(
+      0.045 * m,
+      0.09 * m,
+      depth,
+      '#4b514c',
+      x,
+      ceilingY - 0.045 * m,
+      midZ,
+      roof,
+    );
   const doorWidth = 0.95 * m;
   const doorHeight = 2.1 * m;
   const side = (width - doorWidth) / 2;
@@ -144,7 +162,8 @@ export function createPlantRoom(options: {
     );
   label('TECHNIKRAUM', 1.25 * m, midX, floorY + 2.3 * m, entryZ + 0.05);
   const door = new Group();
-  door.position.set(midX - doorWidth / 2, floorY, entryZ - 0.04 * m);
+  // Hinge at the room face of the wall so the open leaf clears the jamb.
+  door.position.set(midX - doorWidth / 2, floorY, maxZ + 0.02 * m);
   group.add(door);
   box(
     doorWidth - 0.05 * m,
@@ -237,6 +256,65 @@ export function createPlantRoom(options: {
       door,
     );
   }
+  // Paired painted hazard pictograms on both sides of the door: electric
+  // shock and compressed xenon. They sit above the wired-glass window.
+  const hazard = createCanvasTexture(384, 144);
+  textures.push(hazard.texture);
+  const hazardCtx = hazard.context;
+  hazardCtx.fillStyle = '#242820';
+  hazardCtx.fillRect(0, 0, 384, 144);
+  hazardCtx.strokeStyle = '#e4b939';
+  hazardCtx.lineWidth = 8;
+  hazardCtx.strokeRect(4, 4, 376, 136);
+  hazardCtx.fillStyle = '#e9be3d';
+  hazardCtx.beginPath();
+  hazardCtx.moveTo(82, 15);
+  hazardCtx.lineTo(147, 105);
+  hazardCtx.lineTo(17, 105);
+  hazardCtx.closePath();
+  hazardCtx.fill();
+  hazardCtx.fillStyle = '#20251e';
+  hazardCtx.beginPath();
+  hazardCtx.moveTo(91, 32);
+  hazardCtx.lineTo(63, 68);
+  hazardCtx.lineTo(81, 68);
+  hazardCtx.lineTo(69, 94);
+  hazardCtx.lineTo(109, 56);
+  hazardCtx.lineTo(90, 56);
+  hazardCtx.closePath();
+  hazardCtx.fill();
+  hazardCtx.fillStyle = '#f0eee5';
+  hazardCtx.beginPath();
+  hazardCtx.moveTo(272, 13);
+  hazardCtx.lineTo(341, 61);
+  hazardCtx.lineTo(272, 109);
+  hazardCtx.lineTo(203, 61);
+  hazardCtx.closePath();
+  hazardCtx.fill();
+  hazardCtx.strokeStyle = '#b44332';
+  hazardCtx.lineWidth = 9;
+  hazardCtx.stroke();
+  hazardCtx.fillStyle = '#252a25';
+  hazardCtx.fillRect(239, 54, 66, 20);
+  hazardCtx.fillRect(236, 57, 5, 14);
+  hazardCtx.fillRect(305, 59, 8, 10);
+  hazardCtx.fillStyle = '#e6d8a3';
+  hazardCtx.font = 'bold 17px monospace';
+  hazardCtx.textAlign = 'center';
+  hazardCtx.fillText('HOCHSPANNUNG', 85, 128);
+  hazardCtx.fillText('Xe · GAS', 272, 128);
+  hazard.texture.needsUpdate = true;
+  const hazardMaterial = createPs1Material({ map: hazard.texture }, true, true);
+  materials.push(hazardMaterial);
+  for (const face of [-1, 1]) {
+    const print = new Mesh(
+      new PlaneGeometry(0.63 * m, 0.24 * m),
+      hazardMaterial,
+    );
+    print.position.set(doorWidth / 2, 1.88 * m, face * 0.029 * m);
+    if (face < 0) print.rotation.y = Math.PI;
+    door.add(print);
+  }
   const entryParts: Mesh[] = [];
   door.traverse((o) => {
     if (o instanceof Mesh) entryParts.push(o);
@@ -287,6 +365,98 @@ export function createPlantRoom(options: {
       });
     }
   });
+  // A static consumer-unit enclosure beside the rectifier and master switch.
+  // The cover is held open for inspection; the miniature breakers deliberately
+  // have no click targets until their circuits have been modelled.
+  const breakerPanel = new Group();
+  breakerPanel.position.set(
+    maxX - 0.055 * m,
+    floorY + 1.55 * m,
+    minZ + 3.23 * m,
+  );
+  breakerPanel.rotation.y = -Math.PI / 2;
+  group.add(breakerPanel);
+  box(0.76 * m, 0.51 * m, 0.12 * m, '#b8bbb3', 0, 0, 0, breakerPanel);
+  box(
+    0.7 * m,
+    0.28 * m,
+    0.015 * m,
+    '#e4e3da',
+    0,
+    -0.025 * m,
+    0.068 * m,
+    breakerPanel,
+  );
+  box(
+    0.68 * m,
+    0.11 * m,
+    0.02 * m,
+    '#d0d3cc',
+    0,
+    0.1 * m,
+    0.078 * m,
+    breakerPanel,
+  );
+  for (let index = 0; index < 12; index++) {
+    const x = (index - 5.5) * 0.055 * m;
+    const colour = index < 2 ? '#ae3029' : index === 2 ? '#363c3a' : '#ededdf';
+    box(
+      0.048 * m,
+      0.18 * m,
+      0.022 * m,
+      colour,
+      x,
+      -0.035 * m,
+      0.085 * m,
+      breakerPanel,
+    );
+    box(
+      0.031 * m,
+      0.055 * m,
+      0.025 * m,
+      index < 2 ? '#a4302b' : '#313633',
+      x,
+      -0.067 * m,
+      0.108 * m,
+      breakerPanel,
+    );
+    box(
+      0.026 * m,
+      0.012 * m,
+      0.009 * m,
+      '#727e77',
+      x,
+      0.035 * m,
+      0.101 * m,
+      breakerPanel,
+    );
+  }
+  for (const x of [-0.34 * m, 0.34 * m])
+    for (const y of [-0.2 * m, 0.2 * m])
+      box(
+        0.018 * m,
+        0.018 * m,
+        0.012 * m,
+        '#78837f',
+        x,
+        y,
+        0.071 * m,
+        breakerPanel,
+      );
+  const cover = new Group();
+  cover.position.set(0, 0.255 * m, 0.045 * m);
+  cover.rotation.x = -0.42;
+  breakerPanel.add(cover);
+  box(0.79 * m, 0.34 * m, 0.025 * m, '#e0e1da', 0, 0.17 * m, 0.06 * m, cover);
+  box(0.75 * m, 0.31 * m, 0.008 * m, '#c7ccc5', 0, 0.17 * m, 0.078 * m, cover);
+  label(
+    'SICHERUNGSKASTEN · 240 V',
+    0.6 * m,
+    0,
+    0.18 * m,
+    0.082 * m,
+    breakerPanel,
+  );
   const warning = createCanvasTexture(384, 512);
   textures.push(warning.texture);
   const ctx = warning.context;
@@ -343,9 +513,18 @@ export function createPlantRoom(options: {
       floorY + 1.2 * m,
       minZ + 0.1 * m,
     );
-  box(1.2 * m, 0.08 * m, 0.15 * m, '#c9d0ba', midX, floorY + 2.45 * m, midZ);
+  for (const x of [minX + 1.25 * m, maxX - 1.25 * m]) {
+    const fitting = new Group();
+    fitting.position.set(x, ceilingY, minZ + 3.65 * m);
+    group.add(fitting);
+    for (const dx of [-0.48 * m, 0.48 * m])
+      box(0.016 * m, 0.24 * m, 0.016 * m, '#343833', dx, -0.12 * m, 0, fitting);
+    box(1.28 * m, 0.08 * m, 0.13 * m, '#b9bcae', 0, -0.27 * m, 0, fitting);
+    for (const dz of [-0.035 * m, 0.035 * m])
+      box(1.2 * m, 0.012 * m, 0.024 * m, '#eef2df', 0, -0.33 * m, dz, fitting);
+  }
   const light = new PointLight('#dbe5c3', 24, 6 * m, 1.3);
-  light.position.set(midX, floorY + 2.35 * m, midZ);
+  light.position.set(midX, floorY + 2.35 * m, minZ + 3.65 * m);
   group.add(light);
 
   addPlantRoomWiring(group, materials, options);
@@ -455,8 +634,8 @@ export function createPlantRoom(options: {
     entryFootprint: {
       minX: midX - doorWidth / 2,
       maxX: midX + doorWidth / 2,
-      minZ: entryZ - 0.06 * m,
-      maxZ: entryZ + 0.06 * m,
+      minZ: maxZ - 0.04 * m,
+      maxZ: maxZ + 0.08 * m,
     },
     get entryBlocking() {
       return entryAmount < 0.85;

@@ -58,6 +58,12 @@ Each new feature lives in its own module, with small hooks in `src/rendering/sta
 
 - Microvitec Cub: the placeholder CRT on the low table next to the xenon bank became a Microvitec Cub, in `src/scene/cub-monitor.ts`. It is built in true metres outside the table's stretched scale, at the Science Museum's 415 × 352 × 300 mm. After a first attempt from memory, it was rebuilt from a photo the user supplied (eBay listings refuse automated fetches with HTTP 403, so the user pasted the image). The cabinet is a plain cream box, not tapered, with louvres near the front of each side and a seam a third of the way up. The brown bezel stands slightly proud round a black surround, and the tube has rounded corners and a faint sheen. The MICROVITEC badge sits on a black tab at the bottom left and a bare red power light at the bottom right. The screen shows a BBC Micro's Mode 7 text (BBC Computer 32K, Acorn DFS, BASIC, CHAIN "VX3CAL") with a blinking cursor, and it glows with the room lights off.
 
+- Xenon bank tops: the user saw a bar that seemed to pass through the cylinder tops. The cause was that the domed shoulders rise 0.9 × radius above the body, about 6 cm higher than the code assumed, which buried each valve, handwheel and the manifold bar inside the domes. The fix in `xenon-cylinders.ts`:
+  - Each cylinder now has a collar and valve on the crown of its dome, with a black handwheel and a side outlet.
+  - A copper pigtail loops from each outlet up to an isolating valve with a red lever on a brass manifold. The manifold hangs on stand-off brackets in front of the wall, above the cylinders.
+  - The manifold runs to a single two-gauge regulator just past the right-hand cylinder, and the feed hose to the rotameter now starts at the regulator's actual outlet.
+  - The cylinders stand hard against the lab wall, so a first placement behind them put the manifold inside the wall; it now sits just in front of the wall face.
+
 ## Outcomes
 
 - All 37 tests pass, and typecheck, lint, format and build are clean.
