@@ -1178,7 +1178,7 @@ export function startScene(canvas: HTMLCanvasElement) {
           .slice(4, 10)
           .map(([text]) => text)
           .filter(Boolean)
-          .join('. ')
+          .join(' ')
       : 'Startvorgang';
     if (description !== benchDescription) {
       benchDescription = description;

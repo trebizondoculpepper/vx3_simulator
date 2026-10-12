@@ -8,7 +8,7 @@ import {
   createBenchComputer,
 } from './bench-monitor';
 import { createRackControls, applyRack } from './rack-controls';
-import { createRig } from './rig';
+import { createRig, stepRig } from './rig';
 import { XENON_SPINDLE_LIMIT } from './xenon-supply';
 
 function running(spindle: number, xenonFlowSlpm: number) {
@@ -145,5 +145,34 @@ it('all pre-rendered clue pages fit the tube and use the same fixed twelve-row l
     expect(lines).toHaveLength(12);
     for (const [text] of lines)
       expect(text.length, text).toBeLessThanOrEqual(36);
+  }
+});
+
+it('can reach the ferrocore clue milestone by warming and driving the real rig, with no field excitation', () => {
+  const rig = createRig();
+  const rack = createRackControls();
+  rack.knobs.spindle = 0.2;
+  rack.knobs.field = 0;
+  applyRack(rack, rig.controls);
+  rig.controls.mains = true;
+  const inputs = { rig, rack, xenonFlowSlpm: 3, plantPowered: true };
+  expect(benchPage(inputs)).toBe('heaters');
+  for (let frame = 0; frame < 600; frame++) stepRig(rig, 1 / 60, () => 0.5);
+  expect(rig.spindle).toBeCloseTo(0.2);
+  expect(rig.field).toBe(0);
+  expect(benchPage(inputs)).toBe('cores-turning');
+});
+
+it('ships pre-rendered assets containing every displayed clue', () => {
+  const assets = import.meta.glob<string>('../../public/screens/bbc/*.svg', {
+    eager: true,
+    query: '?raw',
+    import: 'default',
+  });
+  for (const [id, lines] of Object.entries(bbcPages)) {
+    const svg = assets[`../../public/screens/bbc/${id}.svg`];
+    expect(svg).toContain('viewBox="0 0 320 240"');
+    for (const [text] of lines.filter(([text]) => text))
+      expect(svg, id).toContain(text);
   }
 });
