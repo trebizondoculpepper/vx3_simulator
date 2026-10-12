@@ -167,4 +167,8 @@ export function applyRack(desk: RackControls, controls: RigControls) {
     ? desk.knobs.plasmaExcite
     : 0;
   controls.plasmaNull = desk.knobs.plasmaNull;
+  controls.ratio = desk.knobs.ratio;
+  controls.grounded = desk.toggles.gnd;
+  // SERVICE-B is the fitted service panel; its band sets the insulation check.
+  controls.band = desk.knobs.insulationBand;
 }

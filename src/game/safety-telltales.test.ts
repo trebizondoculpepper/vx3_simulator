@@ -67,4 +67,15 @@ describe('wall safety tell-tales', () => {
     stepSafetyTelltales(telltales, rig, controls, 0.1, 0);
     expect(telltales.crystalPulse).toBe(0);
   });
+
+  it('loads the supply more as betaform stages are switched in', () => {
+    const rig = createRig();
+    const controls = createRackControls();
+    rig.controls.mains = true;
+    rig.heater = 1;
+    controls.knobs.ampGain = 0;
+    const idle = networkOutputs(rig, controls).powerKw;
+    controls.knobs.ampGain = 1;
+    expect(networkOutputs(rig, controls).powerKw).toBeCloseTo(idle + 0.35);
+  });
 });

@@ -137,3 +137,17 @@ describe('independent switches', () => {
     expect(rig.controls.plasmaExcitation).toBe(0);
   });
 });
+
+describe('secondary controls reach the rig', () => {
+  it('passes RATIO, GND? and the insulation BAND through', () => {
+    const controls = createRackControls();
+    controls.knobs.ratio = 0.8;
+    controls.toggles.gnd = true;
+    controls.knobs.insulationBand = 0.2;
+    const rig = createRig();
+    applyRack(controls, rig.controls);
+    expect(rig.controls.ratio).toBe(0.8);
+    expect(rig.controls.grounded).toBe(true);
+    expect(rig.controls.band).toBe(0.2);
+  });
+});

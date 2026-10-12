@@ -37,7 +37,9 @@ export function networkOutputs(
     rig.field * 2.8 +
     (controls.toggles.aux1 ? 0.42 : 0) +
     (controls.toggles.chromoAux ? 0.42 : 0) +
-    (controls.toggles.aux2 ? 0.16 : 0);
+    (controls.toggles.aux2 ? 0.16 : 0) +
+    // The betaform amplifier's stages draw more as more are switched in.
+    controls.knobs.ampGain * 0.35 * rig.heater;
   const dilationActivity = ferrocoresOperational(rig, xenonFlowSlpm)
     ? Math.min(
         1,

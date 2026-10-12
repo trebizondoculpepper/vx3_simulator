@@ -21,7 +21,6 @@ MAINS --> HEAT(("Valve heaters")):::state
 HT["HT<br/>SUPPLY-B"]:::input --> VALVES["Valve glow, both banks"]:::ind
 HEAT --> VALVES
 HEAT --> HG["HEATER gauge"]:::ind
-HEAT --> STAGE["Betaform stage lamps ×7"]:::ind
 HEAT --> SWL["Rack switch lamps"]:::ind
 HEAT -- "above half" --> SPIN(("Spindle speed")):::state
 SPINSW["SPIN<br/>SPINDLE-A"]:::input --> SPIN
@@ -44,7 +43,7 @@ LOAD --> WM["Wall load meter and kWh register"]:::ind
 
 ## Field and stability
 
-The field needs a spindle above a fifth of full speed. Instability is the gap between BLATZ TRIM and where the field wants it, which moves with spindle, field and drift. Strain builds while instability is high, or while the xenon circuit is unsafe; at full strain an incident trips the mains.
+The field needs a spindle above a fifth of full speed. Instability is the gap between BLATZ TRIM and where the field wants it, which moves with spindle, field, drift and the spindle gearing (RATIO). GND? earths the plasma inducer and slows the drift. Strain builds while instability is high, or while the xenon circuit is unsafe, and bleeds away fastest when the insulation BAND matches the field; at full strain an incident trips the mains. Time only dilates while the ferrocores are fully operational.
 
 ```mermaid
 flowchart LR
@@ -62,6 +61,8 @@ NULL["NULL<br/>FIELD-B"]:::input --> INST
 SPIN -- "ideal trim" --> INST
 FIELD --> INST
 DRIFT(("Drift")):::state --> INST
+RATIO["RATIO<br/>SPINDLE-A"]:::input -- "gearing moves the ideal trim" --> INST
+GND["GND?<br/>FIELD-B"]:::input -- "earthed: drift slows" --> DRIFT
 FIELD --> FG["FIELD gauges ×2"]:::ind
 FIELD --> EMIT["Flux emitter lamp"]:::ind
 FIELD --> MAP["Flux map pin lights"]:::ind
@@ -72,11 +73,15 @@ INST --> DELTA
 DELTA --> DR["Delta readouts: status bar, bench monitor, east board"]:::ind
 INST --> STRAIN(("Strain")):::state
 PURGE["PURGE<br/>SERVICE-B"]:::input -- "relieves" --> STRAIN
+BAND["BAND<br/>SERVICE-B"]:::input -- "bleed rate, best matched to field" --> STRAIN
+FIELD -- "sets the best band" --> BAND
 DONOT["DO NOT<br/>SERVICE-B"]:::input -- "adds" --> STRAIN
 STRAIN -- "at full: incident" --> TRIP(("Mains trip")):::state
-FIELD --> DIL(("Time dilation")):::state
-INST --> DIL
-DAMP["DAMP<br/>FIELD-A"]:::input --> DIL
+OPS(("Ferrocores operational:<br/>powered, warm, xenon,<br/>spindle settled")):::state -- "gates" --> DIL(("Time dilation")):::state
+SPIN -- "settled at SPEED" --> OPS
+SPIN -- "core activity" --> DIL
+STRAIN --> DIL
+DAMP["DAMP<br/>FIELD-A"]:::input -- "damps" --> DIL
 DIL --> CRY["Time Dilation crystal and pulse lamp"]:::ind
 RESET["RESET<br/>SERVICE-B"]:::input -- "zeroes the rig" --> FIELD
   
@@ -84,7 +89,7 @@ RESET["RESET<br/>SERVICE-B"]:::input -- "zeroes the rig" --> FIELD
 
 ## Monitors and valve banks
 
-Each monitor panel has its own gain and its own BLATZ switch, which puts the field on that panel's trace. Each valve glows from its own switch, scaled by the heaters and HT.
+Each monitor panel has its own gain and its own BLATZ switch, which puts the field on that panel's trace. The side cabinet's betaform stage gain feeds both monitors, switches stages in (one lamp each, once the heaters reach it) and draws power. Each valve glows from its own switch, scaled by the heaters and HT.
 
 ```mermaid
 flowchart LR
@@ -95,6 +100,10 @@ GA["GAIN<br/>MONITOR-A"]:::input --> SA["Scope A trace"]:::ind
 BA["BLATZ<br/>MONITOR-A"]:::input -- "trace on" --> SA
 GB["GAIN<br/>MONITOR-B"]:::input --> SB["Scope B trace"]:::ind
 BB["BLATZ<br/>MONITOR-B"]:::input -- "trace on" --> SB
+AMP["Betaform stage gain<br/>side cabinet"]:::input -- "amplitude" --> SA
+AMP -- "amplitude" --> SB
+AMP -- "stages switched in" --> STAGE["Betaform stage lamps ×7"]:::ind
+HEAT(("Valve heaters")):::state --> STAGE
 RATIO["RATIO<br/>SPINDLE-A"]:::input -- "trace frequency" --> SA
 RATIO --> SB
 FIELD(("H-B field")):::state --> SA
@@ -106,6 +115,7 @@ B1["AUX 1, XTAL A, XTAL B, XTAL C<br/>VALVES-B"]:::input --> VB["VALVES-B valve 
 A1 -- "AUX 1, AUX 2" --> LOAD(("Load kW")):::state
 B1 -- "AUX 1" --> LOAD
 A1 -- "AUX 1" --> SPARK["Spark crackle"]:::ind
+AMP -- "draws power" --> LOAD
 LOAD --> WM["Wall load meter"]:::ind
   
 ```
@@ -130,6 +140,8 @@ SPIN(("Spindle speed")):::state -- "above 30%" --> HAZ
 HAZ --> WARN["Bench monitor warning"]:::ind
 HAZ --> STRAIN(("Strain")):::state
 FLOW --> FL["East board FLUSS window"]:::ind
+FLOW -- "2 SLPM or more" --> OPS(("Ferrocores operational")):::state
+OPS --> CRY["Time Dilation crystal and sparks"]:::ind
   
 ```
 
@@ -143,7 +155,7 @@ classDef input fill:#f2c26b,stroke:#1d2622,color:#1d2622
 classDef state fill:#cfe5d2,stroke:#1d2622,color:#1d2622
 classDef ind fill:#cddbe8,stroke:#1d2622,color:#1d2622
 H1["NETZ, HT, LT, SPIN, H-B, BLATZ,<br/>DÄMPF., ERDE?, AUX 1, AUX 2,<br/>XTAL A, XTAL B, XTAL C handles"]:::input -- "same as the rack switch" --> RACK(("Primary rack switches")):::state
-NA["NOT-AUS"]:::input -- "mains, SPIN, H-B off" --> RACK
+NA["NOT-AUS"]:::input -- "mains and lever off" --> RACK
 SP["SPÜLEN"]:::input -- "purge" --> STRAIN(("Strain")):::state
 RU["RÜCKS."]:::input -- "reset" --> RIG(("Rig state")):::state
 QU["QUITT"]:::input --> ALM(("Alarm sequence")):::state
@@ -157,13 +169,6 @@ RACK --> HP["Handle positions and EIN lamps"]:::ind
   
 ```
 
-## Inputs with no effect yet
+## Spare inputs
 
-These hold their own value and move their own pointer or lamp, but nothing else in the machine reads them.
-
-| Input | Panel | What it does now |
-|---|---|---|
-| GND? | FIELD-B, east board ERDE? | Lights its own lamp. |
-| BAND selector | SERVICE-B | Steps through bands A to Ω and logs the choice. |
-| Betaform stage gain | Side cabinet | Turns its knob and logs the setting. |
-| RATIO | SPINDLE-A | Changes only the scope trace frequency, not the spindle. |
+Every input fitted to this rack now changes the machine. Two alternate panels in the catalogue are not fitted: SERVICE-A's BUS BAND selector holds its own value but reaches nothing, and SUPPLY-A duplicates SUPPLY-B. The operator log is also printed, line by line, on the teleprinter's endless paper.

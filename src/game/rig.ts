@@ -10,7 +10,16 @@ export interface RigControls {
   plasmaExcitation?: number;
   plasmaNull?: number;
   trim: number;
+  /** Gearing between the Encabulator and the phase spindle (RATIO). */
+  ratio?: number;
+  /** The plasma inducer is earthed (GND?), which steadies the drift. */
+  grounded?: boolean;
+  /** Ion-insulation check band (BAND), 0 (A) to 1 (Ω). */
+  band?: number;
 }
+
+/** RATIO's factory setting, at which the trim point is where it always was. */
+export const RATIO_NEUTRAL = 0.3;
 
 /** Physical state of the rig, advanced by `stepRig`. */
 export interface RigState {
@@ -57,7 +66,12 @@ export function createRig(): RigState {
 
 /** Trim setting at which the field sits in equilibrium. */
 export function idealTrim(state: RigState): number {
-  return clamp(0.2 + state.spindle * 0.35 + state.field * 0.3 + state.drift);
+  // Changing gear moves the point at which the field balances.
+  const gearing =
+    ((state.controls.ratio ?? RATIO_NEUTRAL) - RATIO_NEUTRAL) * 0.25;
+  return clamp(
+    0.2 + state.spindle * 0.35 + state.field * 0.3 + state.drift + gearing,
+  );
 }
 
 /** Workstation estimate of Delta, bounded by Yalgeth's reported four-dimensional limit. */
@@ -111,7 +125,12 @@ export function stepRig(
   state.field = approach(state.field, fieldTarget, delta / FIELD_SECONDS);
 
   // Drift wanders faster as the field strengthens, so a hot rig needs tending.
-  const wander = (random() - 0.5) * delta * (0.04 + state.field * 0.25);
+  // An earthed plasma inducer bleeds field noise away, so drift slows.
+  const wander =
+    (random() - 0.5) *
+    delta *
+    (0.04 + state.field * 0.25) *
+    (controls.grounded ? 0.4 : 1);
   state.drift = Math.max(
     -0.25,
     Math.min(0.25, state.drift * (1 - delta * 0.05) + wander),
@@ -126,7 +145,11 @@ export function stepRig(
     state.strain +=
       delta * ((state.instability - WARNING_LEVEL) * 1.2 + hazardStrain);
   else if (hazardStrain > 0) state.strain += delta * hazardStrain;
-  else state.strain = Math.max(0, state.strain - delta * 0.15);
+  else
+    state.strain = Math.max(
+      0,
+      state.strain - delta * 0.15 * insulationBleed(state.field, controls.band),
+    );
 
   if (!wasWarm && state.heater >= 0.95) events.push({ kind: 'warmed' });
   if (!wasLocked && state.field > 0.2 && state.instability < 0.1)
@@ -156,4 +179,13 @@ function approach(value: number, target: number, step: number) {
 
 function clamp(value: number) {
   return Math.max(0, Math.min(1, value));
+}
+
+/**
+ * How fast strain bleeds away, relative to normal, for the insulation check
+ * band: one and a half times as fast when the band matches the field
+ * strength, half as fast when it is far off.
+ */
+export function insulationBleed(field: number, band = 0.4) {
+  return 0.5 + (1 - Math.min(1, Math.abs(band - field) * 2));
 }

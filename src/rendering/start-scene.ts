@@ -633,7 +633,11 @@ export function startScene(canvas: HTMLCanvasElement) {
     );
     dynamic.push(() => {
       (lamp.material as ReturnType<typeof material>).color.set(
-        rig.heater > (stage + 1) / 8 ? '#f3b157' : '#413b30',
+        // A stage lights once the heaters reach it and the gain switches it in.
+        rig.heater > (stage + 1) / 8 &&
+          Math.round(settings.knobs.ampGain * 7) > stage
+          ? '#f3b157'
+          : '#413b30',
       );
     });
   }
@@ -1702,6 +1706,8 @@ export function startScene(canvas: HTMLCanvasElement) {
                   i * (0.45 + settings.knobs.ratio) + performance.now() * 0.003,
                 ) *
                   rig.field *
+                  // The betaform amplifier feeds both monitors.
+                  (0.4 + settings.knobs.ampGain) *
                   (0.08 +
                     settings.knobs[
                       module.id === 'monitor-b' ? 'detectorGain' : 'gain'
@@ -1878,7 +1884,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     {
       title: 'OPERATING GUIDE / VX3',
       content:
-        '1  Close the varistance-isolated mains breaker.\n2  Allow the valve heaters to reach temperature.\n3  Start the Encabulator and advance drive gradually.\n4  Raise the Holtzmann coil field; trim for a steady Delta.\n5  Observe the Baltovsky chamber and ferrocore drum.\n6  Open the breaker if the retrocheck warns of strain.',
+        '1  Close the varistance-isolated mains breaker.\n2  Allow the valve heaters to reach temperature.\n3  Start the Encabulator and advance drive gradually.\n4  Raise the Holtzmann coil field; trim for a steady Delta.\n5  Observe the Baltovsky chamber and ferrocore drum.\n6  Open the breaker if the retrocheck warns of strain.\n\nSECONDARY CONTROLS\nRATIO   Spindle gearing. Moves the trim point: retrim.\nGND?    Earths the plasma inducer. Drift slows.\nBAND    Insulation check. Set to field strength to\n        clear strain fastest.\nGAIN    Betaform stages in circuit, one lamp each.\n        More stages, larger traces, heavier load.',
     },
     {
       title: 'INSTRUCTION MANUAL / CORE HANDLING',

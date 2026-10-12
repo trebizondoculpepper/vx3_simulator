@@ -3,6 +3,8 @@ import {
   createRig,
   deltaScore,
   idealTrim,
+  insulationBleed,
+  RATIO_NEUTRAL,
   stepRig,
   YALGETH_LIMIT,
 } from './rig';
@@ -88,5 +90,51 @@ describe('stepRig', () => {
     expect(incident).toBeDefined();
     expect(rig.incidents).toBeGreaterThan(0);
     expect(rig.controls.mains).toBe(false);
+  });
+});
+
+describe('secondary controls', () => {
+  it('moves the balance point when RATIO changes gear', () => {
+    const rig = createRig();
+    rig.spindle = 0.5;
+    rig.controls.ratio = RATIO_NEUTRAL;
+    const neutral = idealTrim(rig);
+    rig.controls.ratio = 0.9;
+    expect(idealTrim(rig)).toBeGreaterThan(neutral);
+    rig.controls.ratio = 0;
+    expect(idealTrim(rig)).toBeLessThan(neutral);
+  });
+
+  it('slows the drift when GND? earths the plasma inducer', () => {
+    const wandered = (grounded: boolean) => {
+      const rig = createRig();
+      rig.field = 1;
+      rig.controls.grounded = grounded;
+      let total = 0;
+      let flip = false;
+      for (let i = 0; i < 50; i++) {
+        flip = !flip;
+        const before = rig.drift;
+        stepRig(rig, 0.1, () => (flip ? 0.9 : 0.15));
+        total += Math.abs(rig.drift - before);
+      }
+      return total;
+    };
+    expect(wandered(true)).toBeLessThan(wandered(false) * 0.5);
+  });
+
+  it('bleeds strain fastest when BAND matches the field', () => {
+    expect(insulationBleed(0.6, 0.6)).toBe(1.5);
+    expect(insulationBleed(0.6, 0)).toBe(0.5);
+    const bleed = (band: number) => {
+      const rig = createRig();
+      rig.field = 0.6;
+      rig.strain = 0.5;
+      rig.controls.band = band;
+      // A short step, so the field has no time to decay away from the band.
+      stepRig(rig, 0.1, () => 0.5);
+      return 0.5 - rig.strain;
+    };
+    expect(bleed(0.6)).toBeGreaterThan(bleed(0) * 2);
   });
 });
