@@ -38,8 +38,20 @@ export type SoundSource =
   | 'service'
   | 'printer'
   | 'computer'
+  | 'cassette'
   | 'sink'
   | 'rectifier';
+
+export type CassetteButton = 'play' | 'stop' | 'fast-forward';
+
+const cassetteAssetUrls: Record<CassetteButton, URL> = {
+  play: new URL('./assets/cassette-play.mp3', import.meta.url),
+  stop: new URL('./assets/cassette-stop.mp3', import.meta.url),
+  'fast-forward': new URL(
+    './assets/cassette-fast-forward.mp3',
+    import.meta.url,
+  ),
+};
 
 type Channel = 'hum' | 'heater' | 'spindle' | 'field' | 'strain' | 'rectifier';
 
@@ -291,6 +303,10 @@ export function createSoundEngine() {
   let bootBuffer: Promise<AudioBuffer> | null = null;
   let bootSource: AudioBufferSourceNode | null = null;
   let bootRequest = 0;
+  const cassetteBuffers: Partial<Record<CassetteButton, Promise<AudioBuffer>>> =
+    {};
+  let cassetteSource: AudioBufferSourceNode | null = null;
+  let cassetteRequest = 0;
   let plantPowered = false;
   let graph: AudioGraph | null = null;
   let loading: Promise<void> | null = null;
@@ -400,6 +416,44 @@ export function createSoundEngine() {
       console.warn('BBC boot sound could not play.', error);
     }
   };
+  /** Short CC0 recordings of a real cassette transport, played at the bench. */
+  const playCassetteButton = async (button: CassetteButton) => {
+    const request = ++cassetteRequest;
+    cassetteSource?.stop();
+    cassetteSource = null;
+    if (muted || disposed || !visible) return;
+    await unlock();
+    if (!graph || graph.context.state !== 'running') return;
+    const current = graph;
+    cassetteBuffers[button] ??= fetch(cassetteAssetUrls[button])
+      .then((response) => {
+        if (!response.ok) throw new Error('Cassette sound unavailable');
+        return response.arrayBuffer();
+      })
+      .then((bytes) => current.context.decodeAudioData(bytes));
+    try {
+      const buffer = await cassetteBuffers[button];
+      if (request !== cassetteRequest || muted || disposed || !visible) return;
+      const source = current.context.createBufferSource();
+      const gain = current.context.createGain();
+      const pan = current.context.createStereoPanner();
+      source.buffer = buffer;
+      gain.gain.value = 0.6 * distanceGain('cassette');
+      pan.pan.value = spatial?.pan('cassette') ?? 0;
+      source.connect(gain).connect(pan).connect(current.master);
+      cassetteSource = source;
+      source.onended = () => {
+        source.disconnect();
+        gain.disconnect();
+        pan.disconnect();
+        if (cassetteSource === source) cassetteSource = null;
+      };
+      source.start();
+    } catch (error) {
+      delete cassetteBuffers[button];
+      console.warn('Cassette transport sound could not play.', error);
+    }
+  };
   const update = (
     state: RigState,
     controls: RackControls,
@@ -502,6 +556,8 @@ export function createSoundEngine() {
     disposed = true;
     bootRequest++;
     bootSource?.stop();
+    cassetteRequest++;
+    cassetteSource?.stop();
     pending.length = 0;
     if (!graph) return;
     graph.master.gain.value = 0;
@@ -514,6 +570,7 @@ export function createSoundEngine() {
     },
     unlock,
     playComputerBoot,
+    playCassetteButton,
     play,
     update,
     setMix,

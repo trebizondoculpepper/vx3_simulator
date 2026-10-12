@@ -488,7 +488,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     for (const part of control.parts)
       fixture(part, `Cassette player ${control.name}`, () => {
         workbench.cassette.press(control.name);
-        audio.play('button');
+        void audio.playCassetteButton(control.name);
         write(
           control.name === 'play'
             ? 'Kassettenspieler: Wiedergabe.'
@@ -1886,6 +1886,12 @@ export function startScene(canvas: HTMLCanvasElement) {
       x: bbc.group.position.x,
       y: bbc.group.position.y + 0.04 * worldUnitsPerMetre,
       z: bbc.group.position.z,
+    },
+    {
+      id: 'cassette',
+      x: workbench.cassette.group.position.x,
+      y: workbench.cassette.group.position.y + 0.16 * worldUnitsPerMetre,
+      z: workbench.cassette.group.position.z,
     },
     {
       id: 'sink',
