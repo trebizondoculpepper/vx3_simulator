@@ -1829,6 +1829,12 @@ export function startScene(canvas: HTMLCanvasElement) {
       return { id, x: centre.x, y: centre.y, z: centre.z };
     }),
     {
+      id: 'printer',
+      x: teleprinter.group.position.x,
+      y: teleprinter.group.position.y,
+      z: teleprinter.group.position.z,
+    },
+    {
       id: 'computer',
       x: bbc.group.position.x,
       y: bbc.group.position.y + 0.04 * worldUnitsPerMetre,
@@ -1972,6 +1978,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     const item = document.createElement('li');
     item.textContent = `${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}  ${line}`;
     entries.prepend(item);
+    teleprinter.record(item.textContent);
     if (interacted) audio.play('pencil');
     while (entries.children.length > 25) entries.lastElementChild?.remove();
     if (!logOpen) {
@@ -2109,6 +2116,11 @@ export function startScene(canvas: HTMLCanvasElement) {
     walker.z = room.maxZ + 1.8 * worldUnitsPerMetre;
     orbitYaw = 0;
     orbitPitch = -0.05;
+  } else if (inspectionView === 'printer') {
+    walker.x = room.maxX - 2.2 * metre;
+    walker.z = printerZ;
+    orbitYaw = Math.PI / 2;
+    orbitPitch = -0.35;
   } else if (inspectionView === 'rectifier') {
     walker.x = plantRoom.rectifierPosition.x - 1.45 * worldUnitsPerMetre;
     walker.z = plantRoom.rectifierPosition.z + 0.75 * worldUnitsPerMetre;
@@ -2472,6 +2484,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     ps1Uniforms.channels.value.set(...anomaly.channels);
     ps1Uniforms.warp.value = anomaly.warp;
     ps1Uniforms.time.value = time / 1000;
+    sparkles.group.visible = !reducedMotion.matches;
     sparkles.update(
       delta,
       reducedMotion.matches || telltales.dilationActivity === 0
@@ -2503,6 +2516,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       seconds: delta,
     });
     audio.update(rig, settings, reducedMotion.matches);
+    if (teleprinter.update(delta, reducedMotion.matches)) audio.play('printer');
     if (!reducedMotion.matches) carousel.rotation.z -= rig.spindle * delta * 4;
     for (const update of dynamic) update();
     if (view === 'perspective') {

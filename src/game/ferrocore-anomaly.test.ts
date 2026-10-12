@@ -4,6 +4,7 @@ import {
   anomalyStage,
   CHANNEL_HZ,
   ferrocoreActivity,
+  ferrocoresOperational,
 } from './ferrocore-anomaly';
 import { createRig } from './rig';
 
@@ -64,4 +65,25 @@ describe('ferrocore anomaly', () => {
   it('names stages for the log', () => {
     expect([0, 0.3, 0.8].map(anomalyStage)).toEqual([0, 1, 2]);
   });
+});
+
+it('requires safe supply, warm valves, power and settled rotation before the crystal can light', () => {
+  const rig = rigAt(0.6);
+  rig.heater = 1;
+  rig.controls.mains = true;
+  rig.controls.spindle = 0.6;
+  expect(ferrocoresOperational(rig, 3)).toBe(true);
+  expect(ferrocoresOperational(rig, 0)).toBe(false);
+  rig.heater = 0.8;
+  expect(ferrocoresOperational(rig, 3)).toBe(false);
+  rig.heater = 1;
+  rig.spindle = 0.3;
+  expect(ferrocoresOperational(rig, 3)).toBe(false);
+  rig.controls.governor = 0.3;
+  expect(ferrocoresOperational(rig, 3)).toBe(true);
+  rig.controls.mains = false;
+  expect(ferrocoresOperational(rig, 3)).toBe(false);
+  rig.controls.mains = true;
+  rig.controls.spindle = 0;
+  expect(ferrocoresOperational(rig, 3)).toBe(false);
 });

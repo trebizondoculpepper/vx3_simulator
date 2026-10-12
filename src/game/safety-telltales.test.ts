@@ -31,6 +31,7 @@ describe('wall safety tell-tales', () => {
     rig.heater = 1;
     rig.controls.spindle = 0.8;
     rig.spindle = 0.8;
+    rig.controls.spindle = 0.8;
     rig.field = 0.7;
     rig.strain = 0.4;
     const active = networkOutputs(rig, controls, 3);
@@ -54,9 +55,14 @@ describe('wall safety tell-tales', () => {
     rig.heater = 1;
     rig.controls.spindle = 0.8;
     rig.spindle = 0.8;
+    rig.controls.spindle = 0.8;
     rig.field = 0.8;
     stepSafetyTelltales(telltales, rig, controls, 1, 3);
     expect(telltales.crystalPulse).toBeGreaterThan(0);
+    expect(telltales.dilationActivity).toBeGreaterThan(0);
+    stepSafetyTelltales(telltales, rig, controls, 0.1, 0);
+    expect(telltales.crystalPulse).toBe(0);
+    expect(telltales.dilationActivity).toBe(0);
     // The xenon runs out: the cores drop out of operation and the crystal goes dark.
     stepSafetyTelltales(telltales, rig, controls, 0.1, 0);
     expect(telltales.crystalPulse).toBe(0);

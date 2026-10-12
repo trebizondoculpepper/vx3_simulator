@@ -23,7 +23,8 @@ export type SoundCue =
   | 'paper'
   | 'pencil'
   | 'purge'
-  | 'drip';
+  | 'drip'
+  | 'printer';
 
 type SoundBank = Record<SoundCue, ZZFXSound>;
 
@@ -35,6 +36,7 @@ export type SoundSource =
   | 'field'
   | 'monitor'
   | 'service'
+  | 'printer'
   | 'computer'
   | 'sink'
   | 'rectifier';
@@ -62,6 +64,7 @@ const cueSources: Partial<Record<SoundCue, SoundSource>> = {
   spark: 'service',
   purge: 'service',
   drip: 'sink',
+  printer: 'printer',
   counter: 'monitor',
 };
 
@@ -197,6 +200,9 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
 
   // ZzFX parameter order: volume, variation, Hz, attack, sustain, release, shape, curve, slide, ...
   const sounds: SoundBank = {
+    printer: new library.ZZFXSound([
+      0.1, 0.08, 180, 0, 0.025, 0.045, 4, 1.1, -80, 0, 0, 0, 0.09,
+    ]),
     drip: new library.ZZFXSound([
       0.045, 0.015, 1250, 0, 0.025, 0.11, 0, 1.5, -650, 0, 0, 0, 0, 0.15,
     ]),

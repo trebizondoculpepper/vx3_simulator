@@ -1,36 +1,49 @@
 import {
   BoxGeometry,
+  BufferGeometry,
+  DoubleSide,
+  Float32BufferAttribute,
+  RepeatWrapping,
   CylinderGeometry,
   Group,
   Mesh,
   PlaneGeometry,
 } from 'three';
-import type { BufferGeometry, Material, Texture } from 'three';
+import type { Material, Texture } from 'three';
+import { createPrinterLog } from '../game/printer-log';
+import { designate } from '../game/machine-parts';
 import { createPs1Material } from '../rendering/ps1-material';
 import { createCanvasTexture, createLabelTexture } from './screens';
 
 function paperFace() {
-  const { context, texture } = createCanvasTexture(256, 160);
-  context.fillStyle = '#ded7b6';
-  context.fillRect(0, 0, 256, 160);
-  context.fillStyle = '#bcb497';
-  for (let y = 8; y < 160; y += 20) {
-    context.fillRect(7, y, 4, 4);
-    context.fillRect(245, y, 4, 4);
-  }
-  context.fillStyle = '#3f463e';
-  context.font = 'bold 11px monospace';
-  context.fillText('VX3 / EVENT TELEMETRY', 22, 24);
-  context.font = '10px monospace';
-  context.fillText('TIME    SPINDLE   FIELD   DELTA', 22, 49);
-  context.fillText('07:42   0000      0.00    0.000', 22, 72);
-  context.fillText('07:43   0000      0.00    0.000', 22, 92);
-  context.fillText('07:44   0000      0.00    0.000', 22, 112);
-  texture.needsUpdate = true;
-  return texture;
+  const { context, texture } = createCanvasTexture(512, 1024);
+  texture.wrapT = RepeatWrapping;
+  const draw = (rows: readonly string[]) => {
+    context.fillStyle = '#ded7b6';
+    context.fillRect(0, 0, 512, 1024);
+    context.fillStyle = '#afa78d';
+    for (let y = 8; y < 1024; y += 24) {
+      context.fillRect(9, y, 5, 5);
+      context.fillRect(498, y, 5, 5);
+    }
+    for (let y = 0; y < 1024; y += 256) {
+      context.fillStyle = '#c1b99d';
+      context.fillRect(22, y, 468, 1);
+    }
+    context.fillStyle = '#3f463e';
+    context.font = 'bold 14px monospace';
+    context.fillText('VX3 / OPERATOR ACTION LOG', 30, 25);
+    context.font = '14px monospace';
+    rows
+      .slice(-58)
+      .forEach((line, i) => context.fillText(line, 30, 52 + i * 16, 452));
+    texture.needsUpdate = true;
+  };
+  draw([]);
+  return { texture, draw };
 }
 
-/** Static wall teleprinter, with fanfold stock below and output accumulating in front. */
+/** Continuous action logger with endless fanfold stock and a recycled collapsed pile. */
 export function createTeleprinter() {
   const group = new Group();
   group.name = 'WallTeleprinter';
@@ -88,6 +101,11 @@ export function createTeleprinter() {
     0.8,
   );
   roller.rotation.z = Math.PI / 2;
+  designate(roller, {
+    machine: 'Line printer',
+    name: 'Paper feed roller',
+    role: 'indicator',
+  });
   for (const x of [-1.03, 1.03])
     part(new BoxGeometry(0.08, 0.28, 0.16), '#c5b282', x, 0.2, 0.8);
   part(new BoxGeometry(1.85, 0.055, 0.2), '#b6b49b', 0, -0.2, 0.76);
@@ -136,28 +154,150 @@ export function createTeleprinter() {
     0.81,
   );
   feed.rotation.x = -0.16;
+  designate(feed, {
+    machine: 'Line printer',
+    name: 'Paper supply',
+    role: 'indicator',
+  });
 
-  // The last printed section hangs over the front lip; old output forms a
-  // slightly askew pile on the floor in front of the wall-mounted machine.
+  const log = createPrinterLog();
   const printed = paperFace();
-  face(printed, 1.72, 1.08, 0, -0.52, 0.91).rotation.x = -0.18;
+  textures.push(printed.texture);
+  const paperMaterial = createPs1Material(
+    { map: printed.texture, side: DoubleSide },
+    true,
+  );
+  materials.push(paperMaterial);
+  const segments = 32;
+  const columns = 8;
+  const positions = new Float32Array((segments + 1) * (columns + 1) * 3);
+  const uvs = new Float32Array((segments + 1) * (columns + 1) * 2);
+  const indices: number[] = [];
+  for (let row = 0; row <= segments; row++)
+    for (let col = 0; col <= columns; col++) {
+      const index = row * (columns + 1) + col;
+      uvs[index * 2] = col / columns;
+      uvs[index * 2 + 1] = 1 - row / segments;
+      if (row < segments && col < columns) {
+        const below = index + columns + 1;
+        indices.push(index, below, index + 1, index + 1, below, below + 1);
+      }
+    }
+  const ribbonGeometry = new BufferGeometry();
+  ribbonGeometry.setAttribute(
+    'position',
+    new Float32BufferAttribute(positions, 3),
+  );
+  ribbonGeometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+  ribbonGeometry.setIndex(indices);
+  const ribbon = new Mesh(ribbonGeometry, paperMaterial);
+  group.add(ribbon);
+  designate(ribbon, {
+    machine: 'Line printer',
+    name: 'Printed action log',
+    role: 'indicator',
+  });
   const outputPile = new Group();
   group.add(outputPile);
-  for (let sheet = 0; sheet < 12; sheet++) {
+  for (let sheet = 0; sheet < 18; sheet++) {
     const page = part(
       new BoxGeometry(1.68, 0.017, 0.78),
       sheet % 3 ? '#ded6b6' : '#c8c0a2',
-      (sheet % 4) * 0.025 - 0.04,
+      Math.sin(sheet * 1.7) * 0.15,
       sheet * 0.018,
-      1.17 + (sheet % 3) * 0.04,
+      1.17 + Math.cos(sheet * 1.2) * 0.12,
       outputPile,
     );
-    page.rotation.y = ((sheet % 5) - 2) * 0.018;
+    page.rotation.set(
+      Math.sin(sheet) * 0.045,
+      Math.sin(sheet * 2.7) * 0.16,
+      Math.cos(sheet) * 0.045,
+    );
   }
+  const folds: Mesh[] = [];
+  for (let i = 0; i < 5; i++) {
+    const geometry = new PlaneGeometry(1.68, 0.78, 8, 4);
+    const vertices = geometry.getAttribute('position');
+    for (let vertex = 0; vertex < vertices.count; vertex++)
+      vertices.setZ(
+        vertex,
+        0.08 *
+          Math.sin(vertices.getX(vertex) * 4 + vertices.getY(vertex) * 9 + i),
+      );
+    geometry.computeVertexNormals();
+    const fold = new Mesh(geometry, paperMaterial);
+    fold.rotation.set(
+      -Math.PI / 2 + i * 0.035,
+      (i - 2) * 0.1,
+      0.04 * Math.sin(i),
+    );
+    fold.position.set(Math.sin(i * 2) * 0.1, 0.32 + i * 0.035, 1.23 + i * 0.03);
+    designate(fold, {
+      machine: 'Line printer',
+      name: 'Settling paper',
+      role: 'indicator',
+    });
+    outputPile.add(fold);
+    folds.push(fold);
+  }
+  const shapeRibbon = (phase: number) => {
+    const lower = outputPile.position.y + 0.48;
+    const vertices = ribbonGeometry.getAttribute('position');
+    for (let row = 0; row <= segments; row++) {
+      const t = row / segments;
+      const settling = t ** 4;
+      const ripple = Math.sin(t * 14 - phase * Math.PI * 8);
+      for (let col = 0; col <= columns; col++) {
+        const x = (col / columns - 0.5) * 1.72;
+        vertices.setXYZ(
+          row * (columns + 1) + col,
+          x + settling * Math.sin(phase * Math.PI * 2) * 0.05,
+          0.28 + (lower - 0.28) * t + settling * ripple * 0.08,
+          0.88 +
+            Math.sin((t * Math.PI) / 2) * 0.46 +
+            settling * ripple * 0.18 +
+            Math.sin(x * 5 + t * 12) * 0.018 * t,
+        );
+      }
+    }
+    vertices.needsUpdate = true;
+    ribbonGeometry.computeVertexNormals();
+    ribbonGeometry.computeBoundingSphere();
+  };
+  shapeRibbon(0);
+  let clatter = 0;
 
   return {
     group,
     outputPile,
+    record(message: string) {
+      log.append(message);
+      printed.draw(log.rows);
+      ribbon.userData.lastLogEntry = message;
+    },
+    update(delta: number, reducedMotion: boolean) {
+      const printing = log.step(delta);
+      const phase = reducedMotion ? 0 : log.phase;
+      shapeRibbon(phase);
+      printed.texture.offset.y = reducedMotion ? 0 : log.phase;
+      roller.rotation.x = phase * Math.PI * 12;
+      feed.position.y =
+        -0.34 + (reducedMotion ? 0 : Math.sin(phase * Math.PI * 8) * 0.008);
+      folds.forEach((fold, i) => {
+        fold.position.y =
+          0.32 +
+          i * 0.035 +
+          (reducedMotion
+            ? 0
+            : Math.max(0, Math.sin(phase * Math.PI * 2 - i * 0.8)) * 0.075);
+      });
+      clatter = printing ? clatter + delta : 0;
+      if (clatter >= 0.18) {
+        clatter %= 0.18;
+        return true;
+      }
+      return false;
+    },
     dispose() {
       group.traverse((object) => {
         if (object instanceof Mesh) object.geometry.dispose();
