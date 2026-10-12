@@ -2,15 +2,17 @@ import {
   BoxGeometry,
   Color,
   CylinderGeometry,
+  DoubleSide,
   Group,
   Mesh,
   PlaneGeometry,
+  RepeatWrapping,
   SphereGeometry,
   TorusGeometry,
 } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
-import { createLabelTexture } from './screens';
+import { createCanvasTexture, createLabelTexture } from './screens';
 
 export type ServiceKind =
   | 'duct'
@@ -19,6 +21,8 @@ export type ServiceKind =
   | 'pipe'
   | 'sprinkler'
   | 'tray'
+  | 'ladder'
+  | 'basket'
   | 'trunking'
   | 'conduit'
   | 'detector';
@@ -63,6 +67,25 @@ export interface ServiceLane {
   drop?: number;
   /** Detectors: optical smoke or rate-of-rise heat. */
   detector?: 'smoke' | 'heat';
+  /** Trays, ladders and baskets: width in metres. */
+  width?: number;
+  /** Trays, ladders and baskets: carried by a trapeze rather than their own rods. */
+  onTrapeze?: boolean;
+}
+
+/**
+ * A row of slotted steel channel trapezes on threaded rods, carrying the
+ * cable runs and pipes between its ends together.
+ */
+export interface ServiceTrapeze {
+  /** The ends of the channel, across the run, in world units. */
+  across: [number, number];
+  /** Gap between the ceiling and the top of the channel, in metres. */
+  hang: number;
+  /** Metres between trapezes. */
+  spacing?: number;
+  /** Metres from the start of the run to the first. */
+  offset?: number;
 }
 
 export interface ServiceRun {
@@ -73,6 +96,7 @@ export interface ServiceRun {
   ceilingY: number;
   worldUnitsPerMetre: number;
   lanes: ServiceLane[];
+  trapezes?: ServiceTrapeze[];
   /**
    * Keep the pipe labels at full brightness whatever the lab's light switch
    * says, for spaces the switch does not light.
@@ -94,8 +118,9 @@ const LED_OFF = new Color('#3a0f0c');
  * Non-functional basement services under a ceiling: galvanised and
  * silver-clad ducts with grilles on spigots, painted pipes on clamps with
  * gate and ball valves, flow arrows, DIN-style medium labels and branches,
- * a wet sprinkler main with pendant heads, cable trays heaped with cable,
- * steel trunking, thin conduit, and smoke and heat detectors whose LEDs
+ * a wet sprinkler main with pendant heads, perforated cable trays, cable
+ * ladders of heavy black cable, wire baskets of bundled data cable, slotted
+ * channel trapezes carrying several runs together, steel trunking, thin conduit, and smoke and heat detectors whose LEDs
  * blink now and then. The group's meshes share materials by colour; call
  * update every frame for the LEDs and dispose to free everything.
  */
@@ -129,13 +154,14 @@ export function createCeilingServices(run: ServiceRun) {
    */
   const place = (
     geometry: BufferGeometry,
-    color: string,
+    look: string | Material,
     along: number,
     y: number,
     across: number,
     orient: 'up' | 'along' | 'across' = 'up',
   ) => {
-    const result = put(new Mesh(geometry, paint(color)), along, y, across);
+    const material = typeof look === 'string' ? paint(look) : look;
+    const result = put(new Mesh(geometry, material), along, y, across);
     if (axis === 'z') result.rotation.y = Math.PI / 2;
     const towardX = (orient === 'along') === (axis === 'x');
     if (orient !== 'up')
@@ -635,13 +661,114 @@ export function createCeilingServices(run: ServiceRun) {
     leds.push({ material, phase: (leds.length * 2.37) % 6 });
   };
   /** Positions along the run of evenly spaced heads, in world units. */
-  const spaced = (lane: ServiceLane, spacing: number) => {
-    const step = spacing * m;
+  const spaced = (spacing: number, offset = spacing / 2) => {
     const result: number[] = [];
-    for (let at = from + (lane.offset ?? spacing / 2) * m; at < to; at += step)
+    for (let at = from + offset * m; at < to; at += spacing * m)
       result.push(at);
     return result;
   };
+
+  // Sheet steel with its holes punched out: canvas patterns tiled along the
+  // run, drawn transparent where the holes are and alpha-tested.
+  const sheets = new Map<string, Material>();
+  const sheet = (
+    key: string,
+    size: [number, number],
+    /** Tile size in metres, along and across. */
+    tile: [number, number],
+    /** How far the tiled face spans across, in metres. */
+    span: number,
+    draw: (context: CanvasRenderingContext2D) => void,
+  ) => {
+    const id = `${key}:${span}`;
+    let material = sheets.get(id);
+    if (!material) {
+      const { context, texture } = createCanvasTexture(size[0], size[1]);
+      draw(context);
+      texture.wrapS = RepeatWrapping;
+      texture.wrapT = RepeatWrapping;
+      texture.repeat.set(length / (tile[0] * m), span / tile[1]);
+      texture.needsUpdate = true;
+      textures.push(texture);
+      material = createPs1Material({
+        map: texture,
+        alphaTest: 0.5,
+        side: DoubleSide,
+      });
+      extras.push(material);
+      sheets.set(id, material);
+    }
+    return material;
+  };
+  const GALV = '#c4c8c3';
+  /** Perforated tray floor: staggered oblong slots, solid at the edges. */
+  const perforated = (width: number) =>
+    sheet('perforated', [32, 64], [0.2, width], width, (c) => {
+      c.fillStyle = GALV;
+      c.fillRect(0, 0, 32, 64);
+      for (let row = 0; row < 6; row++)
+        for (const k of [0, 16])
+          c.clearRect(2 + (row % 2) * 8 + k, 4 + row * 10, 11, 5);
+    });
+  /** Side rails: a row of square holes. */
+  const railing = () =>
+    sheet('rail', [32, 16], [0.2, 0.08], 0.08, (c) => {
+      c.fillStyle = '#b4b8b2';
+      c.fillRect(0, 0, 32, 16);
+      c.clearRect(6, 6, 5, 4);
+      c.clearRect(22, 6, 5, 4);
+    });
+  /** Ladder rungs every 0.3 m, open between. */
+  const rungs = () =>
+    sheet('rungs', [32, 8], [0.3, 1], 1, (c) => {
+      c.fillStyle = GALV;
+      c.fillRect(0, 0, 5, 8);
+    });
+  /** Welded wire mesh on a 0.1 m grid. */
+  const welded = (width: number) =>
+    sheet('mesh', [16, 16], [0.1, 0.1], width, (c) => {
+      c.fillStyle = '#d4d6d1';
+      c.fillRect(0, 0, 16, 2);
+      c.fillRect(0, 0, 2, 16);
+    });
+
+  // Slotted channel trapezes: the channel, its open slot underneath, and a
+  // threaded rod with a nut at each end.
+  for (const trapeze of run.trapezes ?? []) {
+    const [a, b] = [...trapeze.across].sort((p, q) => p - q);
+    const span = b - a;
+    const mid = (a + b) / 2;
+    const h = 0.041 * m;
+    const y = ceilingY - trapeze.hang * m - h / 2;
+    for (const at of spaced(trapeze.spacing ?? 1.5, trapeze.offset)) {
+      place(new BoxGeometry(0.041 * m, h, span), GALV, at, y, mid);
+      place(
+        new BoxGeometry(0.012 * m, 0.003 * m, span - 0.01 * m),
+        '#1d1e1b',
+        at,
+        y - h / 2 - 0.001 * m,
+        mid,
+      );
+      for (const end of [a + 0.03 * m, b - 0.03 * m]) {
+        const bottom = y - h / 2 - 0.025 * m;
+        const rise = ceilingY - bottom;
+        place(
+          new CylinderGeometry(0.005 * m, 0.005 * m, rise, 4),
+          '#9a9c95',
+          at,
+          bottom + rise / 2,
+          end,
+        );
+        place(
+          new BoxGeometry(0.017 * m, 0.012 * m, 0.017 * m),
+          '#8d8f88',
+          at,
+          y - h / 2 - 0.008 * m,
+          end,
+        );
+      }
+    }
+  }
 
   for (const lane of run.lanes) {
     const hang = (lane.hang ?? 0.05) * m;
@@ -731,16 +858,17 @@ export function createCeilingServices(run: ServiceRun) {
         const color = lane.color ?? '#b3261e';
         pipe(lane, r, y, color, false);
         const headY = ceilingY - (lane.drop ?? 0.5) * m;
-        for (const at of spaced(lane, lane.spacing ?? 3))
+        for (const at of spaced(lane.spacing ?? 3, lane.offset))
           sprinklerHead(at, y, headY, lane.across, color);
         break;
       }
       case 'tray': {
-        const w = 0.4 * m;
+        const width = lane.width ?? 0.4;
+        const w = width * m;
         const y = top - 0.08 * m;
         place(
           new BoxGeometry(length, 0.02, w),
-          '#77796f',
+          perforated(width),
           middle,
           y,
           lane.across,
@@ -748,7 +876,7 @@ export function createCeilingServices(run: ServiceRun) {
         for (const side of [-1, 1])
           place(
             new BoxGeometry(length, 0.06 * m, 0.02),
-            '#77796f',
+            railing(),
             middle,
             y + 0.03 * m,
             lane.across + side * (w / 2),
@@ -766,7 +894,111 @@ export function createCeilingServices(run: ServiceRun) {
             'along',
           );
         }
-        rods(lane.across, y, 1.5 * m, w / 2);
+        if (!lane.onTrapeze) rods(lane.across, y, 1.5 * m, w / 2);
+        break;
+      }
+      case 'ladder': {
+        // Two perforated side rails with rungs between, laden with heavy
+        // black armoured cable, a few riding on top of the rest.
+        const w = (lane.width ?? 0.45) * m;
+        const railH = 0.08 * m;
+        const y = top - railH;
+        place(
+          new BoxGeometry(length, 0.012 * m, w),
+          rungs(),
+          middle,
+          y + 0.006 * m,
+          lane.across,
+        );
+        for (const side of [-1, 1])
+          place(
+            new BoxGeometry(length, railH, 0.012 * m),
+            railing(),
+            middle,
+            y + railH / 2,
+            lane.across + side * (w / 2),
+          );
+        const r = 0.018 * m;
+        const count = Math.max(3, Math.floor((w * 0.85) / (r * 2.1)));
+        for (let i = 0; i < count; i++) {
+          const across =
+            lane.across - w * 0.42 + ((i + 0.5) * w * 0.84) / count;
+          place(
+            new CylinderGeometry(r, r, length, 6),
+            i % 3 ? '#151514' : '#232220',
+            middle,
+            y + 0.012 * m + r,
+            across,
+            'along',
+          );
+          if (i % 3 === 1)
+            place(
+              new CylinderGeometry(r * 0.9, r * 0.9, length, 6),
+              '#1b1a18',
+              middle,
+              y + 0.012 * m + r * 2.9,
+              across + r,
+              'along',
+            );
+        }
+        if (!lane.onTrapeze) rods(lane.across, y, 1.5 * m, w / 2);
+        break;
+      }
+      case 'basket': {
+        // Welded wire basket with a bundle of white data cable in velcro
+        // ties, and a blue and a green-and-yellow cable beside it.
+        const width = lane.width ?? 0.3;
+        const w = width * m;
+        const sideH = 0.05 * m;
+        const y = top - sideH;
+        const wire = welded(width);
+        place(
+          new BoxGeometry(length, 0.004 * m, w),
+          wire,
+          middle,
+          y,
+          lane.across,
+        );
+        for (const side of [-1, 1])
+          place(
+            new BoxGeometry(length, sideH, 0.004 * m),
+            wire,
+            middle,
+            y + sideH / 2,
+            lane.across + side * (w / 2),
+          );
+        const r = 0.008 * m;
+        const bundle = lane.across - w * 0.12;
+        for (let i = 0; i < 6; i++)
+          place(
+            new CylinderGeometry(r, r, length, 5),
+            i % 2 ? '#e4e2da' : '#d6d4cb',
+            middle,
+            y + r + (i >= 3 ? r * 1.7 : 0),
+            bundle + ((i % 3) - 1) * r * 2,
+            'along',
+          );
+        for (const [offset, color] of [
+          [0.28, '#3f8fc4'],
+          [0.38, '#9fb032'],
+        ] as const)
+          place(
+            new CylinderGeometry(r * 0.7, r * 0.7, length, 5),
+            color,
+            middle,
+            y + r * 0.7,
+            lane.across + w * offset,
+            'along',
+          );
+        for (let at = from + 0.6 * m; at < to; at += 1.2 * m)
+          place(
+            new BoxGeometry(0.015 * m, r * 4.4, r * 7),
+            '#121211',
+            at,
+            y + r * 1.8,
+            bundle,
+          );
+        if (!lane.onTrapeze) rods(lane.across, y, 1.5 * m, w / 2);
         break;
       }
       case 'trunking': {
@@ -802,7 +1034,7 @@ export function createCeilingServices(run: ServiceRun) {
         break;
       }
       case 'detector': {
-        for (const at of spaced(lane, lane.spacing ?? 5))
+        for (const at of spaced(lane.spacing ?? 5, lane.offset))
           detector(at, lane.across, lane.detector ?? 'smoke');
         break;
       }

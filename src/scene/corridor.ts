@@ -180,6 +180,14 @@ export function createCorridor(options: CorridorOptions) {
     ceilingY,
     worldUnitsPerMetre: m,
     glowingSigns: true,
+    trapezes: [
+      { across: [northZ + 0.05 * m, northZ + 0.86 * m], hang: 0.362 },
+      {
+        across: [northZ + 1.24 * m, northZ + 1.56 * m],
+        hang: 0.2,
+        spacing: 2,
+      },
+    ],
     lanes: [
       {
         kind: 'duct',
@@ -202,8 +210,13 @@ export function createCorridor(options: CorridorOptions) {
         hang: 0.08,
         medium: 'DRUCKLUFT · 6 BAR',
         flow: -1,
-        // The lab's air feed, through the wall just west of its door.
-        branches: [{ at: 38, side: -1, reach: 0.4, drop: 0.45, end: 'wall' }],
+        // The lab's air feed, through the wall just west of its door, and two
+        // drops that slip down between the basket and the tray.
+        branches: [
+          { at: 38, side: -1, reach: 0.4, drop: 0.45, end: 'wall' },
+          { at: 15, side: 1, reach: 0.9, drop: 0.5 },
+          { at: 70, side: 1, reach: 0.9, drop: 0.5 },
+        ],
       },
       {
         kind: 'pipe',
@@ -212,12 +225,30 @@ export function createCorridor(options: CorridorOptions) {
         diameter: 0.08,
         medium: 'KÜHLWASSER · RÜCKLAUF',
         flow: -1,
-        branches: [
-          { at: 70, side: 1, reach: 0.9, drop: 0.5 },
-          { at: 15, side: 1, reach: 0.9, drop: 0.5 },
-        ],
       },
-      { kind: 'tray', across: northZ + 0.62 * m, hang: 0.28 },
+      // Cable runs alongside the pipes, sharing their trapezes: a basket of
+      // data cable under the heating and air mains, a perforated tray of
+      // mixed cable beside it, and a ladder of black power cable further out.
+      {
+        kind: 'basket',
+        across: northZ + 0.22 * m,
+        width: 0.28,
+        hang: 0.31,
+        onTrapeze: true,
+      },
+      {
+        kind: 'tray',
+        across: northZ + 0.62 * m,
+        hang: 0.28,
+        onTrapeze: true,
+      },
+      {
+        kind: 'ladder',
+        across: northZ + 1.4 * m,
+        width: 0.28,
+        hang: 0.12,
+        onTrapeze: true,
+      },
       { kind: 'trunking', across: northZ + 1.62 * m, hang: 0.02 },
       { kind: 'conduit', across: northZ + 0.9 * m },
       { kind: 'conduit', across: northZ + 0.95 * m, color: '#7a6a3a' },
@@ -234,7 +265,7 @@ export function createCorridor(options: CorridorOptions) {
       },
       {
         kind: 'detector',
-        across: northZ + 1.42 * m,
+        across: northZ + 1.115 * m,
         detector: 'smoke',
         spacing: 7.5,
         offset: 3.75,

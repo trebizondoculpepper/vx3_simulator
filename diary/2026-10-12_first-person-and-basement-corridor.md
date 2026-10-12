@@ -49,6 +49,13 @@ Each new feature lives in its own module, with small hooks in `src/rendering/sta
 
 - Door plate (from the user's "Door sign" email): the small placeholder plaque east of the lab door became the room's original plate. It is drawn on one canvas in `corridor.ts` as cream enamel in a brass frame at eye level, reading KARL-MARX-UNIVERSITÄT LEIPZIG / Sektion Physik / VERSUCHSLABOR -02 17 / Experimentelle Vektor- und Feldtechnik / Zutritt nur für befugtes Personal, with the warning in red. Thin strokes vanish in the PS1 dither, so every line is bold and the rules are 3 px.
 
+- Pinch to zoom: two fingers on the canvas scale the same zoom as the wheel and the − / + buttons, in both views. The zoom follows the ratio of the finger spread, between 0.65× and 1.8×. A pinch cancels any drag, and no tap fires until every finger has lifted, so pinching over the door never opens it. The sticks capture their own fingers, so walking with one thumb while pinching elsewhere is unaffected. A headless phone run with CDP touch events confirmed zooming in and out, and that the door stayed shut.
+
+- Cable runs (from the user's photos of an exposed services ceiling):
+  - **New fittings.** `ceiling-services.ts` gained slotted channel trapezes on threaded rods (a run-level `trapezes` option), which carry several runs together. Cable trays now have real punched slots: canvas patterns tiled along the run and alpha-tested, so the cable shows through. There are two new lane kinds: `ladder`, with perforated side rails and rungs laden with black armoured cable, and `basket`, a welded wire basket with a velcro-tied white data bundle plus blue and green-and-yellow cables. Lanes marked `onTrapeze` skip their own rods.
+  - **Corridor.** The basket and the tray hang side by side under the pipes on one row of trapezes, and a ladder runs near the centre line. The smoke detectors moved between the sprinkler main and the lights. The cooling-water branches would have dropped through the tray, so they became compressed-air drops that slip down between the basket and the tray.
+  - **Lab.** A ladder runs alongside the heating pipe on its own trapezes, clear of the fitting rods and the sprinkler drops.
+
 ## Outcomes
 
 - All 37 tests pass, and typecheck, lint, format and build are clean.

@@ -1671,10 +1671,10 @@ export function startScene(canvas: HTMLCanvasElement) {
     help.textContent =
       view === 'isometric'
         ? touch
-          ? 'DRAG: ORBIT · TAP: USE · − / +: ZOOM'
+          ? 'DRAG: ORBIT · TAP: USE · PINCH: ZOOM'
           : 'WHEEL: ZOOM · ALT+WHEEL: HEIGHT · DRAG: ORBIT · CLICK: USE'
         : touch
-          ? 'LEFT STICK: WALK (PUSH FULLY TO RUN) · RIGHT STICK: LOOK · TAP: USE'
+          ? 'LEFT STICK: WALK (PUSH FULLY TO RUN) · RIGHT STICK: LOOK · TAP: USE · PINCH: ZOOM'
           : 'CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · CLICK / E: USE · WHEEL: ZOOM · ESC: CURSOR';
   };
   const crosshair = overlay.querySelector<HTMLElement>('.crosshair')!;
@@ -1773,7 +1773,28 @@ export function startScene(canvas: HTMLCanvasElement) {
     /** False for a touch in first person, which only ever taps. */
     look: boolean;
   } | null = null;
+  // Two fingers on the canvas pinch to zoom, in either view. A pinch never
+  // ends in a tap: taps wait until every finger has lifted.
+  const touches = new Map<number, { x: number; y: number }>();
+  let pinch: { distance: number; zoom: number } | null = null;
+  let pinched = false;
+  const spread = () => {
+    const [a, b] = [...touches.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y) || 1;
+  };
   const down = (event: PointerEvent) => {
+    if (event.pointerType === 'touch') {
+      touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (touches.size === 2) {
+        pinch = { distance: spread(), zoom: cameraZoom };
+        pinched = true;
+        drag = null;
+      }
+      if (touches.size > 1) {
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
+    }
     if (
       view === 'perspective' &&
       event.pointerType === 'mouse' &&
@@ -1795,6 +1816,15 @@ export function startScene(canvas: HTMLCanvasElement) {
     };
   };
   const move = (event: PointerEvent) => {
+    const touch = touches.get(event.pointerId);
+    if (touch) {
+      touch.x = event.clientX;
+      touch.y = event.clientY;
+      if (pinch && touches.size >= 2) {
+        zoomTo(pinch.zoom * (spread() / pinch.distance));
+        return;
+      }
+    }
     if (!drag) return;
     const dx = event.clientX - drag.x;
     const dy = event.clientY - drag.y;
@@ -1807,7 +1837,18 @@ export function startScene(canvas: HTMLCanvasElement) {
       orbitPitch = Math.max(-1.2, Math.min(1.2, drag.pitch + dy * 0.003));
     }
   };
+  const lift = (event: PointerEvent) => {
+    if (!touches.delete(event.pointerId)) return;
+    if (touches.size < 2) pinch = null;
+    if (touches.size === 0) pinched = false;
+  };
   const up = (event: PointerEvent) => {
+    const wasPinched = pinched;
+    lift(event);
+    if (wasPinched) {
+      drag = null;
+      return;
+    }
     if (!drag) return;
     const moved = drag.moved;
     drag = null;
@@ -1821,6 +1862,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   canvas.addEventListener('pointerdown', down);
   canvas.addEventListener('pointermove', move);
   canvas.addEventListener('pointerup', up);
+  canvas.addEventListener('pointercancel', lift);
 
   const resize = () => {
     const { width, height } = canvas.getBoundingClientRect();
@@ -1978,6 +2020,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     canvas.removeEventListener('pointerdown', gesture);
     canvas.removeEventListener('pointermove', move);
     canvas.removeEventListener('pointerup', up);
+    canvas.removeEventListener('pointercancel', lift);
     document.removeEventListener('keydown', keydown);
     document.removeEventListener('keyup', keyup);
     window.removeEventListener('blur', forget);

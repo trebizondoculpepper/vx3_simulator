@@ -442,6 +442,13 @@ export function createLabRoom(options: LabRoomOptions) {
     to: maxZ,
     ceilingY,
     worldUnitsPerMetre: m,
+    trapezes: [
+      {
+        across: [midX + 0.7 * m, midX + 1.13 * m],
+        hang: 0.18,
+        spacing: 1.2,
+      },
+    ],
     lanes: [
       {
         kind: 'duct',
@@ -458,6 +465,15 @@ export function createLabRoom(options: LabRoomOptions) {
         ],
       },
       { kind: 'tray', across: maxX - 0.3 * m, hang: 0.15 },
+      // A ladder of black power cable alongside the heating pipe, on its
+      // own trapezes, clear of the light fittings' rods.
+      {
+        kind: 'ladder',
+        across: midX + 0.92 * m,
+        width: 0.33,
+        hang: 0.1,
+        onTrapeze: true,
+      },
       {
         kind: 'pipe',
         across: midX - 1.0 * m,
