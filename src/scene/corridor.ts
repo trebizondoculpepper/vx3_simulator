@@ -7,10 +7,11 @@ import {
   PlaneGeometry,
   PointLight,
 } from 'three';
+import { MeshStandardMaterial } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { createCeilingServices } from './ceiling-services';
-import { createLabelTexture } from './screens';
+import { createCanvasTexture, createLabelTexture } from './screens';
 
 export interface CorridorOptions {
   floorY: number;
@@ -90,7 +91,8 @@ export function createCorridor(options: CorridorOptions) {
   ) => {
     const image = createLabelTexture(text, style);
     textures.push(image.texture);
-    const material = createPs1Material({ map: image.texture }, true);
+    // Corridor signs are lit by the corridor, not by the lab's switch.
+    const material = createPs1Material({ map: image.texture }, true, true);
     materials.push(material);
     const result = new Mesh(
       new PlaneGeometry(image.width / scale, image.height / scale),
@@ -177,13 +179,20 @@ export function createCorridor(options: CorridorOptions) {
     to: halfLength,
     ceilingY,
     worldUnitsPerMetre: m,
+    glowingSigns: true,
     lanes: [
-      { kind: 'duct', across: southZ - 0.45 * m },
+      {
+        kind: 'duct',
+        across: southZ - 0.45 * m,
+        clad: true,
+        branches: [12, 22, 33, 47, 58, 68].map((at) => ({ at, drop: 0.1 })),
+      },
       {
         kind: 'pipe',
         across: northZ + 0.2 * m,
         color: '#9c2b20',
         diameter: 0.05,
+        medium: 'HEIZUNG · VORLAUF',
       },
       {
         kind: 'pipe',
@@ -191,23 +200,50 @@ export function createCorridor(options: CorridorOptions) {
         color: '#3f5f7a',
         diameter: 0.1,
         hang: 0.08,
+        medium: 'DRUCKLUFT · 6 BAR',
+        flow: -1,
+        // The lab's air feed, through the wall just west of its door.
+        branches: [{ at: 38, side: -1, reach: 0.4, drop: 0.45, end: 'wall' }],
       },
       {
         kind: 'pipe',
         across: northZ + 0.6 * m,
         color: '#4c6b45',
         diameter: 0.08,
+        medium: 'KÜHLWASSER · RÜCKLAUF',
+        flow: -1,
+        branches: [
+          { at: 70, side: 1, reach: 0.9, drop: 0.5 },
+          { at: 15, side: 1, reach: 0.9, drop: 0.5 },
+        ],
       },
       { kind: 'tray', across: northZ + 0.62 * m, hang: 0.28 },
       { kind: 'trunking', across: northZ + 1.62 * m, hang: 0.02 },
       { kind: 'conduit', across: northZ + 0.9 * m },
       { kind: 'conduit', across: northZ + 0.95 * m, color: '#7a6a3a' },
       { kind: 'conduit', across: southZ - 0.1 * m, hang: 0.4 },
+      // Heads sit halfway between the light fittings.
+      {
+        kind: 'sprinkler',
+        across: northZ + 1.03 * m,
+        hang: 0.02,
+        medium: 'SPRINKLER · NASSANLAGE',
+        spacing: 2.5,
+        offset: 1.25,
+        drop: 0.6,
+      },
+      {
+        kind: 'detector',
+        across: northZ + 1.42 * m,
+        detector: 'smoke',
+        spacing: 7.5,
+        offset: 3.75,
+      },
     ],
   });
   group.add(services.group);
 
-  // The lab's name over its door, and the institute's plaque beside it.
+  // The lab's name over its door.
   sign(
     'UNIVERSITÄT LEIPZIG  ·  HELMHOLTZ-BAU',
     doorX,
@@ -224,31 +260,33 @@ export function createCorridor(options: CorridorOptions) {
     { ink: '#151511', plate: '#f2c230', size: 11 },
     42,
   );
-  box(
-    1.9,
-    1.05,
-    0.04,
-    '#6b5a2e',
-    doorX + doorWidth / 2 + 2,
-    floorY + 1.6 * m,
-    northZ + 0.03,
-  );
-  sign(
-    'INSTITUT FÜR ANGEWANDTE VX-PHYSIK',
-    doorX + doorWidth / 2 + 2,
-    floorY + 1.6 * m + 0.22,
-    northZ + 0.06,
-    { ink: '#2a2110', plate: '#b39550', size: 9 },
-    150,
-  );
-  sign(
-    'UNTERGESCHOSS −2  ·  RAUM −2.17',
-    doorX + doorWidth / 2 + 2,
-    floorY + 1.6 * m - 0.2,
-    northZ + 0.06,
-    { ink: '#2a2110', plate: '#b39550', size: 9 },
-    150,
-  );
+  // The room's door plate beside the door, as the original read: an
+  // enamelled plate on a brass-framed backing at eye level.
+  {
+    const plate = createDoorPlateTexture();
+    textures.push(plate.texture);
+    const width = 0.42 * m;
+    const height = width * (plate.height / plate.width);
+    const x = doorX + doorWidth / 2 + 0.45 * m;
+    const y = floorY + 1.55 * m;
+    box(width + 0.25, height + 0.25, 0.04, '#7a6432', x, y, northZ + 0.02);
+    const material = createPs1Material({ map: plate.texture }, true, true);
+    materials.push(material);
+    const face = new Mesh(new PlaneGeometry(width, height), material);
+    face.position.set(x, y, northZ + 0.045);
+    group.add(face);
+    for (const dx of [-1, 1])
+      for (const dy of [-1, 1])
+        box(
+          0.05,
+          0.05,
+          0.03,
+          '#c9b77a',
+          x + dx * (width / 2 + 0.05),
+          y + dy * (height / 2 + 0.05),
+          northZ + 0.05,
+        );
+  }
 
   // Level markers stencilled on the far wall, facing the lab door and
   // repeated down the corridor.
@@ -347,6 +385,7 @@ export function createCorridor(options: CorridorOptions) {
     const tube = createPs1Material(
       { color: (dead ? TUBE_OFF : near ? TUBE_ON : TUBE_DIM).clone() },
       true,
+      true,
     ) as Material & { color: Color };
     materials.push(tube);
     const tubeMesh = new Mesh(
@@ -365,11 +404,30 @@ export function createCorridor(options: CorridorOptions) {
     fittings.push({ pivot, tube, light, phase: index * 1.37, failing });
   }
 
+  // The scene's fill light belongs to the lab's switch. As the lab goes
+  // dark, the corridor's surfaces make up the difference themselves so the
+  // corridor keeps its own dim lighting either way.
+  const surfaces = new Set<MeshStandardMaterial>();
+  group.traverse((object) => {
+    if (
+      object instanceof Mesh &&
+      object.material instanceof MeshStandardMaterial
+    )
+      surfaces.add(object.material);
+  });
+  let lastDark = -1;
+
   return {
     group,
     /** Where a visitor stands to face the lab door: on the corridor's centre line. */
     spawn: { x: doorX, z: southZ - 0.45 * m },
-    update(seconds: number, reducedMotion: boolean) {
+    update(seconds: number, reducedMotion: boolean, labDark = 0) {
+      if (Math.abs(labDark - lastDark) > 0.01) {
+        lastDark = labDark;
+        for (const surface of surfaces)
+          surface.emissive.copy(surface.color).multiplyScalar(0.55 * labDark);
+      }
+      services.update(seconds);
       for (const fitting of fittings) {
         const t = seconds * 0.3 + fitting.phase;
         fitting.pivot.rotation.z = reducedMotion ? 0 : Math.sin(t) * 0.02;
@@ -400,4 +458,44 @@ export function createCorridor(options: CorridorOptions) {
       for (const item of textures) item.dispose();
     },
   };
+}
+
+/**
+ * The door plate of room −02 17 as it read under the GDR: cream enamel,
+ * black lettering, the room number large, and the access warning in red.
+ */
+function createDoorPlateTexture() {
+  const width = 384;
+  const height = 240;
+  const { context, texture } = createCanvasTexture(width, height);
+  context.fillStyle = '#ece6d2';
+  context.fillRect(0, 0, width, height);
+  context.strokeStyle = '#1b1a16';
+  context.lineWidth = 4;
+  context.strokeRect(10, 10, width - 20, height - 20);
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  const line = (text: string, y: number, font: string, ink = '#1b1a16') => {
+    context.fillStyle = ink;
+    context.font = font;
+    context.fillText(text, width / 2, y, width - 44);
+  };
+  const rule = (y: number) => {
+    context.fillStyle = '#1b1a16';
+    context.fillRect(40, y, width - 80, 3);
+  };
+  line('KARL-MARX-UNIVERSITÄT LEIPZIG', 38, 'bold 19px sans-serif');
+  line('Sektion Physik', 66, 'bold 18px sans-serif');
+  rule(84);
+  line('VERSUCHSLABOR -02 17', 118, 'bold 32px sans-serif');
+  line('Experimentelle Vektor- und Feldtechnik', 156, 'bold 18px sans-serif');
+  rule(176);
+  line(
+    'Zutritt nur für befugtes Personal',
+    204,
+    'bold 17px sans-serif',
+    '#a3221a',
+  );
+  texture.needsUpdate = true;
+  return { texture, width, height };
 }

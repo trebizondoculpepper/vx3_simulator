@@ -360,12 +360,57 @@ export function createLabRoom(options: LabRoomOptions) {
     size: 12,
   });
   textures.push(exitSign.texture);
-  const exitMaterial = createPs1Material({ map: exitSign.texture }, true);
+  // The EXIT box is on the emergency supply, so it stays lit in the dark.
+  const exitMaterial = createPs1Material({ map: exitSign.texture }, true, true);
   materials.push(exitMaterial);
   const exitMesh = new Mesh(new PlaneGeometry(1.6, 0.43), exitMaterial);
   exitMesh.position.set(doorX, floorY + doorHeight + 1.6, maxZ - 0.125);
   exitMesh.rotation.y = Math.PI;
   group.add(exitMesh);
+
+  // The light switch, a chunky rocker on a Bakelite plate, sits on the lab
+  // side of the wall just west of the door frame.
+  const switchX = doorX - doorWidth / 2 - 0.35 * worldUnitsPerMetre;
+  const switchY = floorY + 1.25 * worldUnitsPerMetre;
+  const switchParts: Mesh[] = [];
+  const plateSize = 0.14 * worldUnitsPerMetre;
+  switchParts.push(
+    box(
+      plateSize,
+      plateSize * 1.3,
+      0.05,
+      '#2b2723',
+      switchX,
+      switchY,
+      maxZ - 0.025,
+    ),
+  );
+  const rocker = new Group();
+  rocker.position.set(switchX, switchY, maxZ - 0.06);
+  group.add(rocker);
+  const rockerBody = mesh(
+    new BoxGeometry(plateSize * 0.4, plateSize * 0.6, 0.08),
+    '#d8cfb8',
+    0,
+    0,
+    -0.04,
+    rocker,
+  );
+  switchParts.push(rockerBody);
+  // A small amber neon in the plate, lit while the lights are off so the
+  // switch can be found in the dark.
+  const finder = createPs1Material(
+    { color: '#ffb347' },
+    true,
+    true,
+  ) as Material & {
+    color: Color;
+  };
+  materials.push(finder);
+  const finderMesh = new Mesh(new BoxGeometry(0.12, 0.08, 0.02), finder);
+  finderMesh.position.set(switchX, switchY - plateSize * 0.48, maxZ - 0.055);
+  group.add(finderMesh);
+  switchParts.push(finderMesh);
 
   // Tall ceiling, with exposed beams running front to back.
   const roof = new Group();
@@ -398,27 +443,54 @@ export function createLabRoom(options: LabRoomOptions) {
     ceilingY,
     worldUnitsPerMetre: m,
     lanes: [
-      { kind: 'duct', across: minX + 0.3 * m },
-      { kind: 'round-duct', across: midX, diameter: 0.4 },
+      {
+        kind: 'duct',
+        across: minX + 0.3 * m,
+        branches: [{ at: 2.3, drop: 0.08 }],
+      },
+      {
+        kind: 'clad-duct',
+        across: midX,
+        diameter: 0.45,
+        branches: [
+          { at: 2.8, drop: 0.08 },
+          { at: 4.5, drop: 0.08 },
+        ],
+      },
       { kind: 'tray', across: maxX - 0.3 * m, hang: 0.15 },
-      { kind: 'pipe', across: midX - 1.0 * m, color: '#3f5f7a', diameter: 0.1 },
+      {
+        kind: 'pipe',
+        across: midX - 1.0 * m,
+        color: '#3f5f7a',
+        diameter: 0.1,
+        medium: 'DRUCKLUFT · 6 BAR',
+        // A compressed-air drop over the workbench.
+        branches: [{ at: 2.6, side: -1, reach: 0.75, drop: 0.42 }],
+      },
       {
         kind: 'pipe',
         across: midX - 1.25 * m,
         color: '#4c6b45',
         diameter: 0.08,
+        medium: 'KÜHLWASSER · VORLAUF',
+        branches: [{ at: 4.0, side: -1, reach: 0.5, drop: 0.55 }],
       },
       {
         kind: 'pipe',
         across: midX + 0.6 * m,
         color: '#9c2b20',
         diameter: 0.05,
+        medium: 'HEIZUNG · RÜCKLAUF',
+        flow: -1,
       },
       {
         kind: 'pipe',
         across: midX + 1.4 * m,
         color: '#8a7a52',
         diameter: 0.06,
+        medium: 'XENON · 4 BAR',
+        // Toward the rack.
+        flow: -1,
       },
       { kind: 'trunking', across: midX - 0.6 * m, hang: 0.02 },
       {
@@ -430,6 +502,30 @@ export function createLabRoom(options: LabRoomOptions) {
       { kind: 'conduit', across: midX + 0.95 * m },
       { kind: 'conduit', across: midX + 1.0 * m, color: '#7a6a3a' },
       { kind: 'conduit', across: minX + 0.8 * m, hang: 0.03 },
+      // Two wet sprinkler ranges, their heads clear of the light fittings.
+      ...[midX - 0.38 * m, midX + 1.2 * m].map((across) => ({
+        kind: 'sprinkler' as const,
+        across,
+        hang: 0.02,
+        medium: 'SPRINKLER · NASS',
+        spacing: 2,
+        offset: 0.8,
+        drop: 0.48,
+      })),
+      {
+        kind: 'detector',
+        across: midX - 1.6 * m,
+        detector: 'heat',
+        spacing: 2,
+        offset: 1,
+      },
+      {
+        kind: 'detector',
+        across: midX + 0.4 * m,
+        detector: 'smoke',
+        spacing: 2,
+        offset: 1,
+      },
     ],
   });
   roof.add(services.group);
@@ -482,6 +578,7 @@ export function createLabRoom(options: LabRoomOptions) {
       const tubes = createPs1Material(
         { color: TUBE_ON.clone() },
         true,
+        true,
       ) as Material & {
         color: Color;
       };
@@ -518,6 +615,21 @@ export function createLabRoom(options: LabRoomOptions) {
       });
     }
 
+  // The tubes are switched together. Switching on, each one strikes on its
+  // own: a few starter blinks, none faster than two a second, then steady.
+  // Each fitting's lamp and the room's fill ease between states, so the
+  // tubes blink crisply but the room as a whole brightens in stutters
+  // rather than flashing.
+  let lightsOn = true;
+  let level = 1;
+  const strike = () => {
+    const pattern = [0.1 + random() * 0.7];
+    const blinks = 2 + Math.floor(random() * 3);
+    for (let i = 0; i < blinks; i++)
+      pattern.push(0.22 + random() * 0.18, 0.3 + random() * 0.35);
+    return pattern;
+  };
+
   let last: number | undefined;
   return {
     group,
@@ -542,10 +654,31 @@ export function createLabRoom(options: LabRoomOptions) {
         return doorOpen;
       },
     },
+    lights: {
+      /** Every mesh of the switch, for clicking. */
+      switchParts: switchParts as readonly Mesh[],
+      get on() {
+        return lightsOn;
+      },
+      /** The share of the lab's lighting currently lit, smoothed: 0 to 1. */
+      get level() {
+        return level;
+      },
+      toggle() {
+        lightsOn = !lightsOn;
+        for (const fixture of fixtures) {
+          fixture.flickerAt = lightsOn ? 0 : -1;
+          fixture.pattern = lightsOn ? strike() : patterns[0];
+          fixture.nextFlicker = 40 + random() * 110;
+        }
+        return lightsOn;
+      },
+    },
     /** Advance the sway and the occasional flicker. */
     update(seconds: number, reducedMotion: boolean) {
       const delta = last === undefined ? 0 : Math.min(0.1, seconds - last);
       last = seconds;
+      services.update(seconds);
       // The leaves swing on their hinges, easing to rest against the stops.
       const target = doorOpen ? 1 : 0;
       doorAmount +=
@@ -561,6 +694,7 @@ export function createLabRoom(options: LabRoomOptions) {
         strip.rotation.z = reducedMotion
           ? -0.25
           : -0.33 - Math.sin(seconds * 5.5 + index * 1.7) * 0.12;
+      let lit = 0;
       for (const fixture of fixtures) {
         const t = seconds * 0.35 + fixture.phase;
         fixture.pivot.rotation.z = reducedMotion ? 0 : Math.sin(t) * 0.025;
@@ -568,8 +702,8 @@ export function createLabRoom(options: LabRoomOptions) {
           ? 0
           : Math.sin(t * 0.7 + 1.3) * 0.015;
 
-        let on = true;
-        if (!reducedMotion) {
+        let on = lightsOn;
+        if (lightsOn && !reducedMotion) {
           if (fixture.flickerAt < 0) {
             fixture.nextFlicker -= delta;
             if (fixture.nextFlicker <= 0) {
@@ -596,8 +730,19 @@ export function createLabRoom(options: LabRoomOptions) {
           }
         }
         fixture.tubes.color.copy(on ? TUBE_ON : TUBE_OFF);
-        fixture.light.intensity = on ? 26 : 1.5;
+        const glow = on ? 26 : lightsOn ? 1.5 : 0;
+        fixture.light.intensity +=
+          (glow - fixture.light.intensity) *
+          Math.min(1, delta * (reducedMotion ? 60 : 10));
+        lit += on ? 1 : 0;
       }
+      // The room's fill light follows the tubes, eased a little so a
+      // flicker reads as a stutter rather than a flash.
+      const share = lit / fixtures.length;
+      level +=
+        (share - level) * Math.min(1, delta * (reducedMotion ? 60 : 2.5));
+      rocker.rotation.x = lightsOn ? -0.35 : 0.35;
+      finder.color.set(lightsOn ? '#3a2c1c' : '#ffb347');
     },
     dispose() {
       services.dispose();

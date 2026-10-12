@@ -15,6 +15,7 @@ import {
   OrthographicCamera,
   PerspectiveCamera,
   PlaneGeometry,
+  PointLight,
   Raycaster,
   Scene,
   SRGBColorSpace,
@@ -25,7 +26,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import type { Material, Object3D, Texture } from 'three';
+import type { Material, MeshStandardMaterial, Object3D, Texture } from 'three';
 import { createSoundEngine } from '../audio/sound-engine';
 import { assembleRack } from '../game/rack-catalogue';
 import {
@@ -83,7 +84,10 @@ export function startScene(canvas: HTMLCanvasElement) {
   scene.background = roomTone;
   // Two floors underground the corridor fades into darkness either way.
   const basementFog = new Fog('#0d0c0a', 55, 148);
-  scene.add(new AmbientLight('#fff0d7', 1.5));
+  // The fill lights stand in for the lab's fluorescent tubes and follow
+  // the light switch.
+  const fill = new AmbientLight('#fff0d7', 1.5);
+  scene.add(fill);
   const lamp = new DirectionalLight('#ffe4ad', 2.1);
   lamp.position.set(-3, 5, 7);
   scene.add(lamp);
@@ -107,10 +111,17 @@ export function startScene(canvas: HTMLCanvasElement) {
   const rack = new Group();
   rack.position.z = 3.8;
   scene.add(rack);
-  const material = (color: string, unlit = false) => {
-    const result = createPs1Material({ color }, unlit);
+  const material = (color: string, unlit = false, glow = false) => {
+    const result = createPs1Material({ color }, unlit, glow);
     materials.push(result);
     return result;
+  };
+  // Indicator lamps glow in their own colour: bright when lit, all but
+  // black when not, so they read in the dark.
+  const lamps: MeshStandardMaterial[] = [];
+  const glows = <T extends Mesh>(mesh: T) => {
+    lamps.push(mesh.material as MeshStandardMaterial);
+    return mesh;
   };
   const cube = (
     parent: Group,
@@ -229,7 +240,11 @@ export function startScene(canvas: HTMLCanvasElement) {
   });
   scene.add(corridor.group);
   dynamic.push(() =>
-    corridor.update(performance.now() / 1000, reducedMotion.matches),
+    corridor.update(
+      performance.now() / 1000,
+      reducedMotion.matches,
+      1 - labRoom.lights.level,
+    ),
   );
   // The everyday tool board hangs on the south wall east of the door,
   // facing into the lab; the west side of the door is the sink's corner.
@@ -267,6 +282,35 @@ export function startScene(canvas: HTMLCanvasElement) {
   // The door is used from within arm's reach, from either side.
   const doorReach = 2.8 * worldUnitsPerMetre;
   const doorParts = new Set<Object3D>(labRoom.door.parts);
+  const withinReach = new Set<Object3D>([
+    ...labRoom.door.parts,
+    ...labRoom.lights.switchParts,
+  ]);
+  for (const part of labRoom.lights.switchParts)
+    bind(part, () => {
+      const on = labRoom.lights.toggle();
+      audio.play(on ? 'toggle-up' : 'toggle-down');
+      write(
+        on ? 'Lights on. The tubes take their time about it.' : 'Lights off.',
+      );
+    });
+  // In the dark the machine lights the room by itself, faintly, when it is
+  // running.
+  const machineGlow = new PointLight('#7fd6b8', 0, 0, 2);
+  machineGlow.position.set(0, floorY + 1.6 * worldUnitsPerMetre, 7.5);
+  scene.add(machineGlow);
+  dynamic.push(() => {
+    const dark = 1 - labRoom.lights.level;
+    fill.intensity = 1.5 * (0.02 + 0.98 * labRoom.lights.level);
+    lamp.intensity = 2.1 * labRoom.lights.level;
+    rim.intensity = 0.7 * labRoom.lights.level;
+    ps1Uniforms.roomLight.value = 0.03 + 0.97 * labRoom.lights.level;
+    machineGlow.intensity = rig.controls.mains
+      ? (5 + rig.field * 8) * (0.3 + 0.7 * dark)
+      : 0;
+    for (const item of lamps)
+      item.emissive.copy(item.color).multiply(item.color);
+  });
   for (const part of labRoom.door.parts)
     bind(part, () => {
       const open = labRoom.door.toggle();
@@ -374,7 +418,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   }
   for (let stage = 0; stage < 7; stage++) {
     const x = -0.77 + stage * 0.25;
-    const lamp = disc(sideCabinet, 0.075, '#413b30', x, 0.96, 0.39);
+    const lamp = glows(disc(sideCabinet, 0.075, '#413b30', x, 0.96, 0.39));
     dynamic.push(() => {
       (lamp.material as ReturnType<typeof material>).color.set(
         rig.heater > (stage + 1) / 8 ? '#f3b157' : '#413b30',
@@ -395,7 +439,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   });
   disc(sideCabinet, 0.25, '#d7ad6b', 0, -0.11, 0.39);
   disc(sideCabinet, 0.16, '#273d3e', 0, -0.11, 0.4);
-  const emitterLamp = disc(sideCabinet, 0.09, '#33433e', 0, -0.11, 0.41);
+  const emitterLamp = glows(disc(sideCabinet, 0.09, '#33433e', 0, -0.11, 0.41));
   dynamic.push(() => {
     (emitterLamp.material as ReturnType<typeof material>).color.set(
       rig.field > 0.2 ? '#7ce5c5' : '#33433e',
@@ -637,7 +681,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     const x = wallDisplayX + (u - 0.5) * 2.8;
     const y = wallDisplayTop - 2.04 + (v - 0.5) * 1.34;
     disc(lab, 0.068, '#46443a', x, y, -3.55);
-    const light = disc(lab, 0.038, '#f0b85b', x, y, -3.53);
+    const light = glows(disc(lab, 0.038, '#f0b85b', x, y, -3.53));
     dynamic.push(() => {
       (light.material as ReturnType<typeof material>).color.set(
         Math.sin(performance.now() * 0.0013 + index * 1.8) > -0.45
@@ -738,18 +782,14 @@ export function startScene(canvas: HTMLCanvasElement) {
   disc(lab, 0.48, '#657873', wallDisplayX, crystalY - 0.11, -3.37);
   disc(lab, 0.4, '#172f36', wallDisplayX, crystalY - 0.11, -3.35);
   const crystalMaterial = material('#467888');
+  lamps.push(crystalMaterial as MeshStandardMaterial);
   const crystal = new Mesh(new OctahedronGeometry(0.4, 0), crystalMaterial);
   crystal.scale.set(0.72, 1.28, 0.56);
   crystal.rotation.z = 0.24;
   crystal.position.set(wallDisplayX, crystalY - 0.11, -3.13);
   lab.add(crystal);
-  const crystalLamp = disc(
-    lab,
-    0.09,
-    '#425c5c',
-    wallDisplayX + 0.61,
-    crystalY - 0.5,
-    -3.38,
+  const crystalLamp = glows(
+    disc(lab, 0.09, '#425c5c', wallDisplayX + 0.61, crystalY - 0.5, -3.38),
   );
   dynamic.push(() => {
     const pulse = telltales.crystalPulse;
@@ -1214,7 +1254,9 @@ export function startScene(canvas: HTMLCanvasElement) {
           cy,
           0.36,
         );
-        const indicator = disc(panel, 0.05, '#473829', x, cy + 0.3, 0.28);
+        const indicator = glows(
+          disc(panel, 0.05, '#473829', x, cy + 0.3, 0.28),
+        );
         dynamic.push(() => {
           switchBody.rotation.x = isOn() ? -0.45 : 0.45;
           (indicator.material as ReturnType<typeof material>).color.set(
@@ -1253,7 +1295,7 @@ export function startScene(canvas: HTMLCanvasElement) {
         textures.push(scope.texture);
         const screen = new Mesh(
           new PlaneGeometry(1.15, 0.77),
-          createPs1Material({ map: scope.texture }, true),
+          createPs1Material({ map: scope.texture }, true, true),
         );
         materials.push(screen.material);
         screen.position.set(1.1, instrumentY, 0.29);
@@ -1278,7 +1320,7 @@ export function startScene(canvas: HTMLCanvasElement) {
         textures.push(nixie.texture);
         const screen = new Mesh(
           new PlaneGeometry(1.15, 0.3),
-          createPs1Material({ map: nixie.texture }, true),
+          createPs1Material({ map: nixie.texture }, true, true),
         );
         materials.push(screen.material);
         screen.position.set(1.1, instrumentY - 0.75, 0.29);
@@ -1346,7 +1388,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       bay.add(wire);
     }
     for (const x of [-1.38, 0.18, 1.42]) {
-      const glow = material('#354846', true);
+      const glow = material('#354846', true, true);
       const node = new Mesh(new CircleGeometry(0.13, 8), glow);
       node.position.set(x, -0.25 + x * 0.17, 0.23);
       bay.add(node);
@@ -1594,6 +1636,8 @@ export function startScene(canvas: HTMLCanvasElement) {
           orbitPitch = pitch;
         },
         toolRack: () => toolRack.group.getWorldPosition(new Vector3()),
+        rig,
+        lights: labRoom.lights,
       },
     });
   let footprints: Footprint[] | null = null;
@@ -1639,7 +1683,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     raycaster.setFromCamera(pointer, camera());
     const hit = raycaster.intersectObjects(interactive, false)[0];
     if (!hit) return undefined;
-    if (doorParts.has(hit.object) && hit.distance > doorReach) return undefined;
+    if (withinReach.has(hit.object) && hit.distance > doorReach)
+      return undefined;
     return hit.object;
   };
   const use = (x = 0, y = 0) => {
