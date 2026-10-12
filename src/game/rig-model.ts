@@ -53,7 +53,7 @@ export interface ComponentSpec {
   };
   visual_description: string;
   panel: PanelSpec;
-  model: { variables: VariableSpec[] };
+  model: { variables: VariableSpec[]; topology?: 'network' | 'supply-chain' };
 }
 
 export const componentCatalogue =
@@ -73,6 +73,7 @@ interface CompiledVariable {
  */
 export function createRigModel(components: readonly ComponentSpec[]) {
   const values = new Map<string, number>();
+  const inputKeys = new Set<string>();
   const momentary = new Set<string>();
   const variables: CompiledVariable[] = [];
 
@@ -80,6 +81,7 @@ export function createRigModel(components: readonly ComponentSpec[]) {
     for (const control of component.panel.controls) {
       const key = `${component.id}.${control.id}`;
       values.set(key, 0);
+      inputKeys.add(key);
       if (momentaryKinds.has(control.kind)) momentary.add(key);
     }
   for (const component of components)
@@ -117,7 +119,7 @@ export function createRigModel(components: readonly ComponentSpec[]) {
     has: (key: string) => values.has(key),
     /** Set a control, clamped to 0..1. Unknown controls are ignored. */
     setControl(key: string, value: number) {
-      if (values.has(key)) values.set(key, Math.max(0, Math.min(1, value)));
+      if (inputKeys.has(key)) values.set(key, Math.max(0, Math.min(1, value)));
     },
     /**
      * Advance every variable by `delta` seconds. Targets are computed from

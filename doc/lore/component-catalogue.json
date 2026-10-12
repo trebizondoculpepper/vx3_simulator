@@ -487,6 +487,11 @@
               "kind": "linear",
               "source": "baltovsky-chamber.dissipation",
               "weight": -0.4
+            },
+            {
+              "kind": "linear",
+              "source": "fromitz-probe.insert",
+              "weight": 0.1
             }
           ]
         },
@@ -776,6 +781,11 @@
               "kind": "linear",
               "source": "antiacclimator.bias",
               "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "bell-jar-shroud.vacuum",
+              "weight": -0.15
             }
           ]
         },
@@ -792,6 +802,11 @@
               "kind": "linear",
               "source": "main-bus-controller.instability",
               "weight": 1.0
+            },
+            {
+              "kind": "linear",
+              "source": "delta-hypersistor.bleed",
+              "weight": -0.3
             }
           ]
         },
@@ -839,6 +854,11 @@
               "kind": "linear",
               "source": "main-bus-controller.instability",
               "weight": -0.5
+            },
+            {
+              "kind": "linear",
+              "source": "geotransversion-unit.alignment",
+              "weight": 0.08
             }
           ]
         }
@@ -977,6 +997,16 @@
               "kind": "linear",
               "source": "ion-insulation-plate.shielding",
               "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "plynost-modulation-rectifier.ripple",
+              "weight": -0.12
+            },
+            {
+              "kind": "linear",
+              "source": "bohr-schreiffer-phase-cell.phase",
+              "weight": 0.12
             }
           ],
           "gates": [
@@ -1141,6 +1171,21 @@
               "kind": "linear",
               "source": "betaform-amplifier.standby",
               "weight": -1.0
+            },
+            {
+              "kind": "linear",
+              "source": "infrafractor-housing.temp",
+              "weight": -0.12
+            },
+            {
+              "kind": "linear",
+              "source": "plynost-modulation-rectifier.ripple",
+              "weight": -0.12
+            },
+            {
+              "kind": "linear",
+              "source": "heterodyne-patch-bay.beat",
+              "weight": 0.08
             }
           ],
           "gates": [
@@ -1290,6 +1335,21 @@
               "kind": "linear",
               "source": "electron-pump.flow",
               "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.load",
+              "weight": -0.12
+            },
+            {
+              "kind": "linear",
+              "source": "faraday-suit.grounding",
+              "weight": 0.12
+            },
+            {
+              "kind": "linear",
+              "source": "ion-insulation-plate.leakage",
+              "weight": -0.12
             }
           ],
           "gates": [
@@ -1446,6 +1506,16 @@
               "kind": "linear",
               "source": "condensate-trap-coil.flow",
               "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore-warming-oven.temp",
+              "weight": -0.12
+            },
+            {
+              "kind": "linear",
+              "source": "electron-pump.flow",
+              "weight": 0.12
             }
           ]
         }
@@ -1573,6 +1643,11 @@
               "kind": "linear",
               "source": "fromitz-probe.zero",
               "weight": 0.05
+            },
+            {
+              "kind": "linear",
+              "source": "faraday-suit.grounding",
+              "weight": -0.15
             }
           ],
           "gates": [
@@ -1727,6 +1802,21 @@
               "kind": "linear",
               "source": "hyperfine-detector.threshold",
               "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "control-panel-display.brightness",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "heterodyne-patch-bay.beat",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "micro-weave-tachyon-suppressor.noise",
+              "weight": 0.12
             }
           ],
           "gates": [
@@ -1868,6 +1958,22 @@
               "kind": "linear",
               "source": "antiacclimator.season",
               "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "infrafractor-housing.temp",
+              "weight": 0.12
+            },
+            {
+              "kind": "linear",
+              "source": "geotransversion-unit.alignment",
+              "weight": 0.1
+            },
+            {
+              "kind": "difference",
+              "a": "antiacclimator.season",
+              "b": "geotransversion-unit.hemisphere",
+              "weight": 0.15
             }
           ],
           "gates": [
@@ -2016,6 +2122,11 @@
               "kind": "linear",
               "source": "ion-insulation-plate.discharge",
               "weight": -0.8
+            },
+            {
+              "kind": "linear",
+              "source": "fromitz-probe.reading",
+              "weight": -0.1
             }
           ]
         },
@@ -2043,6 +2154,11 @@
               "kind": "linear",
               "source": "faraday-suit.grounding",
               "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "delta-hypersistor.charge",
+              "weight": 0.15
             }
           ]
         }
@@ -2220,6 +2336,12 @@
               "kind": "linear",
               "source": "encabulator.brake",
               "weight": -0.9
+            },
+            {
+              "kind": "difference",
+              "a": "encabulator.direction",
+              "b": "chirality-indicator.chirality",
+              "weight": -0.2
             }
           ],
           "gates": [
@@ -2366,6 +2488,11 @@
               "kind": "linear",
               "source": "delta-hypersistor.limit",
               "weight": -0.1
+            },
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.strain",
+              "weight": 0.2
             }
           ]
         }
@@ -2513,6 +2640,11 @@
               "kind": "linear",
               "source": "passive-damping-lattice.damping",
               "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "double-helix-transistor.gain",
+              "weight": 0.15
             }
           ],
           "gates": [
@@ -2648,6 +2780,11 @@
               "kind": "linear",
               "source": "double-helix-transistor.twist",
               "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "plynost-modulation-rectifier.ripple",
+              "weight": 0.15
             }
           ],
           "gates": [
@@ -2790,6 +2927,11 @@
               "kind": "linear",
               "source": "vacuum-tube-relief-valve.pop-test",
               "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "lingden-smith-negative-pressure-chamber.pressure",
+              "weight": 0.12
             }
           ]
         }
@@ -2911,6 +3053,11 @@
               "kind": "linear",
               "source": "sizing-relay.reset",
               "weight": -1.0
+            },
+            {
+              "kind": "linear",
+              "source": "vx3-master-control-register.word",
+              "weight": 0.15
             }
           ],
           "gates": [
@@ -3047,6 +3194,21 @@
             {
               "kind": "linear",
               "source": "cradling-node.lock",
+              "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.strain",
+              "weight": 0.15
+            },
+            {
+              "kind": "linear",
+              "source": "encabulator.drive",
+              "weight": 0.12
+            },
+            {
+              "kind": "linear",
+              "source": "passive-damping-lattice.damping",
               "weight": -0.2
             }
           ]
@@ -3196,6 +3358,21 @@
               "kind": "linear",
               "source": "geotransversion-unit.fix",
               "weight": 0.05
+            },
+            {
+              "kind": "linear",
+              "source": "milliblatz-meter.reading",
+              "weight": -0.15
+            },
+            {
+              "kind": "linear",
+              "source": "helmholtz-blatz-coil.field",
+              "weight": -0.15
+            },
+            {
+              "kind": "linear",
+              "source": "chirality-indicator.chirality",
+              "weight": -0.1
             }
           ]
         }
@@ -3377,6 +3554,16 @@
               "kind": "linear",
               "source": "vx3-master-control-register.load",
               "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "hyperfine-detector.count",
+              "weight": 0.15
+            },
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.delta",
+              "weight": 0.1
             }
           ],
           "gates": [
@@ -3552,6 +3739,11 @@
               "kind": "linear",
               "source": "hyperflux-inductor.shunt",
               "weight": -0.5
+            },
+            {
+              "kind": "linear",
+              "source": "isolated-frame-flux-emitter.output",
+              "weight": 0.12
             }
           ]
         }
@@ -3709,6 +3901,11 @@
               "kind": "linear",
               "source": "varistance-isolator.isolation",
               "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.load",
+              "weight": 0.12
             }
           ],
           "gates": [
@@ -3862,6 +4059,11 @@
               "kind": "linear",
               "source": "micro-weave-tachyon-suppressor.degauss",
               "weight": -0.3
+            },
+            {
+              "kind": "linear",
+              "source": "control-panel-display.brightness",
+              "weight": 0.1
             }
           ]
         }
@@ -4165,6 +4367,16 @@
               "kind": "linear",
               "source": "lingden-smith-negative-pressure-chamber.backfill",
               "weight": -0.8
+            },
+            {
+              "kind": "linear",
+              "source": "bell-jar-shroud.vacuum",
+              "weight": -0.1
+            },
+            {
+              "kind": "linear",
+              "source": "micro-weave-tachyon-suppressor.noise",
+              "weight": 0.12
             }
           ],
           "gates": [
@@ -4290,6 +4502,21 @@
               "kind": "linear",
               "source": "passive-damping-lattice.tap",
               "weight": -0.3
+            },
+            {
+              "kind": "linear",
+              "source": "infrafractor-housing.temp",
+              "weight": -0.12
+            },
+            {
+              "kind": "linear",
+              "source": "cradling-node.sway",
+              "weight": -0.15
+            },
+            {
+              "kind": "linear",
+              "source": "holtzmann-resonance-coil.resonance",
+              "weight": -0.12
             }
           ]
         }
@@ -4437,6 +4664,17 @@
               "kind": "linear",
               "source": "bohr-schreiffer-phase-cell.quench",
               "weight": -1.0
+            },
+            {
+              "kind": "match",
+              "a": "heterodyne-patch-bay.local-osc",
+              "b": "bohr-schreiffer-phase-cell.phase-set",
+              "weight": 0.3
+            },
+            {
+              "kind": "linear",
+              "source": "cradling-node.sway",
+              "weight": -0.15
             }
           ],
           "gates": [
@@ -4591,6 +4829,16 @@
               "kind": "linear",
               "source": "electron-pump.governor",
               "weight": -0.1
+            },
+            {
+              "kind": "linear",
+              "source": "hydromagnetic-tau-induction-connector.coupling",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "encabulator.drive",
+              "weight": 0.15
             }
           ],
           "gates": [
@@ -4737,6 +4985,17 @@
               "kind": "linear",
               "source": "hydromagnetic-tau-induction-connector.flush",
               "weight": -0.5
+            },
+            {
+              "kind": "linear",
+              "source": "electron-pump.flow",
+              "weight": 0.15
+            },
+            {
+              "kind": "match",
+              "a": "hydromagnetic-tau-induction-connector.tune",
+              "b": "holtzmann-resonance-coil.tune",
+              "weight": 0.3
             }
           ],
           "gates": [
@@ -4901,6 +5160,11 @@
               "kind": "linear",
               "source": "holtzmann-resonance-coil.ring",
               "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "hyperfine-detector.audio",
+              "weight": 0.1
             }
           ]
         }
@@ -5225,6 +5489,21 @@
               "kind": "linear",
               "source": "control-panel-display.degauss",
               "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "heterodyne-patch-bay.beat",
+              "weight": -0.1
+            },
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.delta",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "plynost-modulation-rectifier.ripple",
+              "weight": -0.12
             }
           ],
           "gates": [
@@ -5349,6 +5628,21 @@
               "kind": "linear",
               "source": "faraday-suit.interlock",
               "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "delta-hypersistor.charge",
+              "weight": -0.15
+            },
+            {
+              "kind": "linear",
+              "source": "ion-insulation-plate.leakage",
+              "weight": -0.1
+            },
+            {
+              "kind": "linear",
+              "source": "condensate-trap-coil.flow",
+              "weight": 0.12
             }
           ]
         }
@@ -5528,6 +5822,21 @@
               "kind": "linear",
               "source": "helmholtz-blatz-coil.field-set",
               "weight": 0.5
+            },
+            {
+              "kind": "linear",
+              "source": "milliblatz-meter.reading",
+              "weight": -0.05
+            },
+            {
+              "kind": "linear",
+              "source": "hydromagnetic-tau-induction-connector.coupling",
+              "weight": 0.1
+            },
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.instability",
+              "weight": -0.1
             }
           ],
           "gates": [
@@ -5717,6 +6026,11 @@
               "kind": "linear",
               "source": "governor-flyweights.limit",
               "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "heterodyne-patch-bay.beat",
+              "weight": 0.1
             }
           ],
           "gates": [
@@ -5872,6 +6186,11 @@
               "kind": "linear",
               "source": "ferrocore-warming-oven.door",
               "weight": -0.2
+            },
+            {
+              "kind": "linear",
+              "source": "infrafractor-housing.temp",
+              "weight": 0.12
             }
           ],
           "gates": [
@@ -6006,6 +6325,16 @@
               "kind": "linear",
               "source": "milliblatz-meter.range",
               "weight": -0.05
+            },
+            {
+              "kind": "linear",
+              "source": "betaform-amplifier.gain",
+              "weight": 0.08
+            },
+            {
+              "kind": "linear",
+              "source": "cradling-node.sway",
+              "weight": 0.08
             }
           ]
         }
@@ -6156,6 +6485,26 @@
               "kind": "linear",
               "source": "ballast-variac.cut-out",
               "weight": -1.0
+            },
+            {
+              "kind": "linear",
+              "source": "delta-hypersistor.bleed",
+              "weight": -0.1
+            },
+            {
+              "kind": "linear",
+              "source": "main-bus-controller.load",
+              "weight": -0.12
+            },
+            {
+              "kind": "linear",
+              "source": "sizing-relay.engaged",
+              "weight": -0.08
+            },
+            {
+              "kind": "linear",
+              "source": "ferrocore-warming-oven.temp",
+              "weight": -0.08
             }
           ],
           "gates": [
@@ -6284,6 +6633,11 @@
               "kind": "linear",
               "source": "governor-flyweights.oil",
               "weight": -0.05
+            },
+            {
+              "kind": "linear",
+              "source": "infrafractor-housing.temp",
+              "weight": -0.12
             }
           ],
           "gates": [
@@ -6427,6 +6781,11 @@
               "kind": "linear",
               "source": "bell-jar-shroud.lift",
               "weight": -1.0
+            },
+            {
+              "kind": "linear",
+              "source": "vacuum-tube-relief-valve.vent",
+              "weight": -0.15
             }
           ]
         }
@@ -6546,6 +6905,16 @@
               "a": "phase-spindle.rpm",
               "b": "heterodyne-patch-bay.local-osc",
               "weight": 1.0
+            },
+            {
+              "kind": "linear",
+              "source": "vx3-master-control-register.word",
+              "weight": 0.12
+            },
+            {
+              "kind": "linear",
+              "source": "encabulator.drive",
+              "weight": 0.12
             }
           ]
         }
@@ -6668,6 +7037,16 @@
               "kind": "linear",
               "source": "condensate-trap-coil.defrost",
               "weight": -0.6
+            },
+            {
+              "kind": "linear",
+              "source": "infrafractor-housing.temp",
+              "weight": -0.12
+            },
+            {
+              "kind": "linear",
+              "source": "nanocore-bose-einstein-radiator.cooling",
+              "weight": 0.15
             }
           ]
         },
@@ -6694,6 +7073,16 @@
               "kind": "linear",
               "source": "condensate-trap-coil.drain",
               "weight": 0.2
+            },
+            {
+              "kind": "linear",
+              "source": "baltovsky-chamber.pressure",
+              "weight": 0.15
+            },
+            {
+              "kind": "linear",
+              "source": "vacuum-tube-relief-valve.vent",
+              "weight": 0.12
             }
           ]
         }
@@ -6831,6 +7220,211 @@
               "kind": "linear",
               "source": "chirality-indicator.sense",
               "weight": 0.0
+            },
+            {
+              "kind": "linear",
+              "source": "delta-hypersistor.charge",
+              "weight": 0.1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "xenon-supply",
+    "name": "Xenon supply and flow valve",
+    "aliases": [],
+    "role": "support",
+    "real_object": "Three blue xenon cylinders inside the plant-room cage, joined by visible copper pigtails to a brass regulator and black flow valve.",
+    "description": "Three blue xenon cylinders inside the plant-room cage, joined by visible copper pigtails to a brass regulator and black flow valve.",
+    "connects_to": ["xenon-flow-gauge", "xenon-pressure-indicator"],
+    "controls": ["Xe VALVE"],
+    "readings": ["Delivered xenon pressure"],
+    "failure_modes": ["insufficient xenon delivery"],
+    "consequences": [
+      "purple XE FLUSS warning; startup interlock refuses mains"
+    ],
+    "provenance": "invented",
+    "frequency": "local installation",
+    "sources": [],
+    "manufacturer": {
+      "name": "Neumann Dynamik",
+      "origin": "Leipzig",
+      "model": "XENON-SUPPLY",
+      "pairing": "invented"
+    },
+    "visual_description": "Three blue xenon cylinders inside the plant-room cage, joined by visible copper pigtails to a brass regulator and black flow valve.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [
+        {
+          "id": "flow-valve",
+          "kind": "knob",
+          "label": "Xe VALVE",
+          "cell": [0, 0],
+          "span": [1, 1]
+        }
+      ],
+      "instruments": [
+        {
+          "id": "delivery-pressure",
+          "kind": "analogue-meter",
+          "label": "Xe BAR",
+          "cell": [3, 0],
+          "span": [2, 2],
+          "shows": "xenon-supply.pressure"
+        }
+      ]
+    },
+    "model": {
+      "topology": "supply-chain",
+      "variables": [
+        {
+          "id": "pressure",
+          "label": "Delivered xenon pressure",
+          "unit": "bar",
+          "scale": 4,
+          "mode": "lag",
+          "base": 0,
+          "lag": 0.6,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "xenon-supply.flow-valve",
+              "weight": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "xenon-flow-gauge",
+    "name": "Xenon flow gauge",
+    "aliases": [],
+    "role": "support",
+    "real_object": "A glass rotameter beside the cylinder bank carries a red float and a cream 0–10 SLPM scale. Its float rises as delivered xenon pressure builds.",
+    "description": "A glass rotameter beside the cylinder bank carries a red float and a cream 0–10 SLPM scale. Its float rises as delivered xenon pressure builds.",
+    "connects_to": ["xenon-supply", "xenon-pressure-indicator"],
+    "controls": [],
+    "readings": ["Xenon flow"],
+    "failure_modes": ["insufficient xenon delivery"],
+    "consequences": [
+      "purple XE FLUSS warning; startup interlock refuses mains"
+    ],
+    "provenance": "invented",
+    "frequency": "local installation",
+    "sources": [],
+    "manufacturer": {
+      "name": "Neumann Dynamik",
+      "origin": "Leipzig",
+      "model": "XENON-FLOW-GAUGE",
+      "pairing": "invented"
+    },
+    "visual_description": "A glass rotameter beside the cylinder bank carries a red float and a cream 0–10 SLPM scale. Its float rises as delivered xenon pressure builds.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [],
+      "instruments": [
+        {
+          "id": "float",
+          "kind": "edge-meter",
+          "label": "Xe SLPM",
+          "cell": [0, 0],
+          "span": [2, 1],
+          "shows": "xenon-flow-gauge.flow"
+        }
+      ]
+    },
+    "model": {
+      "topology": "supply-chain",
+      "variables": [
+        {
+          "id": "flow",
+          "label": "Xenon flow",
+          "unit": "SLPM",
+          "scale": 10,
+          "mode": "lag",
+          "base": 0,
+          "lag": 0.6,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "xenon-supply.pressure",
+              "weight": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "xenon-pressure-indicator",
+    "name": "Xenon delivery pressure indicator",
+    "aliases": [],
+    "role": "support",
+    "real_object": "The regulator’s right-hand cream-faced gauge shows delivered pressure, rather than cylinder contents; its needle rises after the flow valve opens.",
+    "description": "The regulator’s right-hand cream-faced gauge shows delivered pressure, rather than cylinder contents; its needle rises after the flow valve opens.",
+    "connects_to": ["xenon-supply", "xenon-flow-gauge"],
+    "controls": [],
+    "readings": ["Xenon delivery pressure indication"],
+    "failure_modes": ["insufficient xenon delivery"],
+    "consequences": [
+      "purple XE FLUSS warning; startup interlock refuses mains"
+    ],
+    "provenance": "invented",
+    "frequency": "local installation",
+    "sources": [],
+    "manufacturer": {
+      "name": "Neumann Dynamik",
+      "origin": "Leipzig",
+      "model": "XENON-PRESSURE-INDICATOR",
+      "pairing": "invented"
+    },
+    "visual_description": "The regulator’s right-hand cream-faced gauge shows delivered pressure, rather than cylinder contents; its needle rises after the flow valve opens.",
+    "panel": {
+      "units": 2,
+      "grid": {
+        "columns": 12,
+        "rows": 2
+      },
+      "controls": [],
+      "instruments": [
+        {
+          "id": "needle",
+          "kind": "analogue-meter",
+          "label": "Xe BAR",
+          "cell": [0, 0],
+          "span": [2, 2],
+          "shows": "xenon-pressure-indicator.pressure"
+        }
+      ]
+    },
+    "model": {
+      "topology": "supply-chain",
+      "variables": [
+        {
+          "id": "pressure",
+          "label": "Xenon delivery pressure indication",
+          "unit": "bar",
+          "scale": 4,
+          "mode": "lag",
+          "base": 0,
+          "lag": 0.15,
+          "influences": [
+            {
+              "kind": "linear",
+              "source": "xenon-supply.pressure",
+              "weight": 1
             }
           ]
         }

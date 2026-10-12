@@ -4,7 +4,11 @@ import { pickConsequence } from './consequences';
 export interface RigControls {
   mains: boolean;
   spindle: number;
+  governor?: number;
+  governorResponse?: number;
   field: number;
+  plasmaExcitation?: number;
+  plasmaNull?: number;
   trim: number;
 }
 
@@ -67,11 +71,15 @@ export function deltaScore(state: RigState): number {
 /**
  * Advance the rig by `delta` seconds. Pure apart from mutating `state`;
  * randomness comes from `random` so tests can be deterministic.
+ * `hazardStrain` is strain per second from unsafe running elsewhere in the
+ * installation, such as an unpressurised xenon circuit; while it lasts,
+ * strain builds instead of bleeding away.
  */
 export function stepRig(
   state: RigState,
   delta: number,
   random: () => number = Math.random,
+  hazardStrain = 0,
 ): RigEvent[] {
   const events: RigEvent[] = [];
   const { controls } = state;
@@ -85,14 +93,21 @@ export function stepRig(
     delta / HEATER_SECONDS,
   );
   // The spindle will not turn until the valves are warm enough to drive it.
-  const spindleTarget = state.heater > 0.5 ? controls.spindle : 0;
+  const spindleTarget =
+    controls.mains && state.heater > 0.5
+      ? Math.min(controls.spindle, controls.governor ?? 1)
+      : 0;
   state.spindle = approach(
     state.spindle,
     spindleTarget,
-    delta / SPINDLE_SECONDS,
+    (delta / SPINDLE_SECONDS) *
+      (0.4 + (controls.governorResponse ?? 0.5) * 1.2),
   );
   // The Helmholtz-Blatz field needs a turning spindle to sustain itself.
-  const fieldTarget = state.spindle > 0.2 ? controls.field : 0;
+  const fieldTarget =
+    controls.mains && state.spindle > 0.2
+      ? Math.min(controls.field, controls.plasmaExcitation ?? 1)
+      : 0;
   state.field = approach(state.field, fieldTarget, delta / FIELD_SECONDS);
 
   // Drift wanders faster as the field strengthens, so a hot rig needs tending.
@@ -102,11 +117,15 @@ export function stepRig(
     Math.min(0.25, state.drift * (1 - delta * 0.05) + wander),
   );
 
-  const error = Math.abs(controls.trim - idealTrim(state));
+  const error =
+    Math.abs(controls.trim - idealTrim(state)) +
+    Math.abs((controls.plasmaNull ?? 0.5) - 0.5) * 0.2;
   state.instability = clamp(error * 3.5 * state.field);
 
   if (state.instability > WARNING_LEVEL)
-    state.strain += delta * (state.instability - WARNING_LEVEL) * 1.2;
+    state.strain +=
+      delta * ((state.instability - WARNING_LEVEL) * 1.2 + hazardStrain);
+  else if (hazardStrain > 0) state.strain += delta * hazardStrain;
   else state.strain = Math.max(0, state.strain - delta * 0.15);
 
   if (!wasWarm && state.heater >= 0.95) events.push({ kind: 'warmed' });

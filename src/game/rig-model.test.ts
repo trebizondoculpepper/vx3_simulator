@@ -47,6 +47,40 @@ describe('component catalogue', () => {
     }
   });
 
+  it('ties every component to at least two others in each direction', () => {
+    const componentOf = (key: string) => key.split('.')[0];
+    const feeds = new Map<string, Set<string>>();
+    const fedBy = new Map<string, Set<string>>();
+    for (const component of componentCatalogue)
+      for (const variable of component.model.variables)
+        for (const sources of [
+          ...variable.influences.map((influence) =>
+            influence.kind === 'linear'
+              ? [influence.source]
+              : [influence.a, influence.b],
+          ),
+          ...(variable.gates ?? []).map((gate) => [gate.source]),
+        ]) {
+          for (const source of sources.map(componentOf))
+            if (source !== component.id) {
+              if (!feeds.has(source)) feeds.set(source, new Set());
+              if (!fedBy.has(component.id)) fedBy.set(component.id, new Set());
+              feeds.get(source)!.add(component.id);
+              fedBy.get(component.id)!.add(source);
+            }
+        }
+    for (const component of componentCatalogue) {
+      // Physical utility chains have deliberate one-way dependencies.
+      if (component.model.topology === 'supply-chain') continue;
+      expect(feeds.get(component.id)?.size ?? 0, component.id).toBeGreaterThan(
+        1,
+      );
+      expect(fedBy.get(component.id)?.size ?? 0, component.id).toBeGreaterThan(
+        1,
+      );
+    }
+  });
+
   it('gives every component a manufacturer and a visual description', () => {
     for (const component of componentCatalogue) {
       expect(component.manufacturer.name, component.id).not.toBe('');
@@ -125,6 +159,73 @@ describe('createRigModel', () => {
     );
     run(model, 20);
     expect(model.get('main-bus-controller.strain')).toBeLessThan(strained);
+  });
+
+  it('settles rather than running away with everything switched on', () => {
+    const model = runningRig();
+    for (const component of componentCatalogue)
+      for (const control of component.panel.controls)
+        if (
+          !['push-button', 'plunger', 'mushroom-button'].includes(control.kind)
+        )
+          model.setControl(`${component.id}.${control.id}`, 0.5);
+    run(model, 300);
+    const settled = componentCatalogue.flatMap((component) =>
+      component.model.variables
+        .filter((variable) => variable.mode === 'lag')
+        .map((variable) => `${component.id}.${variable.id}`),
+    );
+    const before = settled.map((key) => model.get(key));
+    run(model, 30);
+    settled.forEach((key, i) =>
+      expect(Math.abs(model.get(key) - before[i]), key).toBeLessThan(0.01),
+    );
+    const pinned = settled.filter((key) => model.get(key) >= 0.999);
+    expect(pinned.length).toBeLessThan(settled.length / 4);
+  });
+
+  it('sags the ballast variac as the main bus takes load', () => {
+    const model = runningRig();
+    const light = model.get('ballast-variac.volts');
+    model.setControl('helmholtz-blatz-coil.energise', 1);
+    model.setControl('helmholtz-blatz-coil.field-set', 1);
+    model.setControl('betaform-amplifier.stages', 1);
+    model.setControl('betaform-amplifier.drive', 1);
+    run(model, 30);
+    expect(model.get('main-bus-controller.load')).toBeGreaterThan(0.2);
+    expect(model.get('ballast-variac.volts')).toBeLessThan(light);
+  });
+
+  it('rings the resonance coil when the hyperfine loudspeaker is on', () => {
+    const model = runningRig();
+    run(model, 10);
+    const quiet = model.get('holtzmann-resonance-coil.resonance');
+    model.setControl('hyperfine-detector.audio', 1);
+    run(model, 10);
+    expect(model.get('holtzmann-resonance-coil.resonance')).toBeGreaterThan(
+      quiet,
+    );
+  });
+
+  it('grounds the operator better once the condensate trap wets the floor', () => {
+    const model = runningRig();
+    model.setControl('faraday-suit.ground-clip', 1);
+    run(model, 10);
+    const dry = model.get('faraday-suit.grounding');
+    model.setControl('condensate-trap-coil.chill', 1);
+    run(model, 30);
+    expect(model.get('faraday-suit.grounding')).toBeGreaterThan(dry);
+  });
+
+  it('slows the Encabulator when it turns against the field’s handedness', () => {
+    const model = runningRig();
+    const chirality = model.get('chirality-indicator.chirality');
+    model.setControl('encabulator.direction', chirality);
+    run(model, 20);
+    const along = model.get('encabulator.drive');
+    model.setControl('encabulator.direction', chirality > 0.5 ? 0 : 1);
+    run(model, 20);
+    expect(model.get('encabulator.drive')).toBeLessThan(along);
   });
 
   it('springs push buttons back after one step', () => {

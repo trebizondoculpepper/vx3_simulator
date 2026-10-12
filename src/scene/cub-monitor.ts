@@ -1,3 +1,4 @@
+import { designate } from '../game/machine-parts';
 import {
   BoxGeometry,
   CylinderGeometry,
@@ -7,54 +8,44 @@ import {
 } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import type { ScreenLine } from '../game/bench-monitor';
 import { createCanvasTexture, createLabelTexture } from './screens';
 
-/** The screen as a BBC Micro left it: Mode 7 text after chaining the calibration program. */
-function bootScreen() {
+/** Mode 7 text as the BBC Micro's calibration program draws it. */
+function createScreen() {
   const width = 320;
   const height = 240;
   const { context, texture } = createCanvasTexture(width, height);
-  // The tube's rounded face, set in its black surround.
-  context.fillStyle = '#0c0b0a';
-  context.fillRect(0, 0, width, height);
-  context.fillStyle = '#060807';
-  context.beginPath();
-  context.roundRect(4, 4, width - 8, height - 8, 22);
-  context.fill();
-  context.save();
-  context.clip();
-  context.font = 'bold 13px monospace';
-  context.textBaseline = 'top';
-  const lines: [string, string][] = [
-    ['BBC Computer 32K', '#f2f2ee'],
-    ['', ''],
-    ['Acorn DFS', '#f2f2ee'],
-    ['', ''],
-    ['BASIC', '#f2f2ee'],
-    ['', ''],
-    ['>CHAIN "VX3CAL"', '#f2f2ee'],
-    ['', ''],
-    ['VX3 FIELD CALIBRATION  1.4', '#f4e04a'],
-    ['UNIV. LEIPZIG  RAUM -02 17', '#5fe0e8'],
-    ['', ''],
-    ['SPINDLE  0000 RPM', '#6ef06e'],
-    ['DELTA    0.000 / 0.880', '#6ef06e'],
-    ['', ''],
-    ['PRESS SPACE TO SAMPLE', '#f2f2ee'],
-  ];
-  for (const [i, [text, ink]] of lines.entries()) {
-    context.fillStyle = ink;
-    context.fillText(text, 18, 12 + i * 14.5);
-  }
-  // A faint reflection across the top left of the glass.
-  const sheen = context.createLinearGradient(0, 0, width * 0.6, height * 0.6);
-  sheen.addColorStop(0, 'rgba(255, 255, 255, 0.10)');
-  sheen.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  context.fillStyle = sheen;
-  context.fillRect(0, 0, width, height);
-  context.restore();
-  texture.needsUpdate = true;
-  return { texture, width, height };
+  let shown = '';
+  const draw = (lines: readonly ScreenLine[]) => {
+    const key = lines.map(([text]) => text).join('\n');
+    if (key === shown) return;
+    shown = key;
+    // The tube's rounded face, set in its black surround.
+    context.fillStyle = '#0c0b0a';
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = '#060807';
+    context.beginPath();
+    context.roundRect(4, 4, width - 8, height - 8, 22);
+    context.fill();
+    context.save();
+    context.clip();
+    context.font = 'bold 13px monospace';
+    context.textBaseline = 'top';
+    for (const [i, [text, ink]] of lines.entries()) {
+      context.fillStyle = ink;
+      context.fillText(text, 18, 12 + i * 14.5, width - 30);
+    }
+    // A faint reflection across the top left of the glass.
+    const sheen = context.createLinearGradient(0, 0, width * 0.6, height * 0.6);
+    sheen.addColorStop(0, 'rgba(255, 255, 255, 0.10)');
+    sheen.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    context.fillStyle = sheen;
+    context.fillRect(0, 0, width, height);
+    context.restore();
+    texture.needsUpdate = true;
+  };
+  return { texture, draw };
 }
 
 /**
@@ -62,7 +53,8 @@ function bootScreen() {
  * a plain cream steel box with louvred sides, a brown bezel round a black
  * surround and a round-cornered tube, the maker's badge on a black tab at
  * the bottom left and a red power indicator at the bottom right.
- * The screen shows Mode 7 text with a blinking cursor and keeps glowing
+ * The screen shows the calibration program's Mode 7 text, including any
+ * warnings, with a blinking cursor, and keeps glowing
  * when the room lights are off. Sizes are in metres; the group's origin is
  * the middle of its base and the screen faces +z.
  */
@@ -98,18 +90,18 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
     glow = false,
   ) => part(new BoxGeometry(w * m, h * m, d * m), color, x, y, z, glow);
 
-  // The Science Museum's Cub measures 300 x 352 x 415 mm.
-  const width = 0.415;
-  const height = 0.352;
-  const depth = 0.3;
-  const front = depth / 2;
+  // Science Museum dimensions in H × W × D order, not W × H × D.
+  const width = 0.352;
+  const height = 0.3;
+  const depth = 0.415;
+  const front = depth / 2 - 0.02;
   const CASE = '#dcd2a9';
   const BEZEL = '#4a3b31';
   const SLOT = '#5d5747';
 
   // Plain steel cabinet, its sides louvred near the front and split by a
   // seam a third of the way up.
-  box(width, height, depth - 0.02, CASE, 0, height / 2, -0.01);
+  box(width, height, depth - 0.04, CASE, 0, height / 2, -0.02);
   for (const side of [-1, 1]) {
     const x = side * (width / 2 + 0.001);
     for (const y of [height * 0.86, height * 0.81])
@@ -131,7 +123,7 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
 
   // Brown bezel, a little proud of the case, round a black surround that
   // holds the tube. The tube sits high, leaving a deeper lower rail.
-  box(width + 0.012, height + 0.012, 0.03, BEZEL, 0, height / 2, front - 0.005);
+  box(width, height, 0.03, BEZEL, 0, height / 2, front - 0.005);
   const screenY = height * 0.55;
   box(
     width * 0.88,
@@ -142,15 +134,21 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
     screenY,
     front + 0.012,
   );
-  const screen = bootScreen();
+  const screen = createScreen();
   textures.push(screen.texture);
   const glass = createPs1Material({ map: screen.texture }, true, true);
   materials.push(glass);
-  const screenW = width * 0.84;
-  const screenH = height * 0.76;
+  // A 4:3 picture within the 14-inch tube's bezel.
+  const screenW = 0.276;
+  const screenH = screenW * 0.75;
   const face = new Mesh(new PlaneGeometry(screenW * m, screenH * m), glass);
   face.position.set(0.004 * m, screenY * m, (front + 0.0155) * m);
   group.add(face);
+  designate(face, {
+    machine: 'Bench computer',
+    name: 'Monitor screen',
+    role: 'indicator',
+  });
   // The cursor after the last line of text.
   const cursor = box(
     0.009,
@@ -158,10 +156,20 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
     0.001,
     '#f2f2ee',
     0.004 - screenW / 2 + screenW * (18 / 320),
-    screenY + screenH / 2 - screenH * ((12 + 15 * 14.5 + 9) / 240),
+    0,
     front + 0.0165,
     true,
   );
+  designate(cursor, {
+    machine: 'Bench computer',
+    name: 'Cursor',
+    role: 'indicator',
+  });
+  const placeCursor = (lineCount: number) => {
+    cursor.position.y =
+      (screenY + screenH / 2 - screenH * ((12 + lineCount * 14.5 + 9) / 240)) *
+      m;
+  };
 
   // The badge on a black tab at the bottom left, and the bare red power
   // indicator at the bottom right, just under the tube.
@@ -195,8 +203,10 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
 
   return {
     group,
-    /** Blink the cursor, about once a second. */
-    update(seconds: number) {
+    /** Redraw the text if it has changed, and blink the cursor about once a second. */
+    update(seconds: number, lines: readonly ScreenLine[]) {
+      screen.draw(lines);
+      placeCursor(lines.length);
       cursor.visible = seconds % 1.1 < 0.6;
     },
     dispose() {

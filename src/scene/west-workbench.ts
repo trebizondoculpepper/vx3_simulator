@@ -5,11 +5,14 @@ import {
   CylinderGeometry,
   Group,
   Mesh,
+  MeshStandardMaterial,
+  SphereGeometry,
   TubeGeometry,
   Vector3,
 } from 'three';
 import type { BufferGeometry, Material, Object3D } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import { createSinkLeak } from '../game/sink-leak';
 
 export interface WestWorkbenchOptions {
   floorY: number;
@@ -26,7 +29,7 @@ const TOP = '#5a3f26';
 const TOP_EDGE = '#3f2c1b';
 const FRAME = '#3c453e';
 const CUPBOARD = '#55665f';
-const CERAMIC = '#d9d6cc';
+const CERAMIC = '#f4f3ed';
 const CHROME = '#c8ccc8';
 
 /**
@@ -43,6 +46,8 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
   const materials: Material[] = [];
   const paint = (color: string, unlit = false) => {
     const material = createPs1Material({ color }, unlit);
+    if (color === CERAMIC && material instanceof MeshStandardMaterial)
+      material.roughness = 0.22;
     materials.push(material);
     return material;
   };
@@ -90,6 +95,8 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
   const sinkNorth = sinkZ - (sinkLength / 2) * m;
   const sinkSouth = sinkZ + (sinkLength / 2) * m;
   const topY = height - slab / 2;
+  const basin = 0.38;
+  const sinkFloor = height - basin;
 
   // Worktop in pieces around the sink cut-out, with a dark front edge.
   const run = (z0: number, z1: number, out0: number, out1: number) =>
@@ -200,11 +207,11 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
     const cz = (z0 + toZ) / 2;
     box(
       depth - 0.04,
-      height - slab,
+      sinkFloor - 0.03,
       span,
       '#46524c',
       depth / 2 - 0.02,
-      (height - slab) / 2,
+      (sinkFloor - 0.03) / 2,
       cz,
     );
     for (const side of [-1, 1]) {
@@ -231,11 +238,28 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
   }
 
   // Deep glazed sink, hollow, with a drain and a rolled rim.
-  const basin = 0.28;
   const sinkCentreOut = sinkOut + sinkWidth / 2;
-  const sinkFloor = height - basin;
   box(sinkWidth, 0.03, sinkLength, CERAMIC, sinkCentreOut, sinkFloor, sinkZ);
   for (const side of [-1, 1]) {
+    // Thick white porcelain lip raised above the wooden worktop.
+    box(
+      0.05,
+      0.045,
+      sinkLength + 0.05,
+      CERAMIC,
+      sinkCentreOut + (side * sinkWidth) / 2,
+      height + 0.015,
+      sinkZ,
+    );
+    box(
+      sinkWidth + 0.05,
+      0.045,
+      0.05,
+      CERAMIC,
+      sinkCentreOut,
+      height + 0.015,
+      sinkZ + ((side * sinkLength) / 2) * m,
+    );
     box(
       0.03,
       basin + 0.02,
@@ -326,21 +350,39 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
     true,
   );
   stream.visible = false;
-  let running = false;
+  const leak = createSinkLeak();
+  const drop = mesh(
+    new SphereGeometry(0.008 * m, 6, 4),
+    '#b9d4db',
+    wallX + sinkCentreOut * m,
+    floorY + (height + 0.27) * m,
+    sinkZ,
+    true,
+  );
+  drop.visible = false;
+  let last: number | undefined;
 
   return {
     group,
     /** Every mesh of the tap, for clicking. */
     tapParts: tapParts as readonly Object3D[],
     toggleTap() {
-      running = !running;
+      const running = leak.toggle();
       stream.visible = running;
       return running;
     },
     update(seconds: number, reducedMotion: boolean) {
-      if (!running) return;
+      const delta =
+        last === undefined ? 0 : Math.min(0.1, Math.max(0, seconds - last));
+      last = seconds;
+      const drip = leak.step(delta);
+      drop.visible = drip.drop !== null && !reducedMotion;
+      if (drip.drop !== null)
+        drop.position.y =
+          floorY + (height + 0.27 - drip.drop ** 2 * streamLength) * m;
       const wobble = reducedMotion ? 1 : 1 + Math.sin(seconds * 37) * 0.15;
       stream.scale.set(wobble, 1, wobble);
+      return drip.impact;
     },
     dispose() {
       group.traverse((object) => {

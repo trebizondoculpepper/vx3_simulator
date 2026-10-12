@@ -6,6 +6,10 @@ The research behind this summary is in [vxjunkies-lore.md](vxjunkies-lore.md), w
 
 The community fan wiki places the VX3 in the early 1970s. Its readouts were largely analogue and bulky, and the later Berkeley machine nicknamed “The Khan” gained computer control only through an improvised register in the early 1980s. A “full VX3” is our own term for an intact, pre-VX4 arrangement with visible valves, mechanical controls, ferrocores, insulation plates and a Baltovsky chamber. [VX Module Versions](https://vxjunkies.fandom.com/wiki/VX_Module_Versions), [ConVX](https://vxjunkies.fandom.com/wiki/ConVX)
 
+## Setting
+
+In the game's fiction, the lab is real and still exists: Room −2.17, two floors below the Helmholtz-Bau at the University of Leipzig. The game is a recreation of that facility, not a historical reconstruction or a museum piece. Its VX3 rig and period apparatus are original and have been left largely untouched by years of progress, while the ducting, cable trays and safety features have been modernised around them. In-world text should never call the lab a reconstruction, an exhibit or historical; the University of Leipzig setting is our own invention, not community lore.
+
 ## Core community vocabulary
 
 Delta (δ) is the headline performance score, and Yalgeth's Limit places its practical ceiling at 0.88 in four dimensions. Ferrocores are common consumables; a typical rig needs four to six. The Baltovsky chamber dissipates flux and can glow bright yellow when a ferrocore is dead. The main bus controller, betaform amplifier, isolated-frame flux emitter, varistance-isolator and ion insulation plates provide useful names and physical roles for a complete rack. [Delta](https://vxjunkies.fandom.com/wiki/Delta), [Getting Started](https://vxjunkies.fandom.com/wiki/Getting_Started)
@@ -20,4 +24,4 @@ Operators discuss apparatus and incidents without breaking character. A field ex
 
 ## Design use
 
-The catalogue records `provenance` on each part. Community terms inform the fixed rack's apparatus labels and the adjacent six-position ferrocore drum. Complete panels, maker liveries, the side cabinet, filing-cabinet documents and operating procedures devised for this game remain reconstructions. The simulation evokes a 1970s analogue VX3 without later ConVX-style computer control on the cabinet itself. An ordinary computer can present this historical VX3 approximation; the oft-proposed VX8 simulation remains outside conventional computing practice.
+The catalogue records `provenance` on each part. Community terms inform the fixed rack's apparatus labels and the adjacent six-position ferrocore drum. Complete panels, maker liveries, the side cabinet, filing-cabinet documents and operating procedures devised for this game remain inventions. The simulation evokes a 1970s analogue VX3 without later ConVX-style computer control on the cabinet itself. An ordinary computer can present this historical VX3 approximation; the oft-proposed VX8 simulation remains outside conventional computing practice.

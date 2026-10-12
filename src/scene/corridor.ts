@@ -24,6 +24,7 @@ export interface CorridorOptions {
   doorX: number;
   doorWidth: number;
   doorHeight: number;
+  plantDoor?: { x: number; width: number; height: number };
 }
 
 const WALL = '#3c4440';
@@ -68,6 +69,8 @@ export function createCorridor(options: CorridorOptions) {
     const material = createPs1Material({ color });
     materials.push(material);
     const result = new Mesh(geometry, material);
+    result.castShadow = true;
+    result.receiveShadow = true;
     result.position.set(x, y, z);
     parent.add(result);
     return result;
@@ -111,6 +114,7 @@ export function createCorridor(options: CorridorOptions) {
   const ceilingY = floorY + height;
   const midY = floorY + height / 2;
   const length = halfLength * 2;
+  const wallThickness = 0.3 * m;
 
   // Lino floor with a seam every metre and a scuffed walking line.
   box(length + 0.4, 0.3, width + 0.4, '#3f3d35', 0, floorY - 0.18, midZ);
@@ -131,14 +135,42 @@ export function createCorridor(options: CorridorOptions) {
     box(w, 0.06, 0.08, RAIL, x, floorY + 0.9 * m, z + face * 0.04);
     box(w, 0.15, 0.1, SKIRT, x, floorY + 0.075, z + face * 0.05);
   };
-  box(length, height, 0.2, WALL, 0, midY, southZ + 0.1);
+  box(length, height, wallThickness, WALL, 0, midY, southZ + wallThickness / 2);
   run(-halfLength, halfLength, southZ, -1);
   for (const [x0, x1] of [
     [-halfLength, labMinX],
     [labMaxX, halfLength],
   ]) {
-    box(x1 - x0, height, 0.2, WALL, (x0 + x1) / 2, midY, northZ - 0.1);
-    run(x0, x1, northZ, 1);
+    const opening = options.plantDoor;
+    const ranges =
+      opening && opening.x > x0 && opening.x < x1
+        ? [
+            [x0, opening.x - opening.width / 2],
+            [opening.x + opening.width / 2, x1],
+          ]
+        : [[x0, x1]];
+    for (const [a, b] of ranges) {
+      box(
+        b - a,
+        height,
+        wallThickness,
+        WALL,
+        (a + b) / 2,
+        midY,
+        northZ - wallThickness / 2,
+      );
+      run(a, b, northZ, 1);
+    }
+    if (ranges.length === 2 && opening)
+      box(
+        opening.width,
+        height - opening.height,
+        wallThickness,
+        WALL,
+        opening.x,
+        floorY + (height + opening.height) / 2,
+        northZ - wallThickness / 2,
+      );
   }
   const doorLeft = doorX - doorWidth / 2 - 0.07;
   const doorRight = doorX + doorWidth / 2 + 0.07;
@@ -283,14 +315,6 @@ export function createCorridor(options: CorridorOptions) {
     { ink: '#e8e2cc', plate: '#20302b', size: 13 },
     32,
   );
-  sign(
-    'VX3-LABOR  ·  HISTORISCHE REKONSTRUKTION',
-    doorX,
-    floorY + doorHeight + 0.75,
-    northZ + 0.03,
-    { ink: '#151511', plate: '#f2c230', size: 11 },
-    42,
-  );
   // The room's door plate beside the door, as the original read: an
   // enamelled plate on a brass-framed backing at eye level.
   {
@@ -342,6 +366,21 @@ export function createCorridor(options: CorridorOptions) {
       [-1, 3.5 * m],
     ]) {
       const dx = x + offset;
+      // Remove the nearest decorative doorway to the left of the real plant room.
+      if (
+        face > 0 &&
+        options.plantDoor &&
+        dx < options.plantDoor.x &&
+        dx > options.plantDoor.x - 7 * m
+      )
+        continue;
+      if (
+        face > 0 &&
+        options.plantDoor &&
+        Math.abs(dx - options.plantDoor.x) <
+          options.plantDoor.width / 2 + otherDoorWidth
+      )
+        continue;
       if (dx < labMaxX + 1.5 * m && dx > labMinX - 1.5 * m) continue;
       if (dx > halfLength - otherDoorWidth) continue;
       const z = face > 0 ? northZ : southZ;

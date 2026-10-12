@@ -80,6 +80,8 @@ export function createLabRoom(options: LabRoomOptions) {
     const material = createPs1Material({ color }, unlit);
     materials.push(material);
     const result = new Mesh(geometry, material);
+    result.castShadow = !unlit;
+    result.receiveShadow = !unlit;
     result.position.set(x, y, z);
     parent.add(result);
     return result;
@@ -100,6 +102,7 @@ export function createLabRoom(options: LabRoomOptions) {
   const midZ = (minZ + maxZ) / 2;
   const height = ceilingY - floorY;
   const midY = (floorY + ceilingY) / 2;
+  const wallThickness = 0.3 * worldUnitsPerMetre;
 
   // Floor with seams on a 1.5-unit grid.
   box(width + 0.4, 0.3, depth + 0.4, '#706d60', midX, floorY - 0.18, midZ);
@@ -112,7 +115,15 @@ export function createLabRoom(options: LabRoomOptions) {
   for (const side of [-1, 1]) {
     const face = side < 0 ? minX : maxX;
     const out = (offset: number) => face + side * offset;
-    box(0.2, height + 0.4, depth + 0.4, WALL, out(0.1), midY, midZ);
+    box(
+      wallThickness,
+      height + 0.4,
+      depth + wallThickness * 2,
+      WALL,
+      out(wallThickness / 2),
+      midY,
+      midZ,
+    );
     box(0.22, 3.4, depth, DADO, out(-0.01), floorY + 1.7, midZ);
     box(0.29, 0.11, depth, RAIL, out(-0.1), floorY + 3.4, midZ);
     box(0.3, 0.2, depth, SKIRT, out(-0.1), floorY + 0.12, midZ);
@@ -148,15 +159,31 @@ export function createLabRoom(options: LabRoomOptions) {
   // The double entrance is 1.2 m wide and clears 2.1 m.
   const doorHeight = 2.1 * worldUnitsPerMetre;
   const doorX = midX;
-  const wallZ = maxZ + 0.1;
+  const wallZ = maxZ + wallThickness / 2;
   const leftWidth = doorX - doorWidth / 2 - minX;
   const rightWidth = maxX - (doorX + doorWidth / 2);
-  box(leftWidth, height + 0.4, 0.2, WALL, minX + leftWidth / 2, midY, wallZ);
-  box(rightWidth, height + 0.4, 0.2, WALL, maxX - rightWidth / 2, midY, wallZ);
+  box(
+    leftWidth,
+    height + 0.4,
+    wallThickness,
+    WALL,
+    minX + leftWidth / 2,
+    midY,
+    wallZ,
+  );
+  box(
+    rightWidth,
+    height + 0.4,
+    wallThickness,
+    WALL,
+    maxX - rightWidth / 2,
+    midY,
+    wallZ,
+  );
   box(
     doorWidth,
     height - doorHeight,
-    0.2,
+    wallThickness,
     WALL,
     doorX,
     floorY + doorHeight + (height - doorHeight) / 2,
@@ -172,7 +199,26 @@ export function createLabRoom(options: LabRoomOptions) {
   }
   // A full-height equipment entrance: two steel leaves with wired-glass
   // vision panels, push plates and kick plates.
-  const doorZ = maxZ + 0.02;
+  const doorZ = maxZ + wallThickness - 0.04 * worldUnitsPerMetre;
+  box(
+    doorWidth,
+    0.025 * worldUnitsPerMetre,
+    wallThickness,
+    '#777768',
+    doorX,
+    floorY - 0.015 * worldUnitsPerMetre,
+    wallZ,
+  );
+  for (const x of [doorX - doorWidth / 2, doorX + doorWidth / 2])
+    box(
+      0.06 * worldUnitsPerMetre,
+      doorHeight,
+      wallThickness,
+      '#a39b83',
+      x,
+      floorY + doorHeight / 2,
+      wallZ,
+    );
   box(
     0.14,
     doorHeight + 0.14,
@@ -664,6 +710,10 @@ export function createLabRoom(options: LabRoomOptions) {
       /** True while the leaves still block the opening. */
       get blocking() {
         return doorAmount < 0.75;
+      },
+      /** How far the leaves are open, 0 (shut) to 1. */
+      get amount() {
+        return doorAmount;
       },
       toggle() {
         doorOpen = !doorOpen;

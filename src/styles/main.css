@@ -55,38 +55,9 @@ canvas {
   pointer-events: auto;
   cursor: pointer;
 }
-.rack-heading {
-  position: absolute;
-  top: 16px;
-  left: 22px;
-  display: grid;
-  gap: 5px;
-  padding: 10px 13px;
-  border: 2px solid #a59470;
-  background: #292d29e8;
-  box-shadow: 4px 4px #0a0c0b;
-  letter-spacing: 0.12em;
-  font-size: 12px;
-}
-.rack-heading small {
-  color: #c5b492;
-  font-size: 9px;
-  letter-spacing: 0.02em;
-}
-.rack-heading strong {
-  color: #e9c785;
-  font-size: 17px;
-}
-#rig-status {
-  color: #acd7ab;
-}
-#rig-status[data-alert='true'] {
-  color: #ff7c56;
-  animation: warning 0.7s steps(2) infinite;
-}
 .view-switch {
   position: absolute;
-  top: 117px;
+  top: 16px;
   left: 22px;
   display: flex;
   gap: 3px;
@@ -110,7 +81,7 @@ canvas {
 }
 .sound-controls {
   position: absolute;
-  top: 166px;
+  top: 65px;
   left: 22px;
   display: flex;
   align-items: center;
@@ -285,27 +256,14 @@ canvas {
 [hidden] {
   display: none !important;
 }
-@keyframes warning {
-  50% {
-    opacity: 0.35;
-  }
-}
 @media (max-width: 700px) {
-  .rack-heading {
-    top: 8px;
-    left: 8px;
-    font-size: 10px;
-  }
-  .rack-heading strong {
-    font-size: 13px;
-  }
   .view-switch {
     left: 8px;
-    top: 94px;
+    top: 8px;
   }
   .sound-controls {
     left: 8px;
-    top: 142px;
+    top: 56px;
   }
   .logbook {
     top: auto;

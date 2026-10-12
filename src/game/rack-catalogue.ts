@@ -1,19 +1,29 @@
 import type { KnobId, ToggleId } from './rack-controls';
 
-export type PanelControl =
-  | { kind: 'mains'; label: string; x: number }
-  | { kind: 'toggle'; id: ToggleId; label: string; x: number }
-  | { kind: 'knob'; id: KnobId; label: string; x: number }
-  | { kind: 'selector'; label: string; x: number }
-  | {
-      kind: 'button';
-      id: 'reset' | 'purge' | 'do-not';
-      label: string;
-      x: number;
-    };
+/**
+ * Where a part sits on its faceplate grid (see rack-layout.ts): the first of
+ * the 12 body columns it spans, and the whole body height or one half.
+ */
+interface GridCell {
+  column: number;
+  row?: 'top' | 'bottom';
+}
+
+export type PanelControl = GridCell &
+  (
+    | { kind: 'mains'; label: string }
+    | { kind: 'toggle'; id: ToggleId; label: string }
+    | { kind: 'knob'; id: KnobId; label: string }
+    | { kind: 'selector'; id: KnobId; label: string }
+    | { kind: 'button'; id: 'reset' | 'purge' | 'do-not'; label: string }
+  );
 
 export type Instrument =
   'heater' | 'spindle' | 'field' | 'stability' | 'scope' | 'nixie';
+
+export interface RackInstrument extends GridCell {
+  kind: Instrument;
+}
 
 export interface RackModule {
   id: string;
@@ -22,7 +32,7 @@ export interface RackModule {
   units: number;
   finish: string;
   controls: PanelControl[];
-  instruments: Instrument[];
+  instruments: RackInstrument[];
   provenance: 'invented';
 }
 
@@ -36,11 +46,11 @@ const catalogue: Record<string, RackModule[]> = {
       units: 3,
       finish: '#4d534b',
       controls: [
-        { kind: 'mains', label: 'MAINS', x: -1.5 },
-        { kind: 'toggle', id: 'ht', label: 'HT', x: -0.65 },
-        { kind: 'toggle', id: 'lt', label: 'LT', x: 0.05 },
+        { kind: 'mains', label: 'MAINS', column: 0 },
+        { kind: 'toggle', id: 'ht', label: 'HT', column: 3 },
+        { kind: 'toggle', id: 'lt', label: 'LT', column: 6 },
       ],
-      instruments: ['heater'],
+      instruments: [{ kind: 'heater', column: 10 }],
       provenance: 'invented',
     },
     {
@@ -50,11 +60,11 @@ const catalogue: Record<string, RackModule[]> = {
       units: 3,
       finish: '#574b3e',
       controls: [
-        { kind: 'mains', label: 'BREAKER', x: -1.5 },
-        { kind: 'toggle', id: 'ht', label: 'HT', x: -0.65 },
-        { kind: 'toggle', id: 'lt', label: 'LT', x: 0.05 },
+        { kind: 'mains', label: 'BREAKER', column: 0 },
+        { kind: 'toggle', id: 'ht', label: 'HT', column: 3 },
+        { kind: 'toggle', id: 'lt', label: 'LT', column: 6 },
       ],
-      instruments: ['heater'],
+      instruments: [{ kind: 'heater', column: 10 }],
       provenance: 'invented',
     },
   ],
@@ -66,10 +76,34 @@ const catalogue: Record<string, RackModule[]> = {
       units: 4,
       finish: '#354842',
       controls: [
-        { kind: 'toggle', id: 'aux1', label: 'AUX 1', x: -1.45 },
-        { kind: 'toggle', id: 'aux2', label: 'AUX 2', x: -0.7 },
-        { kind: 'toggle', id: 'xtalA', label: 'XTAL A', x: 0.15 },
-        { kind: 'toggle', id: 'xtalB', label: 'XTAL B', x: 0.85 },
+        {
+          kind: 'toggle',
+          id: 'aux1',
+          label: 'AUX 1',
+          column: 0,
+          row: 'bottom',
+        },
+        {
+          kind: 'toggle',
+          id: 'aux2',
+          label: 'AUX 2',
+          column: 3,
+          row: 'bottom',
+        },
+        {
+          kind: 'toggle',
+          id: 'xtalA',
+          label: 'XTAL A',
+          column: 6,
+          row: 'bottom',
+        },
+        {
+          kind: 'toggle',
+          id: 'xtalB',
+          label: 'XTAL B',
+          column: 9,
+          row: 'bottom',
+        },
       ],
       instruments: [],
       provenance: 'invented',
@@ -81,10 +115,34 @@ const catalogue: Record<string, RackModule[]> = {
       units: 4,
       finish: '#48505a',
       controls: [
-        { kind: 'toggle', id: 'aux1', label: 'AUX 1', x: -1.45 },
-        { kind: 'toggle', id: 'xtalA', label: 'XTAL A', x: -0.7 },
-        { kind: 'toggle', id: 'xtalB', label: 'XTAL B', x: 0.15 },
-        { kind: 'toggle', id: 'xtalC', label: 'XTAL C', x: 0.85 },
+        {
+          kind: 'toggle',
+          id: 'chromoAux',
+          label: 'AUX 1',
+          column: 0,
+          row: 'bottom',
+        },
+        {
+          kind: 'toggle',
+          id: 'chromoA',
+          label: 'XTAL A',
+          column: 3,
+          row: 'bottom',
+        },
+        {
+          kind: 'toggle',
+          id: 'chromoB',
+          label: 'XTAL B',
+          column: 6,
+          row: 'bottom',
+        },
+        {
+          kind: 'toggle',
+          id: 'xtalC',
+          label: 'XTAL C',
+          column: 9,
+          row: 'bottom',
+        },
       ],
       instruments: [],
       provenance: 'invented',
@@ -98,11 +156,14 @@ const catalogue: Record<string, RackModule[]> = {
       units: 4,
       finish: '#555048',
       controls: [
-        { kind: 'toggle', id: 'spin', label: 'SPIN', x: -1.6 },
-        { kind: 'knob', id: 'spindle', label: 'SPEED', x: -0.65 },
-        { kind: 'knob', id: 'ratio', label: 'RATIO', x: 0.25 },
+        { kind: 'toggle', id: 'spin', label: 'SPIN', column: 0 },
+        { kind: 'knob', id: 'spindle', label: 'SPEED', column: 2 },
+        { kind: 'knob', id: 'ratio', label: 'RATIO', column: 4 },
       ],
-      instruments: ['spindle', 'nixie'],
+      instruments: [
+        { kind: 'spindle', column: 6 },
+        { kind: 'nixie', column: 9 },
+      ],
       provenance: 'invented',
     },
     {
@@ -112,11 +173,14 @@ const catalogue: Record<string, RackModule[]> = {
       units: 4,
       finish: '#435451',
       controls: [
-        { kind: 'toggle', id: 'spin', label: 'SPIN', x: -1.6 },
-        { kind: 'knob', id: 'spindle', label: 'DRIVE', x: -0.65 },
-        { kind: 'knob', id: 'ratio', label: 'RATIO', x: 0.25 },
+        { kind: 'toggle', id: 'governorEngage', label: 'ENGAGE', column: 0 },
+        { kind: 'knob', id: 'governor', label: 'LIMIT', column: 2 },
+        { kind: 'knob', id: 'governorRatio', label: 'RESPONSE', column: 4 },
       ],
-      instruments: ['spindle', 'nixie'],
+      instruments: [
+        { kind: 'spindle', column: 6 },
+        { kind: 'nixie', column: 9 },
+      ],
       provenance: 'invented',
     },
   ],
@@ -128,12 +192,15 @@ const catalogue: Record<string, RackModule[]> = {
       units: 4,
       finish: '#3e4d58',
       controls: [
-        { kind: 'toggle', id: 'hb', label: 'H–B', x: -1.65 },
-        { kind: 'knob', id: 'field', label: 'FIELD', x: -0.8 },
-        { kind: 'knob', id: 'trim', label: 'BLATZ TRIM', x: 0.15 },
-        { kind: 'toggle', id: 'damp', label: 'DAMP', x: 1.1 },
+        { kind: 'toggle', id: 'hb', label: 'H–B', column: 0 },
+        { kind: 'knob', id: 'field', label: 'FIELD', column: 2 },
+        { kind: 'knob', id: 'trim', label: 'BLATZ TRIM', column: 4 },
+        { kind: 'toggle', id: 'damp', label: 'DAMP', column: 6 },
       ],
-      instruments: ['field', 'stability'],
+      instruments: [
+        { kind: 'field', column: 8 },
+        { kind: 'stability', column: 10 },
+      ],
       provenance: 'invented',
     },
     {
@@ -143,12 +210,15 @@ const catalogue: Record<string, RackModule[]> = {
       units: 4,
       finish: '#5a5147',
       controls: [
-        { kind: 'toggle', id: 'hb', label: 'H–B', x: -1.65 },
-        { kind: 'knob', id: 'field', label: 'EXCITE', x: -0.8 },
-        { kind: 'knob', id: 'trim', label: 'NULL', x: 0.15 },
-        { kind: 'toggle', id: 'gnd', label: 'GND?', x: 1.1 },
+        { kind: 'toggle', id: 'plasmaOn', label: 'PLASMA', column: 0 },
+        { kind: 'knob', id: 'plasmaExcite', label: 'EXCITE', column: 2 },
+        { kind: 'knob', id: 'plasmaNull', label: 'NULL', column: 4 },
+        { kind: 'toggle', id: 'gnd', label: 'GND?', column: 6 },
       ],
-      instruments: ['field', 'stability'],
+      instruments: [
+        { kind: 'field', column: 8 },
+        { kind: 'stability', column: 10 },
+      ],
       provenance: 'invented',
     },
   ],
@@ -160,10 +230,13 @@ const catalogue: Record<string, RackModule[]> = {
       units: 4,
       finish: '#36433f',
       controls: [
-        { kind: 'knob', id: 'gain', label: 'GAIN', x: -1.6 },
-        { kind: 'toggle', id: 'blatz', label: 'BLATZ', x: -0.75 },
+        { kind: 'knob', id: 'gain', label: 'GAIN', column: 0 },
+        { kind: 'toggle', id: 'blatz', label: 'BLATZ', column: 2 },
       ],
-      instruments: ['scope', 'nixie'],
+      instruments: [
+        { kind: 'scope', column: 4 },
+        { kind: 'nixie', column: 9 },
+      ],
       provenance: 'invented',
     },
     {
@@ -173,10 +246,13 @@ const catalogue: Record<string, RackModule[]> = {
       units: 4,
       finish: '#4b4548',
       controls: [
-        { kind: 'knob', id: 'gain', label: 'GAIN', x: -1.6 },
-        { kind: 'toggle', id: 'blatz', label: 'BLATZ', x: -0.75 },
+        { kind: 'knob', id: 'detectorGain', label: 'GAIN', column: 0 },
+        { kind: 'toggle', id: 'detectorBlatz', label: 'BLATZ', column: 2 },
       ],
-      instruments: ['scope', 'nixie'],
+      instruments: [
+        { kind: 'scope', column: 4 },
+        { kind: 'nixie', column: 9 },
+      ],
       provenance: 'invented',
     },
   ],
@@ -188,10 +264,10 @@ const catalogue: Record<string, RackModule[]> = {
       units: 3,
       finish: '#565247',
       controls: [
-        { kind: 'selector', label: 'BAND', x: -1.55 },
-        { kind: 'button', id: 'reset', label: 'RESET', x: -0.55 },
-        { kind: 'button', id: 'purge', label: 'PURGE', x: 0.45 },
-        { kind: 'button', id: 'do-not', label: 'DO NOT', x: 1.42 },
+        { kind: 'selector', id: 'busBand', label: 'BAND', column: 0 },
+        { kind: 'button', id: 'reset', label: 'RESET', column: 3 },
+        { kind: 'button', id: 'purge', label: 'PURGE', column: 6 },
+        { kind: 'button', id: 'do-not', label: 'DO NOT', column: 9 },
       ],
       instruments: [],
       provenance: 'invented',
@@ -203,16 +279,20 @@ const catalogue: Record<string, RackModule[]> = {
       units: 3,
       finish: '#4b5551',
       controls: [
-        { kind: 'selector', label: 'BAND', x: -1.55 },
-        { kind: 'button', id: 'reset', label: 'RESET', x: -0.55 },
-        { kind: 'button', id: 'purge', label: 'PURGE', x: 0.45 },
-        { kind: 'button', id: 'do-not', label: 'DO NOT', x: 1.42 },
+        { kind: 'selector', id: 'insulationBand', label: 'BAND', column: 0 },
+        { kind: 'button', id: 'reset', label: 'RESET', column: 3 },
+        { kind: 'button', id: 'purge', label: 'PURGE', column: 6 },
+        { kind: 'button', id: 'do-not', label: 'DO NOT', column: 9 },
       ],
       instruments: [],
       provenance: 'invented',
     },
   ],
 };
+
+/** Every module design, including the ones not fitted to this rack. */
+export const rackModules: readonly RackModule[] =
+  Object.values(catalogue).flat();
 
 /** Fixed power-to-measurement path; later behaviour can depend on exact neighbours. */
 export function assembleRack(): RackModule[] {

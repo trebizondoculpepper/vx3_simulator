@@ -26,16 +26,51 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import type { Material, MeshStandardMaterial, Object3D, Texture } from 'three';
+import type {
+  Intersection,
+  Material,
+  MeshStandardMaterial,
+  Object3D,
+  Texture,
+} from 'three';
 import { createSoundEngine } from '../audio/sound-engine';
+import type { SoundSource } from '../audio/sound-engine';
+import type { Emitter } from '../audio/spatial-mix';
+import { roomAt, transmission } from '../game/sound-rooms';
+import {
+  auditParts,
+  designate,
+  designationOf,
+  fixtureOf,
+  markFixture,
+  partInventory,
+} from '../game/machine-parts';
 import { assembleRack } from '../game/rack-catalogue';
+import {
+  PANEL_WIDTH,
+  PART_LABEL_SIZE,
+  RACK_UNIT,
+  layoutModule,
+} from '../game/rack-layout';
 import {
   applyRack,
   createRackControls,
   knobLine,
   toggleLine,
 } from '../game/rack-controls';
-import { createRig, deltaScore, stepRig } from '../game/rig';
+import type { ToggleId } from '../game/rack-controls';
+import { createRig, deltaScore, idealTrim, stepRig } from '../game/rig';
+import {
+  acknowledge,
+  boardHandles,
+  boardReadings,
+  boardView,
+  createBoard,
+  latchFault,
+  pressHandle,
+  startLampTest,
+  stepBoard,
+} from '../game/control-board';
 import {
   createSafetyTelltales,
   stepSafetyTelltales,
@@ -49,13 +84,24 @@ import {
 } from '../scene/screens';
 import { createWorldMapTexture } from '../scene/world-map';
 import { createCubMonitor } from '../scene/cub-monitor';
-import { createPedestalAshtray } from '../scene/pedestal-ashtray';
+import { createBbcMicro } from '../scene/bbc-micro';
+import { createAshtray } from '../scene/ashtray';
 import { createXenonCylinders } from '../scene/xenon-cylinders';
 import { createHotlinePhone } from '../scene/hotline-phone';
 import { createLabRoom } from '../scene/lab-room';
 import { createCorridor } from '../scene/corridor';
+import { createPlantRoom } from '../scene/plant-room';
+import { createMercuryRectifier } from '../scene/mercury-rectifier';
+import { createThermionicValve } from '../scene/thermionic-valve';
+import { knobDirection, mountRotaryKnob, stepKnob } from '../scene/rotary-knob';
+import {
+  XENON_HAZARD_STRAIN_PER_SECOND,
+  xenonHazard,
+} from '../game/xenon-supply';
+import { benchScreen } from '../game/bench-monitor';
 import { createToolRack } from '../scene/tool-rack';
 import { createWestWorkbench } from '../scene/west-workbench';
+import { createEastControlPanel } from '../scene/east-control-panel';
 import { createTouchSticks } from '../ui/touch-sticks';
 import { slide } from '../game/walk-collision';
 import type { Footprint } from '../game/walk-collision';
@@ -63,17 +109,17 @@ import { createTeleprinter } from '../scene/teleprinter';
 import { createPanelHeader, createPanelLivery } from '../scene/panel-livery';
 import { createPs1Material, ps1Uniforms } from './ps1-material';
 
-const panelWidth = 4.35;
+const panelWidth = PANEL_WIDTH;
 const worldUnitsPerMetre = panelWidth / 0.4826;
 // A panel is 19 inches across; one rack unit is 1.75 inches high.
-const U = (panelWidth * 1.75) / 19;
+const U = RACK_UNIT;
 // Ten named instruments and one open 4U inspection bay fill a 42U cabinet.
 const inspectionBayUnits = 4;
 // The handles occupy the outer edges of a panel. Instruments stay between them.
-const instrumentSafeRight = 1.72;
 
 export function startScene(canvas: HTMLCanvasElement) {
   const renderer = new WebGLRenderer({ canvas, antialias: false });
+  renderer.shadowMap.enabled = true;
   renderer.setPixelRatio(1);
   const perspectiveCamera = new PerspectiveCamera(52, 1, 0.1, 150);
   const isometricCamera = new OrthographicCamera(-4, 4, 4, -4, 0.1, 100);
@@ -99,8 +145,9 @@ export function startScene(canvas: HTMLCanvasElement) {
   const materials: Material[] = [];
   const textures: Texture[] = [];
   const interactive: Object3D[] = [];
-  const actions = new Map<number, () => void>();
+  const actions = new Map<number, (hit: Intersection) => void>();
   const dynamic: Array<() => void> = [];
+  const valveModels: Array<ReturnType<typeof createThermionicValve>> = [];
   const rig = createRig();
   const telltales = createSafetyTelltales();
   const settings = createRackControls();
@@ -172,9 +219,33 @@ export function startScene(canvas: HTMLCanvasElement) {
     mesh.position.set(x, y, z);
     parent.add(mesh);
   };
-  const bind = (object: Object3D, action: () => void) => {
+  const bind = (object: Object3D, action: (hit: Intersection) => void) => {
     interactive.push(object);
     actions.set(object.id, action);
+  };
+  // Everything fitted to a machine is an input (worked by the operator) or
+  // an indicator (driven by the machine); see src/game/machine-parts.ts.
+  // Clickable things that belong to the room are fixtures.
+  const input = (
+    object: Object3D,
+    machine: string,
+    name: string,
+    action: (hit: Intersection) => void,
+  ) => {
+    designate(object, { machine, name, role: 'input' });
+    bind(object, action);
+  };
+  const indicator = <T extends Object3D>(
+    object: T,
+    machine: string,
+    name: string,
+  ) => {
+    designate(object, { machine, name, role: 'indicator' });
+    return object;
+  };
+  const fixture = (object: Object3D, name: string, action: () => void) => {
+    markFixture(object, name);
+    bind(object, action);
   };
 
   // The cabinet belongs to a room: painted masonry, benches and old test gear.
@@ -191,16 +262,17 @@ export function startScene(canvas: HTMLCanvasElement) {
     ceilingY: floorY + 2.7 * worldUnitsPerMetre,
     worldUnitsPerMetre,
   };
+  const wallThickness = 0.3 * worldUnitsPerMetre;
   const backWallHeight = room.ceilingY - floorY;
   cube(
     lab,
     room.maxX - room.minX,
     backWallHeight,
-    0.18,
+    wallThickness,
     '#626f68',
     0,
     floorY + backWallHeight / 2,
-    -3.9,
+    room.minZ - wallThickness / 2,
   );
   cube(lab, room.maxX - room.minX, 3.4, 0.2, '#3d5750', 0, floorY + 1.7, -3.79);
   cube(
@@ -229,15 +301,33 @@ export function startScene(canvas: HTMLCanvasElement) {
     labRoom.update(performance.now() / 1000, reducedMotion.matches),
   );
   // Outside the door: the long basement corridor of the Helmholtz-Bau.
+  const plantRoom = createPlantRoom({
+    floorY,
+    worldUnitsPerMetre,
+    minX: room.minX - 4.5 * worldUnitsPerMetre - wallThickness,
+    maxX: room.minX - wallThickness,
+    minZ: room.minZ,
+    maxZ: room.maxZ,
+  });
+  scene.add(plantRoom.group);
+  const rectifier = createMercuryRectifier(worldUnitsPerMetre);
+  rectifier.group.position.set(
+    plantRoom.rectifierPosition.x,
+    floorY,
+    plantRoom.rectifierPosition.z,
+  );
+  rectifier.group.rotation.y = -Math.PI / 2;
+  scene.add(rectifier.group);
   const corridor = createCorridor({
     floorY,
     worldUnitsPerMetre,
-    northZ: room.maxZ + 0.2,
-    labMinX: room.minX - 0.2,
-    labMaxX: room.maxX + 0.2,
+    northZ: room.maxZ + wallThickness,
+    labMinX: room.minX - wallThickness,
+    labMaxX: room.maxX + wallThickness,
     doorX: labRoom.door.handle.x,
     doorWidth: labRoom.door.width,
     doorHeight: labRoom.door.height,
+    plantDoor: plantRoom.doorway,
   });
   scene.add(corridor.group);
   dynamic.push(() =>
@@ -258,9 +348,10 @@ export function startScene(canvas: HTMLCanvasElement) {
   toolRack.group.rotation.y = Math.PI;
   lab.add(toolRack.group);
   for (const item of toolRack.tools)
-    for (const part of item.parts) bind(part, () => write(item.note));
+    for (const part of item.parts)
+      fixture(part, 'Tool board', () => write(item.note));
   // A long workbench along the west wall, with the sink in the south-west
-  // corner. It starts clear of the xenon bank and the ashtray stand.
+  // corner. It starts clear of the xenon bank.
   const workbench = createWestWorkbench({
     floorY,
     worldUnitsPerMetre,
@@ -269,11 +360,113 @@ export function startScene(canvas: HTMLCanvasElement) {
     toZ: room.maxZ,
   });
   lab.add(workbench.group);
-  dynamic.push(() =>
-    workbench.update(performance.now() / 1000, reducedMotion.matches),
+  const eastControlPanel = createEastControlPanel(worldUnitsPerMetre);
+  eastControlPanel.group.position.set(
+    room.maxX - 0.025 * worldUnitsPerMetre,
+    floorY,
+    room.minZ + 2.65 * worldUnitsPerMetre,
   );
+  eastControlPanel.group.rotation.y = -Math.PI / 2;
+  lab.add(eastControlPanel.group);
+
+  // Switch actions shared by the rack and the east board, which works the
+  // rack remotely. Lines from the board are signed so the log says where.
+  const flipToggle = (id: ToggleId, from = '') => {
+    settings.toggles[id] = !settings.toggles[id];
+    applyRack(settings, rig.controls);
+    audio.play(settings.toggles[id] ? 'toggle-up' : 'toggle-down');
+    write(from + toggleLine(id, settings.toggles[id]));
+  };
+  const flipMains = (from = '') => {
+    settings.mains = !settings.mains;
+    if (!settings.mains) {
+      rig.controls.mains = false;
+      audio.play('breaker-off');
+      write(`${from}Mains switch off. Rig settling.`);
+      return;
+    }
+    if (!rig.controls.mains && !plantRoom.powered) {
+      audio.play('warning');
+      write(
+        `${from}Start refused: plant-room master supply is off. Close HAUPTSCHALTER beside the rectifier.`,
+      );
+      return;
+    }
+    rig.controls.mains = true;
+    audio.play(rig.controls.mains ? 'breaker-on' : 'breaker-off');
+    if (rig.controls.mains) window.setTimeout(() => audio.play('relay'), 110);
+    write(
+      from +
+        (rig.controls.mains
+          ? 'Mains closed. Heaters warming.'
+          : 'Mains opened. Rig settling. Ticking noises.'),
+    );
+  };
+  const resetRig = (from = '') => {
+    Object.assign(rig, createRig());
+    applyRack(settings, rig.controls);
+    write(`${from}RESET pressed. Rig reset, mostly.`);
+  };
+  const purge = (from = '') => {
+    rig.strain = Math.max(0, rig.strain - 0.35);
+    rig.drift *= 0.5;
+    audio.play('purge');
+    write(`${from}PURGE pressed. Hiss from behind the wall.`);
+  };
+
+  const board = createBoard();
+  const boardInputs = {
+    rig,
+    controls: settings,
+    telltales,
+    get xenonFlowSlpm() {
+      return xenon.flowSlpm;
+    },
+  };
+  const fromBoard = 'East board: ';
+  for (const [index, parts] of eastControlPanel.handles.entries()) {
+    const { action, label: name } = boardHandles[index];
+    for (const part of parts)
+      input(part, 'East board', `${name} handle`, () => {
+        if (action.kind === 'toggle') flipToggle(action.id, fromBoard);
+        else if (action.kind === 'mains') flipMains(fromBoard);
+        else {
+          pressHandle(board, index);
+          audio.play('selector');
+          if (action.kind === 'emergency-stop') {
+            const wasRunning = rig.controls.mains;
+            rig.controls.mains = false;
+            applyRack(settings, rig.controls);
+            if (wasRunning) audio.play('breaker-off');
+            write(
+              `${fromBoard}NOT-AUS. Mains, spindle and field off. The clock kept going.`,
+            );
+          } else if (action.kind === 'acknowledge') {
+            write(
+              acknowledge(board, boardInputs)
+                ? `${fromBoard}QUITT. Alarms acknowledged.`
+                : `${fromBoard}QUITT. Nothing to acknowledge.`,
+            );
+          } else if (action.kind === 'lamp-test') {
+            startLampTest(board);
+            write(`${fromBoard}Lamp test. Every bulb answers.`);
+          } else if (action.kind === 'purge') purge(fromBoard);
+          else if (action.kind === 'reset') resetRig(fromBoard);
+          else write(`${fromBoard}${name}.`);
+        }
+      });
+  }
+  dynamic.push(() => {
+    const drip = workbench.update(
+      performance.now() / 1000,
+      reducedMotion.matches,
+    );
+    const listener = camera().getWorldPosition(new Vector3());
+    if (drip && roomAt(roomPlan, listener.x, listener.z) === 'lab')
+      audio.play('drip');
+  });
   for (const part of workbench.tapParts)
-    bind(part, () =>
+    fixture(part, 'Sink tap', () =>
       write(
         workbench.toggleTap()
           ? 'Sink tap on. The pipes knock twice, then think better of it.'
@@ -283,12 +476,14 @@ export function startScene(canvas: HTMLCanvasElement) {
   // The door is used from within arm's reach, from either side.
   const doorReach = 2.8 * worldUnitsPerMetre;
   const doorParts = new Set<Object3D>(labRoom.door.parts);
+  for (const part of plantRoom.gateParts) doorParts.add(part);
+  for (const part of plantRoom.entryParts) doorParts.add(part);
   const withinReach = new Set<Object3D>([
     ...labRoom.door.parts,
     ...labRoom.lights.switchParts,
   ]);
   for (const part of labRoom.lights.switchParts)
-    bind(part, () => {
+    fixture(part, 'Light switch', () => {
       const on = labRoom.lights.toggle();
       audio.play(on ? 'toggle-up' : 'toggle-down');
       write(
@@ -313,7 +508,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       item.emissive.copy(item.color).multiply(item.color);
   });
   for (const part of labRoom.door.parts)
-    bind(part, () => {
+    fixture(part, 'Lab door', () => {
       const open = labRoom.door.toggle();
       audio.play(open ? 'relay' : 'breaker-off');
       write(open ? 'Lab door opened.' : 'Lab door closed.');
@@ -335,7 +530,11 @@ export function startScene(canvas: HTMLCanvasElement) {
   barrel.rotation.x = Math.PI / 2;
   barrel.position.z = 0.07;
   drum.add(barrel);
-  const carousel = new Group();
+  const carousel = indicator(
+    new Group(),
+    'Ferrocore drum',
+    'Carousel (turns with the spindle)',
+  );
   drum.add(carousel);
   disc(carousel, 0.59, '#826953', 0, 0, 0.36);
   disc(carousel, 0.49, '#283733', 0, 0, 0.371);
@@ -419,7 +618,11 @@ export function startScene(canvas: HTMLCanvasElement) {
   }
   for (let stage = 0; stage < 7; stage++) {
     const x = -0.77 + stage * 0.25;
-    const lamp = glows(disc(sideCabinet, 0.075, '#413b30', x, 0.96, 0.39));
+    const lamp = indicator(
+      glows(disc(sideCabinet, 0.075, '#413b30', x, 0.96, 0.39)),
+      'Side cabinet',
+      `Betaform stage ${stage + 1} lamp`,
+    );
     dynamic.push(() => {
       (lamp.material as ReturnType<typeof material>).color.set(
         rig.heater > (stage + 1) / 8 ? '#f3b157' : '#413b30',
@@ -433,14 +636,40 @@ export function startScene(canvas: HTMLCanvasElement) {
   ampKnob.rotation.x = Math.PI / 2;
   ampKnob.position.set(0.73, 0.7, 0.43);
   sideCabinet.add(ampKnob);
-  bind(ampKnob, () => {
-    settings.knobs.gain = (settings.knobs.gain + 0.1) % 1.01;
-    audio.play('knob');
-    write(`Betaform stage gain to ${(settings.knobs.gain * 10).toFixed(1)}.`);
+  const ampMarker = cube(
+    sideCabinet,
+    0.02,
+    0.075,
+    0.01,
+    '#e7d6ad',
+    0.73,
+    0.77,
+    0.5,
+  );
+  const ampPivot = mountRotaryKnob(ampKnob, ampMarker);
+  dynamic.push(() => {
+    ampPivot.rotation.z = -(settings.knobs.ampGain - 0.5) * 4.4;
   });
+  const turnAmp = (hit: Intersection) => {
+    settings.knobs.ampGain = stepKnob(
+      settings.knobs.ampGain,
+      knobDirection(ampPivot, hit.point, camera()),
+    );
+    applyRack(settings, rig.controls);
+    audio.play('knob');
+    write(
+      `Betaform stage gain to ${(settings.knobs.ampGain * 10).toFixed(1)}.`,
+    );
+  };
+  for (const part of [ampKnob, ampMarker])
+    input(part, 'Side cabinet', 'Betaform stage gain knob', turnAmp);
   disc(sideCabinet, 0.25, '#d7ad6b', 0, -0.11, 0.39);
   disc(sideCabinet, 0.16, '#273d3e', 0, -0.11, 0.4);
-  const emitterLamp = glows(disc(sideCabinet, 0.09, '#33433e', 0, -0.11, 0.41));
+  const emitterLamp = indicator(
+    glows(disc(sideCabinet, 0.09, '#33433e', 0, -0.11, 0.41)),
+    'Side cabinet',
+    'Flux emitter lamp',
+  );
   dynamic.push(() => {
     (emitterLamp.material as ReturnType<typeof material>).color.set(
       rig.field > 0.2 ? '#7ce5c5' : '#33433e',
@@ -472,9 +701,15 @@ export function startScene(canvas: HTMLCanvasElement) {
     material('#272d2a'),
   );
   lab.add(sideConduit);
-  // Steel document cabinet for the reconstructed operating papers.
+  // Steel document cabinet for the operating papers.
   const fileCabinet = new Group();
-  fileCabinet.position.set(10.8, floorY + 4.57, 1.2);
+  // South-east corner, clear of the process board; drawers face the aisle.
+  fileCabinet.position.set(
+    room.maxX - 0.33 * worldUnitsPerMetre,
+    floorY + 4.57,
+    room.maxZ - 0.5 * worldUnitsPerMetre,
+  );
+  fileCabinet.rotation.y = -Math.PI / 2;
   fileCabinet.scale.set(2.8, 3.68, 4.8);
   lab.add(fileCabinet);
   cube(fileCabinet, 1.52, 2.48, 1.08, '#81918d', 0, 0, -0.13);
@@ -497,7 +732,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     const front = cube(drawer, 1.32, 0.67, 0.08, '#a7b5ae', 0, 0, 0.47);
     cube(drawer, 0.55, 0.13, 0.07, '#515e56', 0, -0.13, 0.53);
     label(drawer, drawerNames[index], 0, 0.14, 0.53, 8, '#344139', '#e2dbc6');
-    bind(front, () => {
+    fixture(front, 'Reference drawer', () => {
       openDrawer = openDrawer === index ? -1 : index;
       drawers.forEach((item, itemIndex) => {
         item.position.z = itemIndex === openDrawer ? 0.2 : 0;
@@ -571,20 +806,27 @@ export function startScene(canvas: HTMLCanvasElement) {
     'neumann-dynamik',
     'bonk-industries',
   ].entries()) {
-    const x = 3.1 + index * 2.9;
-    const y = floorY + 17.3;
-    cube(lab, 2.48, 3.64, 0.035, '#4b3e31', x, y, -3.5);
+    const frame = new Group();
+    frame.position.set(
+      room.minX + 0.035 * worldUnitsPerMetre,
+      floorY + 1.47 * worldUnitsPerMetre,
+      room.minZ + (1.9 + index * 0.85) * worldUnitsPerMetre,
+    );
+    frame.rotation.y = Math.PI / 2;
+    frame.scale.setScalar(worldUnitsPerMetre);
+    lab.add(frame);
+    cube(frame, 0.46, 0.67, 0.012, '#4b3e31', 0, 0, 0);
     const poster = posterLoader.load(`/posters/${name}.png`);
     poster.colorSpace = SRGBColorSpace;
     poster.magFilter = NearestFilter;
     textures.push(poster);
     const printedFace = new Mesh(
-      new PlaneGeometry(2.25, 3.4),
+      new PlaneGeometry(0.42, 0.63),
       createPs1Material({ map: poster }, true),
     );
     materials.push(printedFace.material);
-    printedFace.position.set(x, y, -3.46);
-    lab.add(printedFace);
+    printedFace.position.z = 0.007;
+    frame.add(printedFace);
   }
   for (let x = -8.5; x <= 8.5; x += 2.4) {
     cube(lab, 0.025, totalHeight + 4, 0.025, '#77847a', x, 0, -3.77);
@@ -682,7 +924,11 @@ export function startScene(canvas: HTMLCanvasElement) {
     const x = wallDisplayX + (u - 0.5) * 2.8;
     const y = wallDisplayTop - 2.04 + (v - 0.5) * 1.34;
     disc(lab, 0.068, '#46443a', x, y, -3.55);
-    const light = glows(disc(lab, 0.038, '#f0b85b', x, y, -3.53));
+    const light = indicator(
+      glows(disc(lab, 0.038, '#f0b85b', x, y, -3.53)),
+      'Flux correlation map',
+      'Pin light',
+    );
     dynamic.push(() => {
       (light.material as ReturnType<typeof material>).color.set(
         Math.sin(performance.now() * 0.0013 + index * 1.8) > -0.45
@@ -736,6 +982,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     -3.21,
   );
   loadNeedle.geometry.translate(0, 0.16, 0);
+  indicator(loadNeedle, 'Wall load meter', 'Load kW needle');
   disc(lab, 0.045, '#4b4135', wallDisplayX - 0.69, meterY - 0.06, -3.195);
   label(lab, 'LOAD kW', wallDisplayX - 0.69, meterY - 0.52, -3.22, 8);
   cube(
@@ -756,7 +1003,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   );
   materials.push(registerFace.material);
   registerFace.position.set(wallDisplayX + 0.62, meterY - 0.08, -3.205);
-  lab.add(registerFace);
+  lab.add(indicator(registerFace, 'Wall load meter', 'kWh register'));
   label(lab, 'TOTAL kWh', wallDisplayX + 0.62, meterY - 0.45, -3.23, 8);
   let lastRegister = '';
   dynamic.push(() => {
@@ -788,9 +1035,13 @@ export function startScene(canvas: HTMLCanvasElement) {
   crystal.scale.set(0.72, 1.28, 0.56);
   crystal.rotation.z = 0.24;
   crystal.position.set(wallDisplayX, crystalY - 0.11, -3.13);
-  lab.add(crystal);
-  const crystalLamp = glows(
-    disc(lab, 0.09, '#425c5c', wallDisplayX + 0.61, crystalY - 0.5, -3.38),
+  lab.add(indicator(crystal, 'Time Dilation tell-tale', 'Crystal'));
+  const crystalLamp = indicator(
+    glows(
+      disc(lab, 0.09, '#425c5c', wallDisplayX + 0.61, crystalY - 0.5, -3.38),
+    ),
+    'Time Dilation tell-tale',
+    'Pulse lamp',
   );
   dynamic.push(() => {
     const pulse = telltales.crystalPulse;
@@ -847,71 +1098,138 @@ export function startScene(canvas: HTMLCanvasElement) {
   // A Microvitec Cub on the bench, kept out of the bench's stretched
   // scale so its proportions stay true.
   const cub = createCubMonitor(worldUnitsPerMetre);
-  cub.group.position.set(
+  const bbc = createBbcMicro(worldUnitsPerMetre);
+  bbc.group.position.set(
     bench.position.x + 0.42 * bench.scale.x,
     floorY + 1.3775 * bench.scale.y,
-    -1.6,
+    0.35,
+  );
+  lab.add(bbc.group);
+  cub.group.position.set(
+    bbc.group.position.x,
+    bbc.group.position.y + bbc.monitorHeight,
+    bbc.group.position.z - 0.23 * worldUnitsPerMetre,
   );
   lab.add(cub.group);
-  dynamic.push(() => cub.update(performance.now() / 1000));
+  dynamic.push(() => {
+    const seconds = performance.now() / 1000;
+    cub.update(
+      seconds,
+      benchScreen({ rig, xenonFlowSlpm: xenon.flowSlpm }, seconds % 1 < 0.67)
+        .lines,
+    );
+  });
 
-  // The brass stand sits left of the xenon bank, cigarette still burning.
-  const ashtray = createPedestalAshtray();
-  ashtray.group.position.set(-19.0, floorY, -1.6);
-  ashtray.group.scale.setScalar(3.3);
+  // A small glass ashtray on the worktop, just north of the sink.
+  const ashtray = createAshtray();
+  ashtray.group.position.set(
+    room.minX + 0.42 * worldUnitsPerMetre,
+    floorY + 0.9 * worldUnitsPerMetre,
+    room.maxZ - 0.85 * worldUnitsPerMetre,
+  );
+  ashtray.group.scale.setScalar(0.375 * worldUnitsPerMetre);
   lab.add(ashtray.group);
   dynamic.push(() =>
     ashtray.update(performance.now() / 1000, reducedMotion.matches),
   );
 
-  // Xenon supply: cylinders against the wall left of the bench, with a thick
-  // hose run behind the bench to a bulkhead on the back of the main cabinet.
+  // Caged plant-room xenon bank; flexible hose terminates at the wall port.
   const xenonFloor = floorY + 0.05;
   const xenon = createXenonCylinders({
     floorY,
-    x: -16.5,
-    z: -3.3,
+    x: plantRoom.bank.x,
+    z: plantRoom.bank.z,
     hoseVia: [
-      new Vector3(-13.1, xenonFloor, -2.55),
-      new Vector3(-5.1, xenonFloor, -2.6),
-      new Vector3(-2.2, xenonFloor, -1.6),
+      new Vector3(
+        plantRoom.port.x - 0.2 * worldUnitsPerMetre,
+        xenonFloor,
+        plantRoom.port.z,
+      ),
     ],
-    hoseEnd: new Vector3(-1.6, floorY + 1.3, -0.86),
+    hoseEnd: new Vector3(plantRoom.port.x, plantRoom.port.y, plantRoom.port.z),
   });
-  lab.add(xenon.group);
+  scene.add(xenon.group);
+  for (const part of plantRoom.entryParts) {
+    withinReach.add(part);
+    fixture(part, 'Plant room door', () => {
+      const open = plantRoom.toggleEntry();
+      audio.play('selector');
+      write(open ? 'Plant-room door opening.' : 'Plant-room door closing.');
+    });
+  }
+  for (const part of plantRoom.powerParts) {
+    withinReach.add(part);
+    input(part, 'Plant-room supply', 'HAUPTSCHALTER', () => {
+      const on = plantRoom.togglePower();
+      audio.play(on ? 'breaker-on' : 'breaker-off');
+      write(
+        on
+          ? 'Plant master supply on. Mercury arc struck.'
+          : 'Plant master supply off. Room lights remain on.',
+      );
+    });
+  }
+  for (const part of plantRoom.gateParts) {
+    withinReach.add(part);
+    fixture(part, 'Xenon cage gate', () => {
+      const open = plantRoom.toggle();
+      audio.play('selector');
+      write(
+        open
+          ? 'Plant room: xenon cage opening. Set flow to at least 2 SLPM.'
+          : 'Plant room: xenon cage closed.',
+      );
+    });
+  }
   dynamic.push(() =>
     xenon.update(performance.now() / 1000, reducedMotion.matches),
   );
-  bind(xenon.regulatorKnob, () => {
-    const setting = xenon.stepRegulator();
+  const turnRegulator = (hit: Intersection) => {
+    if (!plantRoom.open) {
+      write('Open the xenon cage before operating the flow valve.');
+      return;
+    }
+    const setting = xenon.stepRegulator(
+      knobDirection(xenon.regulatorPivot, hit.point, camera()),
+    );
     audio.play('knob');
     write(
       setting === 0
         ? 'Xenon regulator wound shut.'
         : `Xenon regulator to ${(setting * 4).toFixed(1)} bar; flow settling toward ${(setting * 10).toFixed(1)} SLPM.`,
     );
-  });
+  };
+  for (const part of xenon.regulatorParts)
+    input(part, 'Xenon supply', 'Flow regulator', turnRegulator);
+  for (const part of xenon.regulatorParts) withinReach.add(part);
 
-  // The emergency telephone is on the east wall at shoulder height.
+  // Corridor side of the lab entrance, left of the door so the room's door
+  // plate on the right stays clear.
   const hotline = createHotlinePhone();
   hotline.group.position.set(
-    room.maxX - 0.16,
+    labRoom.door.handle.x - labRoom.door.width / 2 - 0.95 * worldUnitsPerMetre,
     floorY + 1.4 * worldUnitsPerMetre,
-    8,
+    room.maxZ + wallThickness + 0.035,
   );
-  hotline.group.rotation.y = -Math.PI / 2;
+  hotline.group.rotation.y = 0;
   // A roughly 18 cm wide wall telephone with a legible hazard sign.
   hotline.group.scale.setScalar(3.5);
   lab.add(hotline.group);
 
   const teleprinter = createTeleprinter();
   const printerY = floorY + 0.95 * worldUnitsPerMetre;
-  teleprinter.group.position.set(room.maxX - 0.42, printerY, 1.25);
+  // Keep an 80 mm gap between the printer casing and the adjacent console.
+  const printerZ =
+    eastControlPanel.group.position.z -
+    1.125 * worldUnitsPerMetre -
+    (2.34 * 2.5) / 2 -
+    0.08 * worldUnitsPerMetre;
+  teleprinter.group.position.set(room.maxX - 0.42, printerY, printerZ);
   teleprinter.group.scale.setScalar(2.5);
   teleprinter.group.rotation.y = -Math.PI / 2;
   teleprinter.outputPile.position.y = (floorY - printerY) / 2.5 + 0.08;
   for (const y of [printerY - 1.4, printerY + 0.9])
-    cube(lab, 0.94, 0.09, 0.12, '#67736c', room.maxX - 0.38, y, 1.25);
+    cube(lab, 0.94, 0.09, 0.12, '#67736c', room.maxX - 0.38, y, printerZ);
   lab.add(teleprinter.group);
 
   // The wall outlet and the trailing rubber mains lead are visible at rack base.
@@ -1042,6 +1360,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     y: number,
     reading: () => number,
     caption: string,
+    machine: string,
   ) => {
     const dial = createDialTexture();
     textures.push(dial);
@@ -1054,6 +1373,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     panel.add(face);
     const needle = cube(panel, 0.018, 0.28, 0.012, '#a63425', x, y, 0.31);
     needle.geometry.translate(0, 0.13, 0);
+    indicator(face, machine, `${caption} gauge`);
+    indicator(needle, machine, `${caption} gauge`);
     dynamic.push(() => {
       needle.rotation.z =
         Math.PI * (0.75 - Math.max(0, Math.min(1, reading())) * 1.5);
@@ -1062,14 +1383,15 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
 
   let top = totalHeight / 2 - 0.2;
-  let band = 2;
   const bands = ['A', 'B', 'C', 'D', 'E', 'Ω'];
+  const soundPanels: Array<[SoundSource, Group]> = [];
   for (const [moduleIndex, module] of modules.entries()) {
     const h = module.units * U;
     const y = top - h / 2;
     const panel = new Group();
     panel.position.y = y;
     rack.add(panel);
+    soundPanels.push([module.id.split('-')[0] as SoundSource, panel]);
     cube(panel, panelWidth, h - 0.055, 0.27, module.finish, 0, 0, 0.04);
     const livery = createPanelLivery(module.maker, module.finish, module.units);
     textures.push(livery);
@@ -1100,22 +1422,26 @@ export function startScene(canvas: HTMLCanvasElement) {
         );
       }
     }
+    // Everything on the faceplate sits on its grid (src/game/rack-layout.ts),
+    // so nothing can overprint the title plate, the footer or a neighbour.
+    const layout = layoutModule(module, U);
     const header = createPanelHeader(module.maker, module.title);
     textures.push(header);
     const headerPlate = new Mesh(
-      new PlaneGeometry(4.05, 0.3),
+      new PlaneGeometry(layout.title.width, layout.title.height),
       createPs1Material({ map: header }, true),
     );
     materials.push(headerPlate.material);
-    headerPlate.position.set(0, h / 2 - 0.27, 0.235);
+    headerPlate.position.set(layout.title.x, layout.title.y, 0.235);
     panel.add(headerPlate);
+    // The footer carries the module stamp on the right and vents on the left.
     label(
       panel,
       module.id.toUpperCase(),
-      1.51,
-      -h / 2 + 0.17,
+      1.55,
+      layout.footer.y,
       0.235,
-      8,
+      6,
       '#342d20',
       '#c6b68e',
     );
@@ -1126,178 +1452,142 @@ export function startScene(canvas: HTMLCanvasElement) {
         0.025,
         0.015,
         '#1d2423',
-        1.4 + vent * 0.1,
-        h / 2 - 0.55,
+        -1.62 + vent * 0.1,
+        layout.footer.y,
         0.215,
       );
 
-    if (module.id.startsWith('valves')) {
-      const tubeSwitches = ['aux1', 'xtalA', 'xtalB', 'xtalC'] as const;
-      for (const [index, x] of [-1.35, -0.55, 0.25, 1.05].entries()) {
-        cube(panel, 0.28, 0.07, 0.19, '#252823', x, 0.09, 0.31);
-        const glassMaterial = material('#40342b');
-        const glass = new Mesh(
-          new CylinderGeometry(0.1, 0.1, 0.2, 8),
-          glassMaterial,
-        );
-        glass.position.set(x, 0.22, 0.34);
-        panel.add(glass);
-        const filament = cube(
-          panel,
-          0.065,
-          0.17,
-          0.025,
-          '#4f2f19',
-          x,
-          0.37,
-          0.46,
-        );
-        const filamentMaterial = filament.material as ReturnType<
-          typeof material
-        >;
-        let glowLevel = 0;
-        dynamic.push(() => {
-          const target =
-            rig.heater *
-            (settings.toggles.ht ? 1 : 0.03) *
-            (settings.toggles[tubeSwitches[index]] ? 1 : 0.08);
-          glowLevel += (target - glowLevel) * 0.075;
-          const time = performance.now() * 0.001;
-          const flutter =
-            0.86 +
-            0.1 * Math.sin(time * (9.7 + index * 1.4) + index * 2.1) +
-            0.04 * Math.sin(time * (31 + index * 3.3));
-          const brightness = Math.max(0, glowLevel * flutter);
-          filamentMaterial.color.setRGB(
-            0.2 + brightness * 0.8,
-            0.1 + brightness * 0.36,
-            0.04 + brightness * 0.08,
+    for (const part of layout.parts) {
+      // Each part is drawn at its natural size around its cell's centre,
+      // then scaled to fit; depth is left alone.
+      const slot = new Group();
+      slot.position.set(part.rect.x, part.rect.y, 0);
+      slot.scale.set(part.scale, part.scale, 1);
+      panel.add(slot);
+      const machine = `VX3 rack · ${module.id.toUpperCase()}`;
+      if (part.source.list === 'controls') {
+        const control = module.controls[part.source.index];
+        if (part.kind === 'valve') {
+          const toggleId = control.kind === 'toggle' ? control.id : 'ht';
+          const valve = createThermionicValve();
+          indicator(valve.group, machine, `${control.label} valve`);
+          slot.add(valve.group);
+          valveModels.push(valve);
+          dynamic.push(() =>
+            valve.update(
+              rig.heater *
+                (settings.toggles.ht ? 1 : 0.03) *
+                (settings.toggles[toggleId] ? 1 : 0.08),
+              performance.now() / 1000,
+              reducedMotion.matches,
+            ),
           );
-          glassMaterial.color.setRGB(
-            0.24 + brightness * 0.19,
-            0.19 + brightness * 0.09,
-            0.14 + brightness * 0.025,
+          continue;
+        }
+        if (control.kind === 'knob' || control.kind === 'selector') {
+          const cy = 0.1;
+          disc(slot, 0.26, '#1e2422', 0, cy, 0.25);
+          const knobPivot = new Group();
+          knobPivot.position.set(0, cy, 0.35);
+          slot.add(knobPivot);
+          const knob = new Mesh(
+            new CylinderGeometry(0.18, 0.2, 0.13, 12),
+            material(control.kind === 'selector' ? '#8b7853' : '#252928'),
           );
-        });
-      }
-    }
-
-    for (const control of module.controls) {
-      const x = control.x;
-      const cy = module.units >= 4 ? -0.28 : -0.2;
-      if (control.kind === 'knob' || control.kind === 'selector') {
-        disc(panel, 0.26, '#1e2422', x, cy, 0.25);
-        const knob = new Mesh(
-          new CylinderGeometry(0.18, 0.2, 0.13, 12),
-          material(control.kind === 'selector' ? '#8b7853' : '#252928'),
-        );
-        knob.rotation.x = Math.PI / 2;
-        knob.position.set(x, cy, 0.35);
-        panel.add(knob);
-        const mark = cube(
-          panel,
-          0.025,
-          0.12,
-          0.012,
-          '#e7d6ad',
-          x,
-          cy + 0.11,
-          0.43,
-        );
-        const id = control.kind === 'knob' ? control.id : null;
-        const update = () => {
-          mark.rotation.z = -((id ? settings.knobs[id] : band / 5) - 0.5) * 4.4;
-        };
-        dynamic.push(update);
-        bind(knob, () => {
-          if (id) {
-            settings.knobs[id] = (settings.knobs[id] + 0.1) % 1.01;
-            applyRack(settings, rig.controls);
-            audio.play('knob');
-            write(knobLine(id, settings.knobs[id]));
-          } else {
-            band = (band + 1) % bands.length;
-            settings.knobs.ratio = band / 5;
-            audio.play('selector');
-            write(`Band ${bands[band]} selected.`);
-          }
-        });
-      } else if (control.kind === 'button') {
-        disc(panel, 0.24, '#202521', x, cy, 0.25);
-        const color =
-          control.id === 'reset'
-            ? '#638960'
-            : control.id === 'purge'
-              ? '#b29952'
-              : '#ad5946';
-        const button = cube(panel, 0.26, 0.2, 0.12, color, x, cy, 0.35);
-        bind(button, () => {
-          audio.play('button');
-          if (control.id === 'reset') {
-            Object.assign(rig, createRig());
-            applyRack(settings, rig.controls);
-            write('RESET pressed. Rig reset, mostly.');
-          } else if (control.id === 'purge') {
-            rig.strain = Math.max(0, rig.strain - 0.35);
-            rig.drift *= 0.5;
-            audio.play('purge');
-            write('PURGE pressed. Hiss from behind the wall.');
-          } else {
-            if (rig.controls.mains) rig.strain = Math.min(1, rig.strain + 0.15);
-            audio.play('spark');
-            write('Pressed DO NOT. The annotation was unspecific.');
-          }
-        });
-      } else {
-        const id = control.kind === 'toggle' ? control.id : null;
-        const isOn = () => (id ? settings.toggles[id] : rig.controls.mains);
-        disc(panel, 0.2, '#1e2220', x, cy, 0.25);
-        const switchBody = cube(
-          panel,
-          0.18,
-          0.26,
-          0.15,
-          control.kind === 'mains' ? '#ab4933' : '#c5bda5',
-          x,
-          cy,
-          0.36,
-        );
-        const indicator = glows(
-          disc(panel, 0.05, '#473829', x, cy + 0.3, 0.28),
-        );
-        dynamic.push(() => {
-          switchBody.rotation.x = isOn() ? -0.45 : 0.45;
-          (indicator.material as ReturnType<typeof material>).color.set(
-            isOn() && rig.heater > 0 ? '#f7a344' : '#473829',
+          knob.rotation.x = Math.PI / 2;
+          knobPivot.add(knob);
+          const mark = cube(
+            knobPivot,
+            0.025,
+            0.12,
+            0.012,
+            '#e7d6ad',
+            0,
+            0.11,
+            0.08,
           );
-        });
-        bind(switchBody, () => {
-          if (id) {
-            settings.toggles[id] = !settings.toggles[id];
-            applyRack(settings, rig.controls);
-            audio.play(settings.toggles[id] ? 'toggle-up' : 'toggle-down');
-            write(toggleLine(id, settings.toggles[id]));
-          } else {
-            rig.controls.mains = !rig.controls.mains;
-            audio.play(rig.controls.mains ? 'breaker-on' : 'breaker-off');
-            if (rig.controls.mains)
-              window.setTimeout(() => audio.play('relay'), 110);
-            write(
-              rig.controls.mains
-                ? 'Mains closed. Heaters warming.'
-                : 'Mains opened. Rig settling. Ticking noises.',
+          const id = control.id;
+          dynamic.push(() => {
+            knobPivot.rotation.z = -(settings.knobs[id] - 0.5) * 4.4;
+          });
+          const turn = (hit: Intersection) => {
+            const direction = knobDirection(knobPivot, hit.point, camera());
+            if (control.kind === 'knob') {
+              settings.knobs[id] = stepKnob(settings.knobs[id], direction);
+              applyRack(settings, rig.controls);
+              audio.play('knob');
+              write(knobLine(id, settings.knobs[id]));
+            } else {
+              const band =
+                (Math.round(settings.knobs[id] * (bands.length - 1)) +
+                  direction +
+                  bands.length) %
+                bands.length;
+              settings.knobs[id] = band / (bands.length - 1);
+              audio.play('selector');
+              write(`Band ${bands[band]} selected.`);
+            }
+          };
+          for (const part of [knob, mark])
+            input(part, machine, `${control.label} ${control.kind}`, turn);
+          label(slot, control.label, 0, -0.28, 0.28, PART_LABEL_SIZE);
+        } else if (control.kind === 'button') {
+          const cy = 0.11;
+          disc(slot, 0.24, '#202521', 0, cy, 0.25);
+          const color =
+            control.id === 'reset'
+              ? '#638960'
+              : control.id === 'purge'
+                ? '#b29952'
+                : '#ad5946';
+          const button = cube(slot, 0.26, 0.2, 0.12, color, 0, cy, 0.35);
+          input(button, machine, `${control.label} button`, () => {
+            audio.play('button');
+            if (control.id === 'reset') resetRig();
+            else if (control.id === 'purge') purge();
+            else {
+              if (rig.controls.mains)
+                rig.strain = Math.min(1, rig.strain + 0.15);
+              audio.play('spark');
+              write('Pressed DO NOT. The annotation was unspecific.');
+            }
+          });
+          label(slot, control.label, 0, -0.27, 0.28, PART_LABEL_SIZE);
+        } else {
+          const cy = 0.05;
+          const id = control.kind === 'toggle' ? control.id : null;
+          const isOn = () => (id ? settings.toggles[id] : settings.mains);
+          disc(slot, 0.2, '#1e2220', 0, cy, 0.25);
+          const switchBody = cube(
+            slot,
+            0.18,
+            0.26,
+            0.15,
+            control.kind === 'mains' ? '#ab4933' : '#c5bda5',
+            0,
+            cy,
+            0.36,
+          );
+          const lamp = indicator(
+            glows(disc(slot, 0.05, '#473829', 0, 0.34, 0.28)),
+            machine,
+            `${control.label} lamp`,
+          );
+          dynamic.push(() => {
+            switchBody.rotation.x = isOn() ? -0.45 : 0.45;
+            (lamp.material as ReturnType<typeof material>).color.set(
+              isOn() && rig.heater > 0 ? '#f7a344' : '#473829',
             );
-          }
-        });
+          });
+          input(switchBody, machine, `${control.label} switch`, () => {
+            if (id) flipToggle(id);
+            else flipMains();
+          });
+          label(slot, control.label, 0, -0.3, 0.28, PART_LABEL_SIZE);
+        }
+        continue;
       }
-      label(panel, control.label, x, cy - 0.38, 0.28, 9);
-    }
-    const instrumentY = module.units >= 4 ? 0.15 : -0.05;
-    for (const [index, instrument] of module.instruments.entries()) {
-      const x =
-        module.instruments.length === 1
-          ? 1.17
-          : Math.min(instrumentSafeRight - 0.38, 0.8 + index * 0.58);
+      const instrument = module.instruments[part.source.index].kind;
       if (instrument === 'scope') {
         const scope = createScopeScreen(96, 64);
         textures.push(scope.texture);
@@ -1306,8 +1596,8 @@ export function startScene(canvas: HTMLCanvasElement) {
           createPs1Material({ map: scope.texture }, true, true),
         );
         materials.push(screen.material);
-        screen.position.set(1.1, instrumentY, 0.29);
-        panel.add(screen);
+        screen.position.set(0, 0, 0.29);
+        slot.add(indicator(screen, machine, 'Oscilloscope'));
         dynamic.push(() => {
           const points: [number, number][] = Array.from(
             { length: 40 },
@@ -1318,10 +1608,22 @@ export function startScene(canvas: HTMLCanvasElement) {
                   i * (0.45 + settings.knobs.ratio) + performance.now() * 0.003,
                 ) *
                   rig.field *
-                  (0.08 + settings.knobs.gain * 0.2 + rig.instability * 0.15),
+                  (0.08 +
+                    settings.knobs[
+                      module.id === 'monitor-b' ? 'detectorGain' : 'gain'
+                    ] *
+                      0.2 +
+                    rig.instability * 0.15),
             ],
           );
-          scope.draw(points, rig.controls.mains);
+          // Each monitor's BLATZ switch puts the field on its own trace.
+          scope.draw(
+            points,
+            rig.controls.mains &&
+              settings.toggles[
+                module.id === 'monitor-b' ? 'detectorBlatz' : 'blatz'
+              ],
+          );
         });
       } else if (instrument === 'nixie') {
         const nixie = createNixieScreen();
@@ -1331,8 +1633,8 @@ export function startScene(canvas: HTMLCanvasElement) {
           createPs1Material({ map: nixie.texture }, true, true),
         );
         materials.push(screen.material);
-        screen.position.set(1.1, instrumentY - 0.75, 0.29);
-        panel.add(screen);
+        screen.position.set(0, 0, 0.29);
+        slot.add(indicator(screen, machine, 'Nixie counter'));
         dynamic.push(() =>
           nixie.draw(
             String(
@@ -1354,7 +1656,7 @@ export function startScene(canvas: HTMLCanvasElement) {
               : instrument === 'field'
                 ? () => rig.field
                 : () => rig.instability;
-        addGauge(panel, x, instrumentY, reading, instrument.toUpperCase());
+        addGauge(slot, 0, 0.115, reading, instrument.toUpperCase(), machine);
       }
     }
     top -= h + 0.045;
@@ -1399,7 +1701,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       const glow = material('#354846', true, true);
       const node = new Mesh(new CircleGeometry(0.13, 8), glow);
       node.position.set(x, -0.25 + x * 0.17, 0.23);
-      bay.add(node);
+      bay.add(indicator(node, 'VX3 rack · FIELD BUS', 'Field tap'));
       dynamic.push(() => {
         const pulse = (Math.sin(performance.now() / 580 + x * 3) + 1) / 2;
         glow.color.set(rig.controls.mains ? '#3fe8c3' : '#354846');
@@ -1412,13 +1714,58 @@ export function startScene(canvas: HTMLCanvasElement) {
     top -= bayHeight + 0.045;
   }
 
+  // Each continuous sound comes from the middle of the panels that make it.
+  scene.traverse((object) => {
+    if (object instanceof Mesh) object.receiveShadow = true;
+  });
+  scene.updateMatrixWorld(true);
+  const soundCentres = new Map<SoundSource, Vector3[]>();
+  for (const [source, panel] of soundPanels) {
+    const centres = soundCentres.get(source) ?? [];
+    centres.push(panel.localToWorld(new Vector3(0, 0, 0.2)));
+    soundCentres.set(source, centres);
+  }
+  const soundSources = [
+    ...[...soundCentres].map(([id, centres]) => {
+      const centre = centres
+        .reduce((sum, point) => sum.add(point), new Vector3())
+        .divideScalar(centres.length);
+      return { id, x: centre.x, y: centre.y, z: centre.z };
+    }),
+    {
+      id: 'sink',
+      x: room.minX + 0.325 * worldUnitsPerMetre,
+      y: floorY + 0.52 * worldUnitsPerMetre,
+      z: room.maxZ - 0.395 * worldUnitsPerMetre,
+    },
+    {
+      id: 'rectifier',
+      x: rectifier.group.position.x,
+      y: floorY + worldUnitsPerMetre,
+      z: rectifier.group.position.z,
+    },
+  ] satisfies Array<Emitter & { id: SoundSource }>;
+  // Shut doors stop sound between the lab, the plant room and the corridor.
+  const roomPlan = { lab: room, plant: plantRoom.bounds };
+  const soundRooms = soundSources.map(
+    (source) => [source.id, roomAt(roomPlan, source.x, source.z)] as const,
+  );
+  audio.setSources(soundSources, {
+    reference: 1.5 * worldUnitsPerMetre,
+    cutoff: 25 * worldUnitsPerMetre,
+    maxGain: 2,
+    moveThreshold: 0.05 * worldUnitsPerMetre,
+  });
+  const ear = new Vector3();
+  const facing = new Vector3();
+
   const overlay = document.createElement('div');
   overlay.className = 'rack-ui';
-  overlay.innerHTML = `<div class="rack-heading"><strong>VX3 / FULL RIG</strong><small>EARLY-1970s ANALOGUE APPARATUS</small><span id="rig-status">RIG COLD</span><span id="delta-readout">δ 0.000 / 0.880</span></div><div class="view-switch" role="group" aria-label="Camera view"><button type="button" data-view="perspective" aria-pressed="true">PERSPECTIVE</button><button type="button" data-view="isometric" aria-pressed="false">ISOMETRIC</button></div><div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Pan and zoom"><button type="button" data-pan="left" aria-label="Pan left">◀</button><button type="button" data-pan="up" aria-label="Pan up">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Pan down">▼</button><button type="button" data-pan="right" aria-label="Pan right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook"><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log" hidden>▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · CLICK / E: USE · WHEEL: ZOOM · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
+  overlay.innerHTML = `<div class="view-switch" role="group" aria-label="Camera view"><button type="button" data-view="perspective" aria-pressed="true">PERSPECTIVE</button><button type="button" data-view="isometric" aria-pressed="false">ISOMETRIC</button></div><div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Pan and zoom"><button type="button" data-pan="left" aria-label="Pan left">◀</button><button type="button" data-pan="up" aria-label="Pan up">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Pan down">▼</button><button type="button" data-pan="right" aria-label="Pan right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook"><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log" hidden>▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: ZOOM · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
   const manualSheet = document.createElement('aside');
   manualSheet.className = 'manual-sheet';
   manualSheet.hidden = true;
-  manualSheet.innerHTML = `<div class="manual-head"><strong id="manual-title"></strong><button type="button" aria-label="Close reference sheet">×</button></div><pre id="manual-content"></pre><small>VX3 WORKSTATION RECONSTRUCTION · FOR EDUCATIONAL USE ONLY</small>`;
+  manualSheet.innerHTML = `<div class="manual-head"><strong id="manual-title"></strong><button type="button" aria-label="Close reference sheet">×</button></div><pre id="manual-content"></pre><small>UNIVERSITÄT LEIPZIG · VX3-LABOR RAUM −2.17 · FOR EDUCATIONAL USE ONLY</small>`;
   overlay.append(manualSheet);
   canvas.parentElement?.append(overlay);
   const manualPages = [
@@ -1452,8 +1799,6 @@ export function startScene(canvas: HTMLCanvasElement) {
     openDrawer = -1;
     drawers.forEach((drawer) => (drawer.position.z = 0));
   });
-  const status = overlay.querySelector<HTMLElement>('#rig-status')!;
-  const deltaReadout = overlay.querySelector<HTMLElement>('#delta-readout')!;
   const entries = overlay.querySelector<HTMLOListElement>('#log-entries')!;
   const unitReadout = overlay.querySelector<HTMLElement>('#unit-readout')!;
   const logbook = overlay.querySelector<HTMLElement>('.logbook')!;
@@ -1533,7 +1878,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       tab.setAttribute('aria-label', `Open logbook, ${unseen} new entries`);
     }
   };
-  write('Rack opened. Historical full VX3 cold. For educational use only.');
+  write('Rack opened. Original full VX3 cold. For educational use only.');
   overlay.querySelector('#close-log')!.addEventListener('click', () => {
     audio.play('paper');
     logOpen = false;
@@ -1620,7 +1965,7 @@ export function startScene(canvas: HTMLCanvasElement) {
 
   // First-person walking, as in any PC shooter: click to capture the mouse
   // and look around, WASD or the arrow keys to walk, Shift to run, C to
-  // crouch, click or E to use whatever is under the crosshair, Esc to get the
+  // crouch, V to crouch lower, click or E to use the crosshair target, Esc to get the
   // cursor back. Touch screens drag to look and tap to use.
   const metre = worldUnitsPerMetre;
   const walkerRadius = 0.25 * metre;
@@ -1628,13 +1973,70 @@ export function startScene(canvas: HTMLCanvasElement) {
     x: corridor.spawn.x,
     z: corridor.spawn.z,
     crouched: false,
+    lowCrouched: false,
     crouch: 0,
     stride: 0,
   };
+  // A shareable inspection view for the east-wall installation.
+  const inspectionView = new URLSearchParams(window.location.search).get(
+    'view',
+  );
+  if (inspectionView === 'control-panel') {
+    walker.x = room.maxX - 2.8 * metre;
+    walker.z = eastControlPanel.group.position.z;
+    orbitYaw = Math.PI / 2;
+    orbitPitch = -0.16;
+  } else if (inspectionView === 'workbench') {
+    walker.x = room.minX + 2.8 * metre;
+    walker.z = room.minZ + 2.75 * metre;
+    orbitYaw = -Math.PI / 2;
+    orbitPitch = -0.16;
+  } else if (inspectionView === 'computer') {
+    walker.x = bbc.group.position.x - 0.55 * worldUnitsPerMetre;
+    walker.z = bbc.group.position.z + 1.3 * worldUnitsPerMetre;
+    orbitYaw = 0.4;
+    orbitPitch = -0.4;
+  } else if (inspectionView === 'xenon') {
+    walker.x = plantRoom.bank.x;
+    walker.z = plantRoom.bank.z + 1.65 * worldUnitsPerMetre;
+    orbitYaw = 0;
+    orbitPitch = -0.305;
+  } else if (inspectionView === 'plant-room') {
+    walker.x = plantRoom.doorway.x;
+    walker.z = room.maxZ + 1.8 * worldUnitsPerMetre;
+    orbitYaw = 0;
+    orbitPitch = -0.05;
+  } else if (inspectionView === 'rectifier') {
+    walker.x = plantRoom.rectifierPosition.x - 1.45 * worldUnitsPerMetre;
+    walker.z = plantRoom.rectifierPosition.z + 0.75 * worldUnitsPerMetre;
+    orbitYaw = Math.PI / 2;
+    orbitPitch = -0.28;
+  }
   const keys = new Set<string>();
   const nudge = { forward: 0, right: 0 };
   // Development builds expose the walker so browser checks can place the
   // camera without a captured mouse.
+  // In development, check that every clickable thing is an input or a room
+  // fixture, that every input works and that no indicator can be operated.
+  const partsInScene = () => {
+    const objects: Array<{
+      userData: Object3D['userData'];
+      clickable: boolean;
+    }> = [];
+    scene.traverse((object) => {
+      if (designationOf(object) || fixtureOf(object) || actions.has(object.id))
+        objects.push({
+          userData: object.userData,
+          clickable: actions.has(object.id),
+        });
+    });
+    return objects;
+  };
+  if (import.meta.env.DEV) {
+    const problems = auditParts(partsInScene());
+    if (problems.length)
+      console.error(`Machine part designations:\n${problems.join('\n')}`);
+  }
   if (import.meta.env.DEV)
     Object.assign(window, {
       vx3Walker: {
@@ -1646,6 +2048,17 @@ export function startScene(canvas: HTMLCanvasElement) {
         toolRack: () => toolRack.group.getWorldPosition(new Vector3()),
         rig,
         lights: labRoom.lights,
+        plantRoom,
+        /** Every machine with its inputs and indicators, and any problems. */
+        parts: () => ({
+          machines: Object.fromEntries(partInventory(partsInScene())),
+          problems: auditParts(partsInScene()),
+        }),
+        controlPanel: () => ({
+          x: eastControlPanel.group.position.x,
+          z: eastControlPanel.group.position.z,
+          metre: worldUnitsPerMetre,
+        }),
       },
     });
   let footprints: Footprint[] | null = null;
@@ -1683,7 +2096,7 @@ export function startScene(canvas: HTMLCanvasElement) {
           : 'WHEEL: ZOOM · ALT+WHEEL: HEIGHT · DRAG: ORBIT · CLICK: USE'
         : touch
           ? 'LEFT STICK: WALK (PUSH FULLY TO RUN) · RIGHT STICK: LOOK · TAP: USE · PINCH: ZOOM'
-          : 'CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · CLICK / E: USE · WHEEL: ZOOM · ESC: CURSOR';
+          : 'CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: ZOOM · ESC: CURSOR';
   };
   const crosshair = overlay.querySelector<HTMLElement>('.crosshair')!;
   const target = (x = 0, y = 0) => {
@@ -1693,11 +2106,11 @@ export function startScene(canvas: HTMLCanvasElement) {
     if (!hit) return undefined;
     if (withinReach.has(hit.object) && hit.distance > doorReach)
       return undefined;
-    return hit.object;
+    return hit;
   };
   const use = (x = 0, y = 0) => {
-    const object = target(x, y);
-    if (object) actions.get(object.id)?.();
+    const hit = target(x, y);
+    if (hit) actions.get(hit.object.id)?.(hit);
   };
   const typing = (event: Event) =>
     event.target instanceof HTMLInputElement ||
@@ -1723,7 +2136,14 @@ export function startScene(canvas: HTMLCanvasElement) {
       if (event.code.startsWith('Arrow')) event.preventDefault();
     }
     if (event.repeat) return;
-    if (event.code === 'KeyC') walker.crouched = !walker.crouched;
+    if (event.code === 'KeyC') {
+      walker.crouched = walker.lowCrouched || !walker.crouched;
+      walker.lowCrouched = false;
+    }
+    if (event.code === 'KeyV') {
+      walker.crouched = true;
+      walker.lowCrouched = !walker.lowCrouched;
+    }
     if (event.code === 'KeyE') use();
   };
   const keyup = (event: KeyboardEvent) => keys.delete(event.code);
@@ -1893,10 +2313,36 @@ export function startScene(canvas: HTMLCanvasElement) {
   resize();
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let last = 0;
+  let xenonWarned = false;
   renderer.setAnimationLoop((time) => {
     const delta = last ? Math.min(0.1, (time - last) / 1000) : 0;
     last = time;
-    for (const event of stepRig(rig, delta)) {
+    plantRoom.update(delta, reducedMotion.matches);
+    rectifier.update(plantRoom.powered, time / 1000, reducedMotion.matches);
+    audio.setPlantPower(plantRoom.powered);
+    if (rig.controls.mains && !plantRoom.powered) {
+      rig.controls.mains = false;
+      audio.play('breaker-off');
+      write(
+        'Plant master supply disconnected. Machinery off; lighting unchanged.',
+      );
+    }
+    // Xenon is needed for safe running, but nothing stops anyone running
+    // without it: past the spindle limit the bench monitor flashes a
+    // warning and strain creeps up until something gives.
+    const unsafe =
+      rig.controls.mains && xenonHazard(rig.spindle, xenon.flowSlpm);
+    if (unsafe && !xenonWarned) {
+      audio.play('warning');
+      write('Monitor: XENON CIRCUIT NOT PRESSURISED. Carrying on.');
+    }
+    xenonWarned = unsafe;
+    for (const event of stepRig(
+      rig,
+      delta,
+      Math.random,
+      unsafe ? XENON_HAZARD_STRAIN_PER_SECOND : 0,
+    )) {
       if (event.kind === 'warmed') {
         audio.play('relay');
         write('Heaters at temperature. The cabinet smells like dust.');
@@ -1910,25 +2356,26 @@ export function startScene(canvas: HTMLCanvasElement) {
         write('H-B field wandering. Strain rising.');
       }
       if (event.kind === 'incident') {
+        latchFault(board);
         audio.play('incident');
         window.setTimeout(() => audio.play('breaker-off'), 180);
         write(event.text);
       }
     }
     stepSafetyTelltales(telltales, rig, settings, delta);
+    stepBoard(board, boardInputs, delta);
+    eastControlPanel.update({
+      view: boardView(board, boardInputs),
+      readings: boardReadings(boardInputs),
+      trimSet: settings.knobs.trim,
+      trimIdeal: idealTrim(rig),
+      powerKw: telltales.powerKw,
+      energyKwh: telltales.energyKwh,
+      delta: deltaScore(rig),
+      seconds: delta,
+    });
     audio.update(rig, settings, reducedMotion.matches);
     if (!reducedMotion.matches) carousel.rotation.z -= rig.spindle * delta * 4;
-    status.textContent = !rig.controls.mains
-      ? 'RIG COLD'
-      : rig.instability > 0.55
-        ? 'FIELD UNSTABLE'
-        : rig.field > 0.2 && rig.instability < 0.1
-          ? 'FIELD LOCKED'
-          : rig.field > 0.1
-            ? 'FIELD WANDERING'
-            : 'HEATERS / NO FIELD';
-    status.dataset.alert = rig.instability > 0.55 ? 'true' : 'false';
-    deltaReadout.textContent = `δ ${deltaScore(rig).toFixed(3)} / 0.880`;
     for (const update of dynamic) update();
     if (view === 'perspective') {
       footprints ??= collectFootprints();
@@ -1948,7 +2395,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       const speed =
         (held('ShiftLeft', 'ShiftRight') || push > 0.92 ? 4.2 : 2) *
         metre *
-        (walker.crouched ? 0.5 : 1) *
+        (walker.lowCrouched ? 0.3 : walker.crouched ? 0.5 : 1) *
         delta;
       // The right stick turns faster the further it is pushed.
       orbitYaw += sticks.look.x * Math.abs(sticks.look.x) * 2.4 * delta;
@@ -1963,9 +2410,12 @@ export function startScene(canvas: HTMLCanvasElement) {
       const right = (aside / length) * speed + nudge.right;
       nudge.forward = 0;
       nudge.right = 0;
-      const solid = labRoom.door.blocking
-        ? [...footprints, labRoom.door.footprint]
-        : footprints;
+      const solid = [
+        ...footprints,
+        ...(labRoom.door.blocking ? [labRoom.door.footprint] : []),
+        ...(plantRoom.blocking ? [plantRoom.gateFootprint] : []),
+        ...(plantRoom.entryBlocking ? [plantRoom.entryFootprint] : []),
+      ];
       const next = slide(
         solid,
         walker.x,
@@ -1978,7 +2428,9 @@ export function startScene(canvas: HTMLCanvasElement) {
       walker.x = next.x;
       walker.z = next.z;
       walker.crouch +=
-        ((walker.crouched ? 1 : 0) - walker.crouch) * Math.min(1, delta * 10);
+        ((walker.lowCrouched ? 1.85 : walker.crouched ? 1 : 0) -
+          walker.crouch) *
+        Math.min(1, delta * 10);
       const bob = reducedMotion.matches
         ? 0
         : Math.sin((walker.stride / metre) * Math.PI * 1.6) * 0.02 * metre;
@@ -2000,7 +2452,11 @@ export function startScene(canvas: HTMLCanvasElement) {
       }
       if (locked()) crosshair.dataset.hot = String(Boolean(target()));
       unitReadout.textContent =
-        walker.z > room.maxZ ? 'CORRIDOR · EBENE −2' : 'VX3 LAB · RAUM −2.17';
+        walker.z > room.maxZ
+          ? 'CORRIDOR · EBENE −2'
+          : walker.x < room.minX
+            ? 'TECHNIKRAUM · XENON'
+            : 'VX3 LAB · RAUM −2.17';
     } else unitReadout.textContent = unitLabel;
     scene.fog = view === 'perspective' ? basementFog : null;
     scene.background = view === 'perspective' ? basementFog.color : roomTone;
@@ -2017,8 +2473,23 @@ export function startScene(canvas: HTMLCanvasElement) {
     );
     isometricCamera.lookAt(panX, pan, 0);
     labRoom.roof.visible = view === 'perspective';
+    plantRoom.roof.visible = view === 'perspective';
     ps1Uniforms.snapPixels.value = reducedMotion.matches ? 0 : 1;
-    renderer.render(scene, camera());
+    const viewer = camera();
+    viewer.getWorldPosition(ear);
+    viewer.getWorldDirection(facing);
+    audio.listen(ear.x, ear.y, ear.z, Math.atan2(facing.x, -facing.z));
+    const listenerRoom = roomAt(roomPlan, ear.x, ear.z);
+    const doorOpenings = {
+      lab: labRoom.door.amount,
+      plant: plantRoom.entryAmount,
+    };
+    for (const [source, sourceRoom] of soundRooms)
+      audio.setTransmission(
+        source,
+        transmission(sourceRoom, listenerRoom, doorOpenings, source === 'sink'),
+      );
+    renderer.render(scene, viewer);
   });
   return () => {
     renderer.setAnimationLoop(null);
@@ -2043,12 +2514,17 @@ export function startScene(canvas: HTMLCanvasElement) {
     audio.dispose();
     ashtray.dispose();
     xenon.dispose();
+    plantRoom.dispose();
+    rectifier.dispose();
     hotline.dispose();
     labRoom.dispose();
     corridor.dispose();
     toolRack.dispose();
     cub.dispose();
+    bbc.dispose();
     workbench.dispose();
+    for (const valve of valveModels) valve.dispose();
+    eastControlPanel.dispose();
     teleprinter.dispose();
     overlay.remove();
     scene.traverse((object) => {

@@ -31,6 +31,7 @@ export function networkOutputs(rig: RigState, controls: RackControls) {
     rig.spindle * 1.65 +
     rig.field * 2.8 +
     (controls.toggles.aux1 ? 0.42 : 0) +
+    (controls.toggles.chromoAux ? 0.42 : 0) +
     (controls.toggles.aux2 ? 0.16 : 0);
   const dilationActivity = Math.min(
     1,

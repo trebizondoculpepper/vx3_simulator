@@ -2,6 +2,8 @@ import type { RackControls } from '../game/rack-controls';
 import type { RigState } from '../game/rig';
 import { writeSoundParameters } from './sound-parameters';
 import type { SoundParameters } from './sound-parameters';
+import { createSpatialMix } from './spatial-mix';
+import type { Emitter, SpatialMix, SpatialOptions } from './spatial-mix';
 import type { ZZFXSound } from 'zzfx';
 
 export type SoundCue =
@@ -20,9 +22,47 @@ export type SoundCue =
   | 'counter'
   | 'paper'
   | 'pencil'
-  | 'purge';
+  | 'purge'
+  | 'drip';
 
 type SoundBank = Record<SoundCue, ZZFXSound>;
+
+/** Places in the rack that sounds come from, positioned by the scene. */
+export type SoundSource =
+  | 'supply'
+  | 'valves'
+  | 'spindle'
+  | 'field'
+  | 'monitor'
+  | 'service'
+  | 'sink'
+  | 'rectifier';
+
+type Channel = 'hum' | 'heater' | 'spindle' | 'field' | 'strain' | 'rectifier';
+
+const channelSources: Record<Channel, SoundSource> = {
+  hum: 'supply',
+  heater: 'valves',
+  spindle: 'spindle',
+  field: 'field',
+  strain: 'monitor',
+  rectifier: 'rectifier',
+};
+
+// Cues from the apparatus itself. Control clicks and the logbook are at
+// the operator's fingertips, so they are never attenuated.
+const cueSources: Partial<Record<SoundCue, SoundSource>> = {
+  'breaker-on': 'supply',
+  'breaker-off': 'supply',
+  relay: 'valves',
+  'field-locked': 'field',
+  warning: 'field',
+  incident: 'field',
+  spark: 'service',
+  purge: 'service',
+  drip: 'sink',
+  counter: 'monitor',
+};
 
 interface AudioGraph {
   context: AudioContext;
@@ -33,6 +73,8 @@ interface AudioGraph {
   spindle: GainNode;
   field: GainNode;
   strain: GainNode;
+  rectifier: GainNode;
+  panners: Record<Channel, StereoPannerNode>;
   spindleTone: OscillatorNode;
   rotorPulse: OscillatorNode;
   bearingFilter: BiquadFilterNode;
@@ -69,20 +111,23 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
   const master = context.createGain();
   master.gain.value = 0;
   master.connect(context.destination);
-  const gain = (pan: number) => {
+  const panners = {} as Record<Channel, StereoPannerNode>;
+  const gain = (pan: number, channel?: Channel) => {
     const node = context.createGain();
     node.gain.value = 0;
     const panner = context.createStereoPanner();
     panner.pan.value = pan;
     node.connect(panner).connect(master);
+    if (channel) panners[channel] = panner;
     return node;
   };
   const room = gain(-0.05);
-  const hum = gain(0.1);
-  const heater = gain(-0.2);
-  const spindle = gain(-0.25);
-  const field = gain(0.2);
-  const strain = gain(0.15);
+  const hum = gain(0.1, 'hum');
+  const heater = gain(-0.2, 'heater');
+  const spindle = gain(-0.25, 'spindle');
+  const field = gain(0.2, 'field');
+  const strain = gain(0.15, 'strain');
+  const rectifier = gain(0, 'rectifier');
   const sources: Array<OscillatorNode | AudioBufferSourceNode> = [];
   const oscillator = (
     type: OscillatorType,
@@ -103,6 +148,9 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
   oscillator('sine', 50, hum, 1);
   oscillator('sine', 100, hum, 0.28);
   oscillator('sine', 150, hum, 0.1);
+  oscillator('sawtooth', 100, rectifier, 0.6);
+  oscillator('square', 50, rectifier, 0.22);
+  oscillator('sawtooth', 301, rectifier, 0.08);
   const spindleTone = oscillator('sawtooth', 65, spindle, 0.33);
   oscillator('sine', 32, spindle, 0.55);
   const rotorPulse = context.createOscillator();
@@ -148,6 +196,9 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
 
   // ZzFX parameter order: volume, variation, Hz, attack, sustain, release, shape, curve, slide, ...
   const sounds: SoundBank = {
+    drip: new library.ZZFXSound([
+      0.045, 0.015, 1250, 0, 0.025, 0.11, 0, 1.5, -650, 0, 0, 0, 0, 0.15,
+    ]),
     // Bat-handle switch snaps, with a slightly heavier downward return.
     'toggle-up': new library.ZZFXSound([
       0.34, 0.04, 550, 0, 0.014, 0.025, 4, 1.2, -220,
@@ -213,6 +264,8 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
     spindle,
     field,
     strain,
+    rectifier,
+    panners,
     spindleTone,
     rotorPulse,
     bearingFilter,
@@ -228,6 +281,7 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
 }
 
 export function createSoundEngine() {
+  let plantPowered = false;
   let graph: AudioGraph | null = null;
   let loading: Promise<void> | null = null;
   let disposed = false;
@@ -237,6 +291,14 @@ export function createSoundEngine() {
   let nextCounter = 0;
   let nextSpark = 0;
   const pending: SoundCue[] = [];
+  let spatial: SpatialMix | null = null;
+  let panned = false;
+  // How much of each source gets through the doors to the listener's room.
+  const transmitted = new Map<SoundSource, number>();
+  const distanceGain = (source: SoundSource | undefined) =>
+    spatial && source
+      ? spatial.gain(source) * (transmitted.get(source) ?? 1)
+      : 1;
 
   const setMix = (nextVolume: number, nextMuted: boolean) => {
     volume = Math.max(0, Math.min(1, nextVolume));
@@ -249,6 +311,12 @@ export function createSoundEngine() {
   const playNow = (cue: SoundCue) => {
     if (!graph || muted || !visible || graph.context.state !== 'running')
       return;
+    const source = cueSources[cue];
+    if (spatial && source) {
+      const gain = distanceGain(source);
+      if (gain > 0) graph.sounds[cue].play(gain, 1, 1, spatial.pan(source));
+      return;
+    }
     const pan =
       cue === 'paper' || cue === 'pencil' ? 0.4 : cue === 'spark' ? -0.35 : 0;
     graph.sounds[cue].play(1, 1, 1, pan);
@@ -271,6 +339,8 @@ export function createSoundEngine() {
     return loading;
   };
   const play = (cue: SoundCue) => {
+    // Ambient drips must not queue while waiting for the first audio gesture.
+    if (cue === 'drip' && graph?.context.state !== 'running') return;
     if (muted || disposed || !visible) return;
     if (graph?.context.state === 'running') playNow(cue);
     else {
@@ -288,11 +358,33 @@ export function createSoundEngine() {
     writeSoundParameters(state, controls, parameters);
     const now = context.currentTime;
     ramp(graph.room.gain, parameters.roomGain, now);
-    ramp(graph.hum.gain, parameters.humGain, now);
-    ramp(graph.heater.gain, parameters.heaterGain, now);
-    ramp(graph.spindle.gain, parameters.spindleGain, now);
-    ramp(graph.field.gain, parameters.fieldGain, now);
-    ramp(graph.strain.gain, parameters.strainGain, now);
+    ramp(
+      graph.rectifier.gain,
+      plantPowered ? 0.22 * distanceGain('rectifier') : 0,
+      now,
+    );
+    ramp(graph.hum.gain, parameters.humGain * distanceGain('supply'), now);
+    ramp(
+      graph.heater.gain,
+      parameters.heaterGain * distanceGain('valves'),
+      now,
+    );
+    ramp(
+      graph.spindle.gain,
+      parameters.spindleGain * distanceGain('spindle'),
+      now,
+    );
+    ramp(graph.field.gain, parameters.fieldGain * distanceGain('field'), now);
+    ramp(
+      graph.strain.gain,
+      parameters.strainGain * distanceGain('monitor'),
+      now,
+    );
+    if (spatial && !panned) {
+      for (const [channel, source] of Object.entries(channelSources))
+        ramp(graph.panners[channel as Channel].pan, spatial.pan(source), now);
+      panned = true;
+    }
     ramp(graph.spindleTone.frequency, parameters.spindleHz, now);
     ramp(graph.rotorPulse.frequency, parameters.rotorHz, now);
     ramp(graph.bearingFilter.frequency, 500 + state.spindle * 900, now);
@@ -325,6 +417,29 @@ export function createSoundEngine() {
     if (!parameters.counterClicksPerSecond) nextCounter = now;
     if (!parameters.sparkCracksPerSecond) nextSpark = now;
   };
+  /** Tell the engine where each source is in the world. */
+  const setSources = (
+    sources: ReadonlyArray<Emitter & { id: SoundSource }>,
+    options: SpatialOptions,
+  ) => {
+    spatial = createSpatialMix(sources, options);
+  };
+  /**
+   * Place the listener each frame. Distances are only recalculated after
+   * a real move, and pans only after a turn; otherwise this does nothing.
+   */
+  /**
+   * Set the share of a source that reaches the listener's room through the
+   * doors in between: 1 in the same room, 0 behind a shut door.
+   */
+  const setTransmission = (source: SoundSource, share: number) => {
+    transmitted.set(source, share);
+  };
+  const listen = (x: number, y: number, z: number, yaw: number) => {
+    if (!spatial) return;
+    const moved = spatial.move(x, y, z);
+    if (spatial.face(yaw) || moved) panned = false;
+  };
   const setVisible = (nextVisible: boolean) => {
     visible = nextVisible;
     if (!graph) return;
@@ -339,5 +454,18 @@ export function createSoundEngine() {
     for (const source of graph.sources) source.stop();
     graph.master.disconnect();
   };
-  return { unlock, play, update, setMix, setVisible, dispose };
+  return {
+    setPlantPower(on: boolean) {
+      plantPowered = on;
+    },
+    unlock,
+    play,
+    update,
+    setMix,
+    setSources,
+    setTransmission,
+    listen,
+    setVisible,
+    dispose,
+  };
 }

@@ -13,10 +13,31 @@ export const toggleIds = [
   'xtalC',
   'damp',
   'gnd',
+  // The second panel of each pair has switches of its own.
+  'chromoAux',
+  'chromoA',
+  'chromoB',
+  'governorEngage',
+  'plasmaOn',
+  'detectorBlatz',
 ] as const;
 export type ToggleId = (typeof toggleIds)[number];
 
-export const knobIds = ['spindle', 'ratio', 'field', 'trim', 'gain'] as const;
+export const knobIds = [
+  'spindle',
+  'ratio',
+  'governor',
+  'governorRatio',
+  'field',
+  'trim',
+  'gain',
+  'detectorGain',
+  'ampGain',
+  'plasmaExcite',
+  'plasmaNull',
+  'busBand',
+  'insulationBand',
+] as const;
 export type KnobId = (typeof knobIds)[number];
 
 export const toggleLabels: Record<ToggleId, string> = {
@@ -32,14 +53,28 @@ export const toggleLabels: Record<ToggleId, string> = {
   xtalC: 'XTAL C',
   damp: 'DAMP',
   gnd: 'GND?',
+  chromoAux: 'CHROMOCORE AUX 1',
+  chromoA: 'CHROMOCORE XTAL A',
+  chromoB: 'CHROMOCORE XTAL B',
+  governorEngage: 'GOVERNOR ENGAGE',
+  plasmaOn: 'PLASMA',
+  detectorBlatz: 'DETECTOR BLATZ',
 };
 
 export const knobLabels: Record<KnobId, string> = {
   spindle: 'SPINDLE',
   ratio: 'RATIO',
+  governor: 'SPEED LIMIT',
+  governorRatio: 'RESPONSE',
   field: 'H-B FIELD',
   trim: 'BLATZ TRIM',
-  gain: 'GAIN',
+  gain: 'CHAMBER GAIN',
+  detectorGain: 'DETECTOR GAIN',
+  ampGain: 'BETAFORM GAIN',
+  plasmaExcite: 'PLASMA EXCITATION',
+  plasmaNull: 'PLASMA NULL',
+  busBand: 'BUS BAND',
+  insulationBand: 'INSULATION BAND',
 };
 
 /** Logbook lines for switches with opinions; others log plainly. */
@@ -62,12 +97,15 @@ const quips: Partial<Record<ToggleId, [up: string, down: string]>> = {
 
 /** Everything on the rack the operator can touch, apart from the mains lever. */
 export interface RackControls {
+  /** Physical mains switch position. Trips change power, not this input. */
+  mains: boolean;
   toggles: Record<ToggleId, boolean>;
   knobs: Record<KnobId, number>;
 }
 
 export function createRackControls(): RackControls {
   return {
+    mains: false,
     toggles: {
       ht: true,
       lt: true,
@@ -81,8 +119,28 @@ export function createRackControls(): RackControls {
       xtalC: true,
       damp: false,
       gnd: false,
+      chromoAux: false,
+      chromoA: true,
+      chromoB: false,
+      governorEngage: true,
+      plasmaOn: true,
+      detectorBlatz: true,
     },
-    knobs: { spindle: 0, ratio: 0.3, field: 0, trim: 0.5, gain: 0.6 },
+    knobs: {
+      spindle: 0,
+      ratio: 0.3,
+      governor: 1,
+      governorRatio: 0.5,
+      field: 0,
+      trim: 0.5,
+      gain: 0.6,
+      detectorGain: 0.6,
+      ampGain: 0.6,
+      plasmaExcite: 1,
+      plasmaNull: 0.5,
+      busBand: 0.4,
+      insulationBand: 0.4,
+    },
   };
 }
 
@@ -101,4 +159,12 @@ export function applyRack(desk: RackControls, controls: RigControls) {
   controls.spindle = desk.toggles.spin ? desk.knobs.spindle : 0;
   controls.field = desk.toggles.hb ? desk.knobs.field : 0;
   controls.trim = desk.knobs.trim;
+  // The governor only limits the spindle while it is engaged, and the plasma
+  // inducer only excites the field while it is switched on.
+  controls.governor = desk.toggles.governorEngage ? desk.knobs.governor : 1;
+  controls.governorResponse = desk.knobs.governorRatio;
+  controls.plasmaExcitation = desk.toggles.plasmaOn
+    ? desk.knobs.plasmaExcite
+    : 0;
+  controls.plasmaNull = desk.knobs.plasmaNull;
 }

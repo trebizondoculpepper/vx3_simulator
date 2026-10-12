@@ -1,3 +1,6 @@
+import { floorSafeHose } from './hose-route';
+import { mountRotaryKnob, stepKnob } from './rotary-knob';
+import { designate } from '../game/machine-parts';
 import {
   BoxGeometry,
   CatmullRomCurve3,
@@ -13,6 +16,7 @@ import {
 } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import { componentCatalogue, createRigModel } from '../game/rig-model';
 import {
   createCanvasTexture,
   createDialTexture,
@@ -46,6 +50,11 @@ const ROTAMETER_LENGTH = 3.4;
  * the floor to the back of the main cabinet.
  */
 export function createXenonCylinders(options: XenonBankOptions) {
+  const supply = createRigModel(
+    componentCatalogue.filter(
+      (c) => c.model.topology === 'supply-chain' && c.id.startsWith('xenon-'),
+    ),
+  );
   const group = new Group();
   group.name = 'XenonCylinders';
   const materials: Material[] = [];
@@ -88,6 +97,9 @@ export function createXenonCylinders(options: XenonBankOptions) {
 
   const base = options.floorY - 0.03;
   const top = base + CYLINDER_HEIGHT;
+  const shoulderBase = top - CYLINDER_RADIUS * 0.9;
+  const manifoldY = top + 0.4;
+  const manifoldZ = options.z + CYLINDER_RADIUS + 0.2;
   const spacing = CYLINDER_RADIUS * 2 + 0.06;
   const xs = [-spacing, 0, spacing].map((dx) => options.x + dx);
 
@@ -98,12 +110,12 @@ export function createXenonCylinders(options: XenonBankOptions) {
       new CylinderGeometry(
         CYLINDER_RADIUS,
         CYLINDER_RADIUS,
-        CYLINDER_HEIGHT - 0.29,
+        shoulderBase - base,
         10,
       ),
       '#3f5664',
       x,
-      base + (CYLINDER_HEIGHT - 0.29) / 2,
+      (base + shoulderBase) / 2,
       z,
     );
     const shoulder = mesh(
@@ -118,7 +130,7 @@ export function createXenonCylinders(options: XenonBankOptions) {
       ),
       '#3f5664',
       x,
-      base + CYLINDER_HEIGHT - 0.29,
+      shoulderBase,
       z,
     );
     shoulder.scale.y = 0.9;
@@ -163,13 +175,23 @@ export function createXenonCylinders(options: XenonBankOptions) {
       z,
     );
     wheel.rotation.x = Math.PI / 2;
-    // Short copper pigtail up to the manifold.
+    // Copper pigtail rises above the shoulder and bends to the front manifold.
     mesh(
-      new CylinderGeometry(0.022, 0.022, 0.23, 5),
+      new TubeGeometry(
+        new CatmullRomCurve3([
+          new Vector3(x, top + 0.12, z),
+          new Vector3(x, top + 0.3, z + 0.2),
+          new Vector3(x, manifoldY, manifoldZ),
+        ]),
+        12,
+        0.06,
+        5,
+        false,
+      ),
       '#c07a45',
-      x,
-      top + 0.29,
-      z,
+      0,
+      0,
+      0,
     );
   }
 
@@ -195,20 +217,19 @@ export function createXenonCylinders(options: XenonBankOptions) {
   }
 
   // Brass manifold bar joining the three valves.
-  const manifoldY = top + 0.4;
   const manifold = mesh(
-    new CylinderGeometry(0.028, 0.028, spacing * 2 + 0.12, 6),
+    new CylinderGeometry(0.12, 0.12, spacing * 2 + 0.12, 8),
     '#c9a24e',
     options.x,
     manifoldY,
-    options.z + 0.02,
+    manifoldZ,
   );
   manifold.rotation.z = Math.PI / 2;
 
   // Regulator: a brass body with high- and low-pressure gauges and a T-handle.
   const regulator = new Group();
-  regulator.position.set(options.x, manifoldY + 0.13, options.z + 0.02);
-  regulator.scale.setScalar(1.4);
+  regulator.position.set(options.x, manifoldY + 0.13, manifoldZ);
+  regulator.scale.setScalar(4);
   group.add(regulator);
   mesh(new BoxGeometry(0.2, 0.2, 0.16), '#b8913f', 0, 0, 0, regulator);
   const bonnet = mesh(
@@ -240,7 +261,15 @@ export function createXenonCylinders(options: XenonBankOptions) {
     regulator,
   );
   pointer.geometry.translate(0, 0.03, 0);
+  const regulatorPivot = mountRotaryKnob(regulatorKnob, pointer);
+  for (const part of [regulatorKnob, pointer])
+    designate(part, {
+      machine: 'Xenon supply',
+      name: 'Flow regulator',
+      role: 'input',
+    });
   let deliveryNeedle: Mesh | undefined;
+  let contentsNeedle: Mesh | undefined;
   for (const side of [-1, 1]) {
     const gaugeX = side * 0.17;
     const stem = mesh(
@@ -284,7 +313,13 @@ export function createXenonCylinders(options: XenonBankOptions) {
     needle.geometry.translate(0, 0.026, 0);
     // Left: cylinder contents, nearly full. Right: delivery, set by the knob.
     needle.rotation.z = -1.6;
+    designate(needle, {
+      machine: 'Xenon supply',
+      name: side > 0 ? 'Delivery pressure needle' : 'Cylinder contents needle',
+      role: 'indicator',
+    });
     if (side > 0) deliveryNeedle = needle;
+    else contentsNeedle = needle;
   }
   // Outlet nipple where the hose clamps on.
   const outlet = mesh(
@@ -339,6 +374,11 @@ export function createXenonCylinders(options: XenonBankOptions) {
     rotBottom + 0.05,
     rotZ + 0.03,
   );
+  designate(float, {
+    machine: 'Xenon supply',
+    name: 'Rotameter float',
+    role: 'indicator',
+  });
   const meterLabel = createLabelTexture('Xe FLOW', {
     ink: '#e3d8b7',
     plate: '#2d2b26',
@@ -356,93 +396,118 @@ export function createXenonCylinders(options: XenonBankOptions) {
   // The thick black hose, in two runs: regulator down into the meter's
   // bottom inlet, then from its top outlet down to the floor, behind the
   // bench, and up to a fitting on the back of the main cabinet.
-  const outletWorld = new Vector3(
-    options.x,
-    manifoldY + 0.13 - 0.2,
-    options.z + 0.12,
-  );
-  const hoseFloor = options.floorY + 0.05;
+  const outletWorld = regulator.position
+    .clone()
+    .add(new Vector3(0, -0.15, 0.06).multiplyScalar(regulator.scale.x));
+  const hoseFloor = options.floorY + 0.22;
   const feed = new CatmullRomCurve3([
     outletWorld,
-    new Vector3(options.x + 0.15, manifoldY - 0.35, options.z + 0.42),
+    new Vector3(options.x + 0.15, manifoldY - 0.35, manifoldZ + 0.25),
     new Vector3(rotX - 0.1, rotBottom - 0.45, options.z + 0.25),
     new Vector3(rotX, rotBottom - 0.22, rotZ + 0.1),
     new Vector3(rotX, rotBottom - 0.07, rotZ + 0.03),
   ]);
-  mesh(new TubeGeometry(feed, 40, 0.04, 6, false), '#1c1c1a', 0, 0, 0);
-  const hose = new CatmullRomCurve3([
-    new Vector3(rotX, rotTop + 0.07, rotZ + 0.03),
-    new Vector3(rotX + 0.05, rotTop + 0.28, rotZ + 0.12),
-    new Vector3(rotX + 0.3, rotTop + 0.05, rotZ + 0.3),
-    new Vector3(rotX + 0.42, hoseFloor + 0.35, options.z + 0.5),
-    new Vector3(rotX + 0.5, hoseFloor, options.z + 0.7),
-    ...options.hoseVia,
-    new Vector3(
-      options.hoseEnd.x - 0.15,
-      hoseFloor + 0.05,
-      options.hoseEnd.z - 0.25,
-    ),
-    new Vector3(
-      options.hoseEnd.x,
-      options.hoseEnd.y - 0.3,
-      options.hoseEnd.z - 0.12,
-    ),
-    options.hoseEnd,
-  ]);
-  mesh(new TubeGeometry(hose, 80, 0.05, 6, false), '#1c1c1a', 0, 0, 0);
-  // Jubilee clip and a brass bulkhead fitting at the cabinet end.
-  mesh(
-    new BoxGeometry(0.2, 0.2, 0.06),
-    '#b8913f',
-    options.hoseEnd.x,
-    options.hoseEnd.y,
-    options.hoseEnd.z + 0.02,
+  mesh(new TubeGeometry(feed, 40, 0.09, 8, false), '#1c1c1a', 0, 0, 0);
+  const hose = floorSafeHose(
+    [
+      new Vector3(rotX, rotTop + 0.07, rotZ + 0.03),
+      new Vector3(rotX + 0.05, rotTop + 0.28, rotZ + 0.12),
+      new Vector3(rotX + 0.3, rotTop + 0.05, rotZ + 0.3),
+      new Vector3(rotX + 0.42, hoseFloor + 0.35, options.z + 0.5),
+      new Vector3(rotX + 0.5, hoseFloor, options.z + 0.7),
+      ...options.hoseVia,
+      new Vector3(
+        options.hoseEnd.x - 0.15,
+        hoseFloor + 0.05,
+        options.hoseEnd.z - 0.25,
+      ),
+      new Vector3(
+        options.hoseEnd.x,
+        options.hoseEnd.y - 0.3,
+        options.hoseEnd.z - 0.12,
+      ),
+      options.hoseEnd,
+    ],
+    options.floorY,
+    0.09,
   );
-  const fittingLabel = createLabelTexture('Xe IN', {
+  mesh(new TubeGeometry(hose, 80, 0.09, 8, false), '#1c1c1a', 0, 0, 0);
+  // Labelled wall bulkhead: fixed pipework continues behind the masonry.
+  const port = new Group();
+  port.position.copy(options.hoseEnd);
+  // The north-wall port faces into the room along +Z.
+  group.add(port);
+  mesh(new BoxGeometry(1.1, 1.1, 0.12), '#b8913f', 0, 0, -0.4, port);
+  const nipple = mesh(
+    new CylinderGeometry(0.13, 0.13, 0.4, 8),
+    '#b8913f',
+    0,
+    0,
+    -0.18,
+    port,
+  );
+  nipple.rotation.x = Math.PI / 2;
+  const fittingLabel = createLabelTexture('XENON · VX3', {
     ink: '#e3d8b7',
     plate: '#343d38',
     size: 8,
   });
-  textured(
-    fittingLabel.texture,
-    fittingLabel.width / 220,
-    fittingLabel.height / 220,
-    options.hoseEnd.x,
-    options.hoseEnd.y + 0.17,
-    options.hoseEnd.z + 0.01,
-  ).rotation.y = Math.PI;
+  textured(fittingLabel.texture, 1.25, 0.2, 0, 0.8, -0.33, port);
 
-  let setting = 0.35;
-  let flow = 0;
+  let setting = 0;
+  // The bank's remaining contents, 0 to 1, drawn down by the flow. A full
+  // bank holds 3,000 standard litres: ten hours at 5 SLPM.
+  let contents = 0.92;
   let last: number | undefined;
   return {
     group,
     /** The clickable adjusting knob on the regulator. */
     regulatorKnob,
+    /** Every mesh of the regulator knob, its pointer included. */
+    regulatorParts: [regulatorKnob, pointer] as readonly Mesh[],
     /** Delivery setting, 0..1. */
     get setting() {
       return setting;
     },
     /** Current flow in standard litres per minute. */
     get flowSlpm() {
-      return flow * XENON_FULL_SCALE_SLPM;
+      return supply.display('xenon-flow-gauge.flow');
     },
-    /** Turn the knob one step clockwise, wrapping back to closed. */
-    stepRegulator() {
-      setting = setting >= 0.95 ? 0 : Math.min(1, setting + 0.1);
+    /** Share of the bank's xenon left, 0 to 1. */
+    get contents() {
+      return contents;
+    },
+    get pressureBar() {
+      return supply.display('xenon-pressure-indicator.pressure');
+    },
+    /** Turn the knob one step clockwise, stopping at fully open or closed. */
+    regulatorPivot,
+    stepRegulator(direction = 1) {
+      setting = stepKnob(setting, direction);
+      supply.setControl('xenon-supply.flow-valve', setting);
       return setting;
     },
     /** Ease the flow toward the setting and move the needle and float. */
     update(seconds: number, reducedMotion: boolean) {
       const delta = last === undefined ? 0 : Math.min(0.1, seconds - last);
       last = seconds;
-      flow += (setting - flow) * (1 - Math.exp(-delta / 1.2));
+      supply.step(delta);
+      contents = Math.max(
+        0,
+        contents -
+          (supply.display('xenon-flow-gauge.flow') * delta) / 60 / 3000,
+      );
+      if (contentsNeedle)
+        contentsNeedle.rotation.z = Math.PI * (0.75 - contents * 1.5);
+      const flow = supply.get('xenon-flow-gauge.flow');
       const bob = reducedMotion ? 0 : Math.sin(seconds * 9) * 0.006 * flow;
       float.position.y =
         rotBottom + 0.05 + flow * (ROTAMETER_LENGTH - 0.1) + bob;
-      pointer.rotation.z = Math.PI * (0.75 - setting * 1.5);
+      regulatorPivot.rotation.z = Math.PI * (0.75 - setting * 1.5);
       if (deliveryNeedle)
-        deliveryNeedle.rotation.z = Math.PI * (0.75 - setting * 1.5);
+        deliveryNeedle.rotation.z =
+          Math.PI *
+          (0.75 - supply.get('xenon-pressure-indicator.pressure') * 1.5);
     },
     dispose() {
       group.traverse((object) => {

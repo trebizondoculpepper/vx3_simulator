@@ -18,6 +18,21 @@ function run(state: RigState, seconds: number, random = still) {
 }
 
 describe('stepRig', () => {
+  it('builds strain from an outside hazard even while the field is steady', () => {
+    const rig = createRig();
+    rig.controls.mains = true;
+    let incident = false;
+    for (let t = 0; t < 60 && !incident; t += 0.1)
+      incident = stepRig(rig, 0.1, still, 0.02).some(
+        (event) => event.kind === 'incident',
+      );
+    expect(incident).toBe(true);
+    expect(rig.controls.mains).toBe(false);
+    const safe = createRig();
+    safe.controls.mains = true;
+    run(safe, 60);
+    expect(safe.strain).toBe(0);
+  });
   it('keeps Delta below Yalgeth’s limit and discounts an unstable field', () => {
     const rig = createRig();
     rig.field = 1;
