@@ -85,6 +85,7 @@ import {
 import { createWorldMapTexture } from '../scene/world-map';
 import { createCubMonitor } from '../scene/cub-monitor';
 import { createBbcMicro } from '../scene/bbc-micro';
+import { createBbcDiskDrive } from '../scene/bbc-disk-drive';
 import { createAshtray } from '../scene/ashtray';
 import { createXenonCylinders } from '../scene/xenon-cylinders';
 import { createHotlinePhone } from '../scene/hotline-phone';
@@ -98,7 +99,13 @@ import {
   XENON_HAZARD_STRAIN_PER_SECOND,
   xenonHazard,
 } from '../game/xenon-supply';
-import { benchScreen } from '../game/bench-monitor';
+import { benchScreen, createBenchComputer } from '../game/bench-monitor';
+import {
+  anomalyEffects,
+  anomalyStage,
+  ferrocoreActivity,
+} from '../game/ferrocore-anomaly';
+import { createCrystalSparkles } from '../scene/crystal-sparkles';
 import { createToolRack } from '../scene/tool-rack';
 import { createWestWorkbench } from '../scene/west-workbench';
 import { createEastControlPanel } from '../scene/east-control-panel';
@@ -149,6 +156,9 @@ export function startScene(canvas: HTMLCanvasElement) {
   const dynamic: Array<() => void> = [];
   const valveModels: Array<ReturnType<typeof createThermionicValve>> = [];
   const rig = createRig();
+  // The room's state near the ferrocores: colour, π, space and sparks.
+  let anomaly = anomalyEffects(0, 0, false);
+  let anomalyLevel = 0;
   const telltales = createSafetyTelltales();
   const settings = createRackControls();
   const audio = createSoundEngine();
@@ -868,9 +878,9 @@ export function startScene(canvas: HTMLCanvasElement) {
   dynamic.push(() => {
     const now = new Date();
     hourHand.rotation.z =
-      (-((now.getHours() % 12) + now.getMinutes() / 60) * Math.PI) / 6;
+      (-((now.getHours() % 12) + now.getMinutes() / 60) * anomaly.pi) / 6;
     minuteHand.rotation.z =
-      (-(now.getMinutes() + now.getSeconds() / 60) * Math.PI) / 30;
+      (-(now.getMinutes() + now.getSeconds() / 60) * anomaly.pi) / 30;
   });
   cube(
     lab,
@@ -1036,6 +1046,9 @@ export function startScene(canvas: HTMLCanvasElement) {
   crystal.rotation.z = 0.24;
   crystal.position.set(wallDisplayX, crystalY - 0.11, -3.13);
   lab.add(indicator(crystal, 'Time Dilation tell-tale', 'Crystal'));
+  const sparkles = createCrystalSparkles();
+  sparkles.group.position.copy(crystal.position);
+  lab.add(sparkles.group);
   const crystalLamp = indicator(
     glows(
       disc(lab, 0.09, '#425c5c', wallDisplayX + 0.61, crystalY - 0.5, -3.38),
@@ -1078,7 +1091,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   cube(lab, 2.4, 0.1, 0.25, '#a4aaa0', -4.45, totalHeight / 2 + 0.55, -3.45);
   cube(lab, 2.25, 0.055, 0.04, '#e5d6a7', -4.45, totalHeight / 2 + 0.45, -3.3);
 
-  // A workbench with a CRT, calibration source and stacked paper records.
+  // A workbench with the BBC computer, disk drive and paper records.
   const bench = new Group();
   bench.position.set(-7.9, floorY, -0.8);
   bench.scale.set(3.7, 5.7, 4.5);
@@ -1089,11 +1102,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     for (const z of [-0.5, 0.5])
       cube(bench, 0.13, 1.2, 0.13, '#3c453e', x, 0.61, z);
   }
-  cube(bench, 0.57, 0.42, 0.45, '#a49b7f', -0.55, 1.65, -0.22);
-  for (const x of [-0.71, -0.5, -0.29])
-    disc(bench, 0.045, '#e0ba6d', x, 1.66, 0.02);
   for (let i = 0; i < 4; i++)
-    cube(bench, 0.57, 0.025, 0.38, '#e0d4af', -0.48, 1.45 + i * 0.025, 0.36);
+    cube(bench, 0.57, 0.025, 0.38, '#e0d4af', -1.06, 1.45 + i * 0.025, 0.36);
 
   // A Microvitec Cub on the bench, kept out of the bench's stretched
   // scale so its proportions stay true.
@@ -1111,13 +1121,72 @@ export function startScene(canvas: HTMLCanvasElement) {
     bbc.group.position.z - 0.23 * worldUnitsPerMetre,
   );
   lab.add(cub.group);
+  const diskDrive = createBbcDiskDrive(worldUnitsPerMetre);
+  diskDrive.group.position.set(
+    bbc.group.position.x - 0.31 * worldUnitsPerMetre,
+    bbc.group.position.y,
+    bbc.group.position.z - 0.04 * worldUnitsPerMetre,
+  );
+  lab.add(diskDrive.group);
+  const diskCable = new Mesh(
+    new TubeGeometry(
+      new CatmullRomCurve3([
+        new Vector3(-0.31, 0.025, -0.185),
+        new Vector3(-0.31, 0.025, -0.215),
+        new Vector3(-0.16, 0.025, -0.215),
+        new Vector3(-0.08, 0.042, -0.174),
+      ]),
+      20,
+      0.0035,
+      6,
+      false,
+    ),
+    material('#333830'),
+  );
+  diskCable.scale.setScalar(worldUnitsPerMetre);
+  diskCable.position.copy(bbc.group.position);
+  lab.add(diskCable);
+  const benchComputer = createBenchComputer();
+  let benchLastSeconds = performance.now() / 1000;
+  let benchDescription = '';
+  input(bbc.resetTarget, 'Bench computer', 'Computer restart', () => {
+    benchComputer.reset();
+    benchLastSeconds = performance.now() / 1000;
+    cub.update(benchLastSeconds, [], false);
+    void audio.playComputerBoot();
+    write('BBC Micro: Neustart. Betriebsdiagnose wird geladen.');
+  });
+  withinReach.add(bbc.resetTarget);
   dynamic.push(() => {
     const seconds = performance.now() / 1000;
-    cub.update(
-      seconds,
-      benchScreen({ rig, xenonFlowSlpm: xenon.flowSlpm }, seconds % 1 < 0.67)
-        .lines,
+    benchComputer.step(Math.min(0.1, seconds - benchLastSeconds));
+    benchLastSeconds = seconds;
+    const screen = benchScreen(
+      {
+        rig,
+        xenonFlowSlpm: xenon.flowSlpm,
+        plantPowered: plantRoom.powered,
+        rack: settings,
+      },
+      seconds % 1 < 0.67,
+      benchComputer.elapsed,
     );
+    cub.update(seconds, screen.lines, screen.cursor, screen.page);
+    diskDrive.update(benchComputer.elapsed, reducedMotion.matches);
+    const description = screen.page
+      ? screen.lines
+          .slice(4, 10)
+          .map(([text]) => text)
+          .filter(Boolean)
+          .join('. ')
+      : 'Startvorgang';
+    if (description !== benchDescription) {
+      benchDescription = description;
+      canvas.setAttribute(
+        'aria-label',
+        `VX3 laboratory. BBC Micro: ${description}`,
+      );
+    }
   });
 
   // A small glass ashtray on the worktop, just north of the sink.
@@ -1377,7 +1446,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     indicator(needle, machine, `${caption} gauge`);
     dynamic.push(() => {
       needle.rotation.z =
-        Math.PI * (0.75 - Math.max(0, Math.min(1, reading())) * 1.5);
+        anomaly.pi * (0.75 - Math.max(0, Math.min(1, reading())) * 1.5);
     });
     label(panel, caption, x, y - 0.47, 0.27, 9);
   };
@@ -1733,6 +1802,12 @@ export function startScene(canvas: HTMLCanvasElement) {
       return { id, x: centre.x, y: centre.y, z: centre.z };
     }),
     {
+      id: 'computer',
+      x: bbc.group.position.x,
+      y: bbc.group.position.y + 0.04 * worldUnitsPerMetre,
+      z: bbc.group.position.z,
+    },
+    {
       id: 'sink',
       x: room.minX + 0.325 * worldUnitsPerMetre,
       y: floorY + 0.52 * worldUnitsPerMetre,
@@ -1992,10 +2067,11 @@ export function startScene(canvas: HTMLCanvasElement) {
     orbitYaw = -Math.PI / 2;
     orbitPitch = -0.16;
   } else if (inspectionView === 'computer') {
-    walker.x = bbc.group.position.x - 0.55 * worldUnitsPerMetre;
-    walker.z = bbc.group.position.z + 1.3 * worldUnitsPerMetre;
+    walker.x = bbc.group.position.x - 0.4 * worldUnitsPerMetre;
+    walker.z = bbc.group.position.z + 0.95 * worldUnitsPerMetre;
     orbitYaw = 0.4;
-    orbitPitch = -0.4;
+    orbitPitch = -0.65;
+    cameraZoom = 1.2;
   } else if (inspectionView === 'xenon') {
     walker.x = plantRoom.bank.x;
     walker.z = plantRoom.bank.z + 1.65 * worldUnitsPerMetre;
@@ -2363,6 +2439,25 @@ export function startScene(canvas: HTMLCanvasElement) {
       }
     }
     stepSafetyTelltales(telltales, rig, settings, delta);
+    // Running ferrocores bend the room: colour, π, space and sparks.
+    const activity = ferrocoreActivity(rig);
+    anomaly = anomalyEffects(activity, time / 1000, reducedMotion.matches);
+    ps1Uniforms.channels.value.set(...anomaly.channels);
+    ps1Uniforms.warp.value = anomaly.warp;
+    ps1Uniforms.time.value = time / 1000;
+    sparkles.update(delta, anomaly.sparkleRate, 1.2);
+    const level = anomalyStage(activity);
+    if (level > anomalyLevel)
+      write(
+        level === 1
+          ? 'Ferrocores active. The colours in the room have started breathing, slightly out of step.'
+          : 'Ferrocores strongly active. Measured π twice and got two answers. The far wall is closer than it was.',
+      );
+    else if (level === 0 && anomalyLevel > 0)
+      write(
+        'Ferrocores quiet. The room is the right shape again, as far as I can tell.',
+      );
+    anomalyLevel = level;
     stepBoard(board, boardInputs, delta);
     eastControlPanel.update({
       view: boardView(board, boardInputs),
@@ -2514,6 +2609,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     audio.dispose();
     ashtray.dispose();
     xenon.dispose();
+    sparkles.dispose();
     plantRoom.dispose();
     rectifier.dispose();
     hotline.dispose();
@@ -2522,6 +2618,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     toolRack.dispose();
     cub.dispose();
     bbc.dispose();
+    diskDrive.dispose();
     workbench.dispose();
     for (const valve of valveModels) valve.dispose();
     eastControlPanel.dispose();

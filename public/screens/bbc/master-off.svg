@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
+<rect width="320" height="240" rx="14" fill="#060807"/>
+<g font-family="monospace" font-weight="bold" font-size="11">
+  <text x="18" y="12" dominant-baseline="hanging" fill="#f4e04a">VX3  BETRIEBSDIAGNOSE  1.4</text>
+  <text x="18" y="24" dominant-baseline="hanging" fill="#5fe0e8">UNIVERSITAET LEIPZIG  -02.17</text>
+  <text x="18" y="36" dominant-baseline="hanging" fill="#f2f2ee">------------------------------------</text>
+  <text x="18" y="60" dominant-baseline="hanging" fill="#f4e04a">STROMVERSORGUNG AUS</text>
+  <text x="18" y="84" dominant-baseline="hanging" fill="#f2f2ee">DER RECHNER HAT EIGENEN STROM.</text>
+  <text x="18" y="96" dominant-baseline="hanging" fill="#f2f2ee">IM TECHNIKRAUM: HAUPTSCHALTER</text>
+  <text x="18" y="108" dominant-baseline="hanging" fill="#f2f2ee">NEBEN DEM GLEICHRICHTER SCHLIESSEN.</text>
+  <text x="18" y="120" dominant-baseline="hanging" fill="#f2f2ee">DIE BELEUCHTUNG IST UNABHAENGIG.</text>
+  <text x="18" y="132" dominant-baseline="hanging" fill="#f2f2ee">------------------------------------</text>
+</g>
+</svg>

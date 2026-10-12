@@ -9,6 +9,7 @@ import {
 } from 'three';
 import type { Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import { addPlantRoomWiring } from './plant-room-wiring';
 import { createCanvasTexture, createLabelTexture } from './screens';
 
 /** A small plant room west of the lab, entered directly from the corridor. */
@@ -346,6 +347,8 @@ export function createPlantRoom(options: {
   const light = new PointLight('#dbe5c3', 24, 6 * m, 1.3);
   light.position.set(midX, floorY + 2.35 * m, midZ);
   group.add(light);
+
+  addPlantRoomWiring(group, materials, options);
 
   // Wire cage: access gate swings into the aisle, with no solid transparent wall.
   const cageX = midX - 0.4 * m;

@@ -8,7 +8,8 @@ import {
 } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
-import type { ScreenLine } from '../game/bench-monitor';
+import { bbcPageIds } from '../game/bench-monitor';
+import type { BbcPageId, ScreenLine } from '../game/bench-monitor';
 import { createCanvasTexture, createLabelTexture } from './screens';
 
 /** Mode 7 text as the BBC Micro's calibration program draws it. */
@@ -16,9 +17,18 @@ function createScreen() {
   const width = 320;
   const height = 240;
   const { context, texture } = createCanvasTexture(width, height);
-  let shown = '';
-  const draw = (lines: readonly ScreenLine[]) => {
-    const key = lines.map(([text]) => text).join('\n');
+  let shown: string | undefined;
+  const frames = new Map<BbcPageId, HTMLImageElement>();
+  for (const id of bbcPageIds) {
+    const image = new Image();
+    image.onload = () => {
+      frames.set(id, image);
+      shown = undefined;
+    };
+    image.src = `${import.meta.env.BASE_URL}screens/bbc/${id}.svg`;
+  }
+  const draw = (lines: readonly ScreenLine[], page?: BbcPageId) => {
+    const key = JSON.stringify([lines, page]);
     if (key === shown) return;
     shown = key;
     // The tube's rounded face, set in its black surround.
@@ -30,11 +40,14 @@ function createScreen() {
     context.fill();
     context.save();
     context.clip();
-    context.font = 'bold 13px monospace';
+    const frame = page && frames.get(page);
+    if (frame) context.drawImage(frame, 0, 0, width, height);
+    context.font = 'bold 11px monospace';
     context.textBaseline = 'top';
     for (const [i, [text, ink]] of lines.entries()) {
+      if (frame && i < 12 && i !== 3) continue;
       context.fillStyle = ink;
-      context.fillText(text, 18, 12 + i * 14.5, width - 30);
+      context.fillText(text, 18, 12 + i * 12, width - 30);
     }
     // A faint reflection across the top left of the glass.
     const sheen = context.createLinearGradient(0, 0, width * 0.6, height * 0.6);
@@ -96,7 +109,7 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
   const depth = 0.415;
   const front = depth / 2 - 0.02;
   const CASE = '#dcd2a9';
-  const BEZEL = '#4a3b31';
+  const BEZEL = '#242724';
   const SLOT = '#5d5747';
 
   // Plain steel cabinet, its sides louvred near the front and split by a
@@ -167,8 +180,7 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
   });
   const placeCursor = (lineCount: number) => {
     cursor.position.y =
-      (screenY + screenH / 2 - screenH * ((12 + lineCount * 14.5 + 9) / 240)) *
-      m;
+      (screenY + screenH / 2 - screenH * ((12 + lineCount * 12 + 9) / 240)) * m;
   };
 
   // The badge on a black tab at the bottom left, and the bare red power
@@ -204,10 +216,15 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
   return {
     group,
     /** Redraw the text if it has changed, and blink the cursor about once a second. */
-    update(seconds: number, lines: readonly ScreenLine[]) {
-      screen.draw(lines);
+    update(
+      seconds: number,
+      lines: readonly ScreenLine[],
+      showCursor = true,
+      page?: BbcPageId,
+    ) {
+      screen.draw(lines, page);
       placeCursor(lines.length);
-      cursor.visible = seconds % 1.1 < 0.6;
+      cursor.visible = showCursor && lines.length > 0 && seconds % 1.1 < 0.6;
     },
     dispose() {
       group.traverse((object) => {

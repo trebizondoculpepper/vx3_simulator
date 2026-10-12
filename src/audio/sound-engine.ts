@@ -35,6 +35,7 @@ export type SoundSource =
   | 'field'
   | 'monitor'
   | 'service'
+  | 'computer'
   | 'sink'
   | 'rectifier';
 
@@ -281,6 +282,9 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
 }
 
 export function createSoundEngine() {
+  let bootBuffer: Promise<AudioBuffer> | null = null;
+  let bootSource: AudioBufferSourceNode | null = null;
+  let bootRequest = 0;
   let plantPowered = false;
   let graph: AudioGraph | null = null;
   let loading: Promise<void> | null = null;
@@ -346,6 +350,47 @@ export function createSoundEngine() {
     else {
       pending.push(cue);
       void unlock();
+    }
+  };
+  /** The reference video's 3–5 second BBC startup, played at the computer. */
+  const playComputerBoot = async () => {
+    const request = ++bootRequest;
+    bootSource?.stop();
+    bootSource = null;
+    if (muted || disposed || !visible) return;
+    await unlock();
+    if (!graph || graph.context.state !== 'running') return;
+    const current = graph;
+    if (!bootBuffer)
+      bootBuffer = fetch(
+        new URL('./assets/bbc-model-b-boot.wav', import.meta.url),
+      )
+        .then((response) => {
+          if (!response.ok) throw new Error('BBC boot sound unavailable');
+          return response.arrayBuffer();
+        })
+        .then((bytes) => current.context.decodeAudioData(bytes));
+    try {
+      const buffer = await bootBuffer;
+      if (request !== bootRequest || muted || disposed || !visible) return;
+      const source = current.context.createBufferSource();
+      const gain = current.context.createGain();
+      const pan = current.context.createStereoPanner();
+      source.buffer = buffer;
+      gain.gain.value = 0.22 * distanceGain('computer');
+      pan.pan.value = spatial?.pan('computer') ?? 0;
+      source.connect(gain).connect(pan).connect(current.master);
+      bootSource = source;
+      source.onended = () => {
+        source.disconnect();
+        gain.disconnect();
+        pan.disconnect();
+        if (bootSource === source) bootSource = null;
+      };
+      source.start();
+    } catch (error) {
+      bootBuffer = null;
+      console.warn('BBC boot sound could not play.', error);
     }
   };
   const update = (
@@ -448,6 +493,8 @@ export function createSoundEngine() {
   };
   const dispose = () => {
     disposed = true;
+    bootRequest++;
+    bootSource?.stop();
     pending.length = 0;
     if (!graph) return;
     graph.master.gain.value = 0;
@@ -459,6 +506,7 @@ export function createSoundEngine() {
       plantPowered = on;
     },
     unlock,
+    playComputerBoot,
     play,
     update,
     setMix,
