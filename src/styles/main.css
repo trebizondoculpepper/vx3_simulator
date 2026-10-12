@@ -59,33 +59,9 @@ canvas {
   pointer-events: auto;
   cursor: pointer;
 }
-.view-switch {
-  position: absolute;
-  top: 16px;
-  left: 22px;
-  display: flex;
-  gap: 3px;
-  padding: 4px;
-  border: 2px solid #777965;
-  background: #292d29e8;
-}
-.view-switch button {
-  border: 1px solid #7f846e;
-  background: #3d433a;
-  color: #d4c39d;
-  font:
-    bold 10px 'Courier New',
-    monospace;
-  padding: 8px 7px;
-}
-.view-switch button[aria-pressed='true'] {
-  border-color: #e6c77e;
-  background: #756343;
-  color: #fff4cf;
-}
 .sound-controls {
   position: absolute;
-  top: 65px;
+  top: 16px;
   left: 22px;
   display: flex;
   align-items: center;
@@ -261,13 +237,9 @@ canvas {
   display: none !important;
 }
 @media (max-width: 700px) {
-  .view-switch {
-    left: 8px;
-    top: 8px;
-  }
   .sound-controls {
     left: 8px;
-    top: 56px;
+    top: 8px;
   }
   .logbook {
     top: auto;
@@ -312,11 +284,11 @@ canvas {
   mix-blend-mode: normal;
 }
 
-/* Twin thumbsticks: touch input in the first-person view only. */
+/* Twin thumbsticks for touch input. */
 .touch-sticks {
   display: none;
 }
-.rack-ui[data-input='touch'][data-view='perspective'] .touch-sticks {
+.rack-ui[data-input='touch'] .touch-sticks {
   display: block;
 }
 .touch-stick {
@@ -358,7 +330,7 @@ canvas {
 }
 /* In touch first person the sticks replace the step buttons, and the
    logbook and its tab keep clear of the right stick. */
-.rack-ui[data-input='touch'][data-view='perspective'] .rack-nav {
+.rack-ui[data-input='touch'] .rack-nav {
   display: none;
 }
 .rack-ui[data-input='touch'] .notebook-tab {

@@ -4,7 +4,6 @@ import {
   BoxGeometry,
   CatmullRomCurve3,
   CircleGeometry,
-  Color,
   CylinderGeometry,
   DirectionalLight,
   Fog,
@@ -12,7 +11,6 @@ import {
   Mesh,
   NearestFilter,
   OctahedronGeometry,
-  OrthographicCamera,
   PerspectiveCamera,
   PlaneGeometry,
   PointLight,
@@ -129,15 +127,11 @@ export function startScene(canvas: HTMLCanvasElement) {
   renderer.shadowMap.enabled = true;
   renderer.setPixelRatio(1);
   const perspectiveCamera = new PerspectiveCamera(52, 1, 0.1, 150);
-  const isometricCamera = new OrthographicCamera(-4, 4, 4, -4, 0.1, 100);
-  let view: 'perspective' | 'isometric' = 'perspective';
-  const camera = () =>
-    view === 'perspective' ? perspectiveCamera : isometricCamera;
   const scene = new Scene();
-  const roomTone = new Color('#181714');
-  scene.background = roomTone;
   // Two floors underground the corridor fades into darkness either way.
   const basementFog = new Fog('#0d0c0a', 55, 148);
+  scene.background = basementFog.color;
+  scene.fog = basementFog;
   // The fill lights stand in for the lab's fluorescent tubes and follow
   // the light switch.
   const fill = new AmbientLight('#fff0d7', 1.5);
@@ -475,7 +469,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       performance.now() / 1000,
       reducedMotion.matches,
     );
-    const listener = camera().getWorldPosition(new Vector3());
+    const listener = perspectiveCamera.getWorldPosition(new Vector3());
     if (drip && roomAt(roomPlan, listener.x, listener.z) === 'lab')
       audio.play('drip');
   });
@@ -667,7 +661,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   const turnAmp = (hit: Intersection) => {
     settings.knobs.ampGain = stepKnob(
       settings.knobs.ampGain,
-      knobDirection(ampPivot, hit.point, camera()),
+      knobDirection(ampPivot, hit.point, perspectiveCamera),
     );
     applyRack(settings, rig.controls);
     audio.play('knob');
@@ -1269,7 +1263,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       return;
     }
     const setting = xenon.stepRegulator(
-      knobDirection(xenon.regulatorPivot, hit.point, camera()),
+      knobDirection(xenon.regulatorPivot, hit.point, perspectiveCamera),
     );
     audio.play('knob');
     write(
@@ -1607,7 +1601,11 @@ export function startScene(canvas: HTMLCanvasElement) {
             knobPivot.rotation.z = -(settings.knobs[id] - 0.5) * 4.4;
           });
           const turn = (hit: Intersection) => {
-            const direction = knobDirection(knobPivot, hit.point, camera());
+            const direction = knobDirection(
+              knobPivot,
+              hit.point,
+              perspectiveCamera,
+            );
             if (control.kind === 'knob') {
               settings.knobs[id] = stepKnob(settings.knobs[id], direction);
               applyRack(settings, rig.controls);
@@ -1869,7 +1867,7 @@ export function startScene(canvas: HTMLCanvasElement) {
 
   const overlay = document.createElement('div');
   overlay.className = 'rack-ui';
-  overlay.innerHTML = `<div class="view-switch" role="group" aria-label="Camera view"><button type="button" data-view="perspective" aria-pressed="true">PERSPECTIVE</button><button type="button" data-view="isometric" aria-pressed="false">ISOMETRIC</button></div><div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Pan and zoom"><button type="button" data-pan="left" aria-label="Pan left">◀</button><button type="button" data-pan="up" aria-label="Pan up">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Pan down">▼</button><button type="button" data-pan="right" aria-label="Pan right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook"><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log" hidden>▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: ZOOM · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
+  overlay.innerHTML = `<div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Movement and zoom"><button type="button" data-pan="left" aria-label="Step left">◀</button><button type="button" data-pan="up" aria-label="Step forward">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Step back">▼</button><button type="button" data-pan="right" aria-label="Step right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook"><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log" hidden>▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: MOVE · ALT+WHEEL: HEIGHT · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
   const manualSheet = document.createElement('aside');
   manualSheet.className = 'manual-sheet';
   manualSheet.hidden = true;
@@ -2002,56 +2000,23 @@ export function startScene(canvas: HTMLCanvasElement) {
     unseen = 0;
     unread.textContent = '';
   });
-  for (const button of overlay.querySelectorAll<HTMLButtonElement>(
-    '[data-view]',
-  )) {
-    button.addEventListener('click', () => {
-      audio.play('selector');
-      view = button.dataset.view === 'isometric' ? 'isometric' : 'perspective';
-      if (view === 'isometric' && locked()) document.exitPointerLock();
-      overlay.dataset.view = view;
-      refreshHelp();
-      keys.clear();
-      sticks.reset();
-      for (const option of overlay.querySelectorAll<HTMLButtonElement>(
-        '[data-view]',
-      )) {
-        option.setAttribute('aria-pressed', String(option === button));
-      }
-    });
-  }
-
-  const halfTravel = Math.max(0, (totalHeight - 3.2) / 2);
   const eyeY = floorY + 1.8034 * worldUnitsPerMetre;
-  let pan = eyeY - 0.22;
-  let panX = 0;
+  let eyeOffset = 0;
   let cameraZoom = 1;
-  let unitLabel = '';
   const zoomTo = (value: number) => {
     cameraZoom = Math.max(0.65, Math.min(1.8, value));
-    isometricCamera.zoom = cameraZoom;
-    isometricCamera.updateProjectionMatrix();
   };
-  const panTo = (value: number) => {
-    pan = Math.max(-halfTravel, Math.min(halfTravel, value));
-    unitLabel = `U ${String(Math.min(rackUnits, Math.max(1, Math.floor((halfTravel - pan) / U) + 1))).padStart(2, '0')} / ${rackUnits}`;
-  };
-  panTo(pan);
   overlay.querySelector('[data-pan="up"]')!.addEventListener('click', () => {
-    if (view === 'perspective') nudge.forward += 0.6 * worldUnitsPerMetre;
-    else panTo(pan + 1.5);
+    nudge.forward += 0.6 * worldUnitsPerMetre;
   });
   overlay.querySelector('[data-pan="down"]')!.addEventListener('click', () => {
-    if (view === 'perspective') nudge.forward -= 0.6 * worldUnitsPerMetre;
-    else panTo(pan - 1.5);
+    nudge.forward -= 0.6 * worldUnitsPerMetre;
   });
   overlay.querySelector('[data-pan="left"]')!.addEventListener('click', () => {
-    if (view === 'perspective') nudge.right -= 0.6 * worldUnitsPerMetre;
-    else panX = Math.max(-6.5, panX - 0.75);
+    nudge.right -= 0.6 * worldUnitsPerMetre;
   });
   overlay.querySelector('[data-pan="right"]')!.addEventListener('click', () => {
-    if (view === 'perspective') nudge.right += 0.6 * worldUnitsPerMetre;
-    else panX = Math.min(9.5, panX + 0.75);
+    nudge.right += 0.6 * worldUnitsPerMetre;
   });
   overlay.querySelector('[data-zoom="in"]')!.addEventListener('click', () => {
     zoomTo(cameraZoom + 0.15);
@@ -2062,9 +2027,16 @@ export function startScene(canvas: HTMLCanvasElement) {
   const wheel = (event: WheelEvent) => {
     event.preventDefault();
     const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
-    panX = Math.max(-6.5, Math.min(9.5, panX + event.deltaX * scale * 0.005));
-    if (event.altKey) panTo(pan - event.deltaY * scale * 0.004);
-    else zoomTo(cameraZoom - event.deltaY * scale * 0.002);
+    nudge.right += event.deltaX * scale * 0.005 * worldUnitsPerMetre;
+    if (event.altKey)
+      eyeOffset = Math.max(
+        -1.1 * worldUnitsPerMetre,
+        Math.min(
+          0.7 * worldUnitsPerMetre,
+          eyeOffset - event.deltaY * scale * 0.004 * worldUnitsPerMetre,
+        ),
+      );
+    else nudge.forward -= event.deltaY * scale * 0.005 * worldUnitsPerMetre;
   };
   canvas.addEventListener('wheel', wheel, { passive: false });
   const raycaster = new Raycaster();
@@ -2209,19 +2181,14 @@ export function startScene(canvas: HTMLCanvasElement) {
   const help = overlay.querySelector<HTMLElement>('.rack-help')!;
   const refreshHelp = () => {
     const touch = overlay.dataset.input === 'touch';
-    help.textContent =
-      view === 'isometric'
-        ? touch
-          ? 'DRAG: ORBIT · TAP: USE · PINCH: ZOOM'
-          : 'WHEEL: ZOOM · ALT+WHEEL: HEIGHT · DRAG: ORBIT · CLICK: USE'
-        : touch
-          ? 'LEFT STICK: WALK (PUSH FULLY TO RUN) · RIGHT STICK: LOOK · TAP: USE · PINCH: ZOOM'
-          : 'CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: ZOOM · ESC: CURSOR';
+    help.textContent = touch
+      ? 'LEFT STICK: WALK (PUSH FULLY TO RUN) · RIGHT STICK: LOOK · TAP: USE · PINCH: ZOOM'
+      : 'CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: MOVE · ALT+WHEEL: HEIGHT · ESC: CURSOR';
   };
   const crosshair = overlay.querySelector<HTMLElement>('.crosshair')!;
   const target = (x = 0, y = 0) => {
     pointer.set(x, y);
-    raycaster.setFromCamera(pointer, camera());
+    raycaster.setFromCamera(pointer, perspectiveCamera);
     const hit = raycaster.intersectObjects(interactive, false)[0];
     if (!hit) return undefined;
     if (withinReach.has(hit.object) && hit.distance > doorReach)
@@ -2249,7 +2216,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     'ShiftRight',
   ]);
   const keydown = (event: KeyboardEvent) => {
-    if (view !== 'perspective' || typing(event)) return;
+    if (typing(event)) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (walkKeys.has(event.code)) {
       keys.add(event.code);
@@ -2311,7 +2278,6 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   window.addEventListener('pointerdown', notePointer, true);
   setInput(window.matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse');
-  overlay.dataset.view = view;
 
   let drag: {
     x: number;
@@ -2322,7 +2288,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     /** False for a touch in first person, which only ever taps. */
     look: boolean;
   } | null = null;
-  // Two fingers on the canvas pinch to zoom, in either view. A pinch never
+  // Two fingers on the canvas pinch to zoom. A pinch never
   // ends in a tap: taps wait until every finger has lifted.
   const touches = new Map<number, { x: number; y: number }>();
   let pinch: { distance: number; zoom: number } | null = null;
@@ -2344,11 +2310,7 @@ export function startScene(canvas: HTMLCanvasElement) {
         return;
       }
     }
-    if (
-      view === 'perspective' &&
-      event.pointerType === 'mouse' &&
-      !lockRefused
-    ) {
+    if (event.pointerType === 'mouse' && !lockRefused) {
       if (event.button !== 0) return;
       if (locked()) use();
       else void Promise.resolve(canvas.requestPointerLock()).catch(refuseLock);
@@ -2361,7 +2323,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       yaw: orbitYaw,
       pitch: orbitPitch,
       moved: false,
-      look: !(view === 'perspective' && event.pointerType === 'touch'),
+      look: event.pointerType !== 'touch',
     };
   };
   const move = (event: PointerEvent) => {
@@ -2423,11 +2385,6 @@ export function startScene(canvas: HTMLCanvasElement) {
     ps1Uniforms.resolution.value.set(w, h);
     perspectiveCamera.aspect = width / height;
     perspectiveCamera.updateProjectionMatrix();
-    isometricCamera.left = -6.5 * (width / height);
-    isometricCamera.right = 6.5 * (width / height);
-    isometricCamera.top = 6.5;
-    isometricCamera.bottom = -6.5;
-    isometricCamera.updateProjectionMatrix();
   };
   const observer = new ResizeObserver(resize);
   observer.observe(canvas);
@@ -2525,105 +2482,86 @@ export function startScene(canvas: HTMLCanvasElement) {
     if (teleprinter.update(delta, reducedMotion.matches)) audio.play('printer');
     if (!reducedMotion.matches) carousel.rotation.z -= rig.spindle * delta * 4;
     for (const update of dynamic) update();
-    if (view === 'perspective') {
-      footprints ??= collectFootprints();
-      const held = (...codes: string[]) => codes.some((code) => keys.has(code));
-      // Keys give a full step; the left stick walks at its deflection and
-      // runs when pushed to the rim.
-      const ahead =
-        (held('KeyW', 'ArrowUp') ? 1 : 0) -
-        (held('KeyS', 'ArrowDown') ? 1 : 0) -
-        sticks.move.y;
-      const aside =
-        (held('KeyD', 'ArrowRight') ? 1 : 0) -
-        (held('KeyA', 'ArrowLeft') ? 1 : 0) +
-        sticks.move.x;
-      const push = Math.hypot(sticks.move.x, sticks.move.y);
-      const length = Math.max(1, Math.hypot(ahead, aside));
-      const speed =
-        (held('ShiftLeft', 'ShiftRight') || push > 0.92 ? 4.2 : 2) *
-        metre *
-        (walker.lowCrouched ? 0.3 : walker.crouched ? 0.5 : 1) *
-        delta;
-      // The right stick turns faster the further it is pushed.
-      orbitYaw += sticks.look.x * Math.abs(sticks.look.x) * 2.4 * delta;
-      orbitPitch = Math.max(
-        -1.45,
-        Math.min(
-          1.45,
-          orbitPitch - sticks.look.y * Math.abs(sticks.look.y) * 1.8 * delta,
-        ),
-      );
-      const forward = (ahead / length) * speed + nudge.forward;
-      const right = (aside / length) * speed + nudge.right;
-      nudge.forward = 0;
-      nudge.right = 0;
-      const solid = [
-        ...footprints,
-        ...(labRoom.door.blocking ? [labRoom.door.footprint] : []),
-        ...(plantRoom.blocking ? [plantRoom.gateFootprint] : []),
-        ...(plantRoom.entryBlocking ? [plantRoom.entryFootprint] : []),
-      ];
-      const next = slide(
-        solid,
-        walker.x,
-        walker.z,
-        Math.sin(orbitYaw) * forward + Math.cos(orbitYaw) * right,
-        -Math.cos(orbitYaw) * forward + Math.sin(orbitYaw) * right,
-        walkerRadius,
-      );
-      walker.stride += Math.hypot(next.x - walker.x, next.z - walker.z);
-      walker.x = next.x;
-      walker.z = next.z;
-      walker.crouch +=
-        ((walker.lowCrouched ? 1.85 : walker.crouched ? 1 : 0) -
-          walker.crouch) *
-        Math.min(1, delta * 10);
-      const bob = reducedMotion.matches
-        ? 0
-        : Math.sin((walker.stride / metre) * Math.PI * 1.6) * 0.02 * metre;
-      const eye = new Vector3(
-        walker.x,
-        eyeY - walker.crouch * 0.65 * metre + bob,
-        walker.z,
-      );
-      perspectiveCamera.position.copy(eye);
-      perspectiveCamera.lookAt(
-        eye.x + Math.sin(orbitYaw) * Math.cos(orbitPitch),
-        eye.y + Math.sin(orbitPitch),
-        eye.z - Math.cos(orbitYaw) * Math.cos(orbitPitch),
-      );
-      const fov = 52 / cameraZoom;
-      if (perspectiveCamera.fov !== fov) {
-        perspectiveCamera.fov = fov;
-        perspectiveCamera.updateProjectionMatrix();
-      }
-      if (locked()) crosshair.dataset.hot = String(Boolean(target()));
-      unitReadout.textContent =
-        walker.z > room.maxZ
-          ? 'CORRIDOR · EBENE −2'
-          : walker.x < room.minX
-            ? 'TECHNIKRAUM · XENON'
-            : 'VX3 LAB · RAUM −2.17';
-    } else unitReadout.textContent = unitLabel;
-    scene.fog = view === 'perspective' ? basementFog : null;
-    scene.background = view === 'perspective' ? basementFog.color : roomTone;
-    // The isometric view keeps its bounded orbit outside the action.
-    const isoYaw = Math.max(-1.15, Math.min(1.15, orbitYaw));
-    const isoPitch = Math.max(-0.35, Math.min(0.65, orbitPitch));
-    isometricCamera.position.set(
-      panX + Math.sin(0.63 + isoYaw) * 9.3,
-      Math.max(
-        floorY + 0.6,
-        Math.min(room.ceilingY - 0.6, pan + 3.5 + Math.sin(isoPitch) * 9.3),
+    footprints ??= collectFootprints();
+    const held = (...codes: string[]) => codes.some((code) => keys.has(code));
+    // Keys give a full step; the left stick walks at its deflection and
+    // runs when pushed to the rim.
+    const ahead =
+      (held('KeyW', 'ArrowUp') ? 1 : 0) -
+      (held('KeyS', 'ArrowDown') ? 1 : 0) -
+      sticks.move.y;
+    const aside =
+      (held('KeyD', 'ArrowRight') ? 1 : 0) -
+      (held('KeyA', 'ArrowLeft') ? 1 : 0) +
+      sticks.move.x;
+    const push = Math.hypot(sticks.move.x, sticks.move.y);
+    const length = Math.max(1, Math.hypot(ahead, aside));
+    const speed =
+      (held('ShiftLeft', 'ShiftRight') || push > 0.92 ? 4.2 : 2) *
+      metre *
+      (walker.lowCrouched ? 0.3 : walker.crouched ? 0.5 : 1) *
+      delta;
+    // The right stick turns faster the further it is pushed.
+    orbitYaw += sticks.look.x * Math.abs(sticks.look.x) * 2.4 * delta;
+    orbitPitch = Math.max(
+      -1.45,
+      Math.min(
+        1.45,
+        orbitPitch - sticks.look.y * Math.abs(sticks.look.y) * 1.8 * delta,
       ),
-      Math.cos(0.63 + isoYaw) * 9.3,
     );
-    isometricCamera.lookAt(panX, pan, 0);
-    labRoom.roof.visible = view === 'perspective';
-    plantRoom.roof.visible = view === 'perspective';
+    const forward = (ahead / length) * speed + nudge.forward;
+    const right = (aside / length) * speed + nudge.right;
+    nudge.forward = 0;
+    nudge.right = 0;
+    const solid = [
+      ...footprints,
+      ...(labRoom.door.blocking ? [labRoom.door.footprint] : []),
+      ...(plantRoom.blocking ? [plantRoom.gateFootprint] : []),
+      ...(plantRoom.entryBlocking ? [plantRoom.entryFootprint] : []),
+    ];
+    const next = slide(
+      solid,
+      walker.x,
+      walker.z,
+      Math.sin(orbitYaw) * forward + Math.cos(orbitYaw) * right,
+      -Math.cos(orbitYaw) * forward + Math.sin(orbitYaw) * right,
+      walkerRadius,
+    );
+    walker.stride += Math.hypot(next.x - walker.x, next.z - walker.z);
+    walker.x = next.x;
+    walker.z = next.z;
+    walker.crouch +=
+      ((walker.lowCrouched ? 1.85 : walker.crouched ? 1 : 0) - walker.crouch) *
+      Math.min(1, delta * 10);
+    const bob = reducedMotion.matches
+      ? 0
+      : Math.sin((walker.stride / metre) * Math.PI * 1.6) * 0.02 * metre;
+    const eye = new Vector3(
+      walker.x,
+      eyeY + eyeOffset - walker.crouch * 0.65 * metre + bob,
+      walker.z,
+    );
+    perspectiveCamera.position.copy(eye);
+    perspectiveCamera.lookAt(
+      eye.x + Math.sin(orbitYaw) * Math.cos(orbitPitch),
+      eye.y + Math.sin(orbitPitch),
+      eye.z - Math.cos(orbitYaw) * Math.cos(orbitPitch),
+    );
+    const fov = 52 / cameraZoom;
+    if (perspectiveCamera.fov !== fov) {
+      perspectiveCamera.fov = fov;
+      perspectiveCamera.updateProjectionMatrix();
+    }
+    if (locked()) crosshair.dataset.hot = String(Boolean(target()));
+    unitReadout.textContent =
+      walker.z > room.maxZ
+        ? 'CORRIDOR · EBENE −2'
+        : walker.x < room.minX
+          ? 'TECHNIKRAUM · XENON'
+          : 'VX3 LAB · RAUM −2.17';
     ps1Uniforms.snapPixels.value = reducedMotion.matches ? 0 : 1;
-    const viewer = camera();
+    const viewer = perspectiveCamera;
     viewer.getWorldPosition(ear);
     viewer.getWorldDirection(facing);
     audio.listen(ear.x, ear.y, ear.z, Math.atan2(facing.x, -facing.z));

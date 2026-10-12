@@ -102,8 +102,7 @@ export function createPlantRoom(options: {
   for (const x of [minX - wallThickness / 2, maxX + wallThickness / 2])
     box(wallThickness, height, depth, '#626f68', x, floorY + height / 2, midZ);
   // Match the laboratory's high exposed ceiling: a slab, deep joists and
-  // suspended twin-tube fittings. The overhead cables below stay visible in
-  // the isometric view when only this roof group is hidden.
+  // suspended twin-tube fittings, with overhead cables below the roof.
   const ceilingY = floorY + height;
   const roof = new Group();
   group.add(roof);
