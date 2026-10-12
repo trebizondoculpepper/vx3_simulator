@@ -10,7 +10,12 @@ import {
 import type { Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { addPlantRoomWiring } from './plant-room-wiring';
+import { createRectifierInstruments } from './rectifier-instruments';
 import { createCanvasTexture, createLabelTexture } from './screens';
+import {
+  createGasCylinderWarningTexture,
+  createNoOpenFlameTexture,
+} from './gas-signs';
 
 /** A small plant room west of the lab, entered directly from the corridor. */
 export function createPlantRoom(options: {
@@ -174,6 +179,7 @@ export function createPlantRoom(options: {
     0,
     door,
   );
+  const grilleGlows: Material[] = [];
   for (const face of [-1, 1]) {
     box(
       0.29 * m,
@@ -207,6 +213,19 @@ export function createPlantRoom(options: {
         door,
       );
     }
+    // The rectifier's blue arc can occasionally be seen behind the grille.
+    // It is a surface glow on the leaf, so it cannot shine through a solid door.
+    const arcMaterial = createPs1Material(
+      { color: '#478cf5', transparent: true, opacity: 0, depthWrite: false },
+      true,
+      true,
+    );
+    materials.push(arcMaterial);
+    const arc = new Mesh(new PlaneGeometry(0.27 * m, 0.54 * m), arcMaterial);
+    arc.position.set(doorWidth / 2, 1.45 * m, face * 0.028 * m);
+    if (face < 0) arc.rotation.y = Math.PI;
+    door.add(arc);
+    grilleGlows.push(arcMaterial);
     const chrome = createPs1Material({ color: '#c3c9bd', metalness: 0.55 });
     materials.push(chrome);
     const handlePart = (
@@ -320,6 +339,9 @@ export function createPlantRoom(options: {
   });
   let entryOpened = false;
   let entryAmount = 0;
+  let arcCountdown = 1.7;
+  let arcPulse = 0;
+  let arcCycle = 0;
   const powerPanel = new Group();
   powerPanel.position.set(maxX - 0.045 * m, floorY + 1.35 * m, minZ + 2.2 * m);
   powerPanel.rotation.y = -Math.PI / 2;
@@ -364,14 +386,23 @@ export function createPlantRoom(options: {
       });
     }
   });
-  // A static consumer-unit enclosure beside the rectifier and master switch.
+  const instruments = createRectifierInstruments(m);
+  instruments.group.position.set(
+    maxX - 0.055 * m,
+    floorY + 1.55 * m,
+    minZ + 3.28 * m,
+  );
+  instruments.group.rotation.y = -Math.PI / 2;
+  group.add(instruments.group);
+
+  // A static consumer-unit enclosure beyond the rectifier instruments.
   // The cover is held open for inspection; the miniature breakers deliberately
   // have no click targets until their circuits have been modelled.
   const breakerPanel = new Group();
   breakerPanel.position.set(
     maxX - 0.055 * m,
     floorY + 1.55 * m,
-    minZ + 3.23 * m,
+    minZ + 4.48 * m,
   );
   breakerPanel.rotation.y = -Math.PI / 2;
   group.add(breakerPanel);
@@ -612,6 +643,22 @@ export function createPlantRoom(options: {
     gate,
   );
   label('XENON · 2 SLPM MIN', 0.75 * m, gateW / 2, 1.5 * m, 0.025 * m, gate);
+  // Current DGUV signs, added when the lab reopened to visitors: gas
+  // cylinders and no open flame, wired to the mesh at eye level.
+  for (const [image, x] of [
+    [createGasCylinderWarningTexture(), gateW * 0.3],
+    [createNoOpenFlameTexture(), gateW * 0.62],
+  ] as const) {
+    textures.push(image.texture);
+    const material = createPs1Material({ map: image.texture }, true, true);
+    materials.push(material);
+    const sign = new Mesh(
+      new PlaneGeometry(0.3 * m, (0.3 * m * image.height) / image.width),
+      material,
+    );
+    sign.position.set(x, 1.12 * m, 0.02 * m);
+    gate.add(sign);
+  }
   label(
     '1 CAGE  2 VALVE  3 FLOW  4 MAINS',
     1.4 * m,
@@ -678,7 +725,12 @@ export function createPlantRoom(options: {
       opened = !opened;
       return opened;
     },
-    update(delta: number, reducedMotion: boolean) {
+    /** Swing the cage gate open, if it is not already. */
+    openGate() {
+      opened = true;
+    },
+    update(delta: number, reducedMotion: boolean, loadKw = 0) {
+      instruments.update(powered, loadKw, delta);
       entryAmount +=
         Math.sign((entryOpened ? 1 : 0) - entryAmount) *
         Math.min(
@@ -686,6 +738,19 @@ export function createPlantRoom(options: {
           delta * (reducedMotion ? 12 : 1.5),
         );
       door.rotation.y = entryAmount * 1.45;
+      if (powered && entryAmount < 0.04 && !reducedMotion) {
+        arcCountdown -= delta;
+        if (arcCountdown <= 0) {
+          arcPulse = 0.09 + (arcCycle % 3) * 0.035;
+          arcCountdown = 2.4 + ((arcCycle * 7) % 6) * 0.55;
+          arcCycle++;
+        }
+        arcPulse = Math.max(0, arcPulse - delta);
+      } else {
+        arcPulse = 0;
+        if (!powered) arcCountdown = 1.7;
+      }
+      for (const glow of grilleGlows) glow.opacity = arcPulse > 0 ? 0.85 : 0;
       lever.rotation.x = powered ? 0 : 1.05;
       const target = opened ? 1 : 0;
       amount +=
@@ -694,6 +759,8 @@ export function createPlantRoom(options: {
       gate.rotation.y = -amount * 1.45;
     },
     dispose() {
+      group.remove(instruments.group);
+      instruments.dispose();
       group.traverse((o) => {
         if (o instanceof Mesh) o.geometry.dispose();
       });

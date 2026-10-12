@@ -17,11 +17,13 @@ import {
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { componentCatalogue, createRigModel } from '../game/rig-model';
+import { xenonSourcePressure } from '../game/xenon-supply';
 import {
   createCanvasTexture,
   createDialTexture,
   createLabelTexture,
 } from './screens';
+import { createCylinderLabelTexture } from './gas-signs';
 
 export interface XenonBankOptions {
   /** Floor height in lab coordinates. */
@@ -111,6 +113,13 @@ export function createXenonCylinders(options: XenonBankOptions) {
   const headerY = domeTop + 1.35;
   const headerZ = options.z - 0.18;
 
+  const hazardLabel = createCylinderLabelTexture();
+  const hazardLabelMaterial = createPs1Material(
+    { map: hazardLabel.texture },
+    true,
+  );
+  materials.push(hazardLabelMaterial);
+  textures.push(hazardLabel.texture);
   for (const [i, x] of xs.entries()) {
     const z = options.z + (i === 1 ? 0.05 : 0);
     // Steel body, domed shoulder, a cream band stencilled XENON.
@@ -136,7 +145,8 @@ export function createXenonCylinders(options: XenonBankOptions) {
         0,
         Math.PI / 2,
       ),
-      '#3f5664',
+      // EN 1089-3: inert gases wear a bright green (RAL 6018) shoulder.
+      '#57a639',
       x,
       shoulderBase,
       z,
@@ -151,7 +161,7 @@ export function createXenonCylinders(options: XenonBankOptions) {
       ),
       '#d8d2b8',
       x,
-      top - 0.68,
+      shoulderBase - 0.22,
       z,
     );
     const band = createLabelTexture('XENON', {
@@ -164,9 +174,27 @@ export function createXenonCylinders(options: XenonBankOptions) {
       band.width / 150,
       band.height / 150,
       x,
-      top - 0.68,
+      shoulderBase - 0.22,
       z + CYLINDER_RADIUS + 0.008,
     );
+    // The supplier's hazard label, wrapped round two facets of the body
+    // facing the room.
+    const facet = (Math.PI * 2) / 10;
+    const labelMesh = new Mesh(
+      new CylinderGeometry(
+        CYLINDER_RADIUS + 0.006,
+        CYLINDER_RADIUS + 0.006,
+        (facet * 2 * CYLINDER_RADIUS * hazardLabel.height) / hazardLabel.width,
+        2,
+        1,
+        true,
+        -facet,
+        facet * 2,
+      ),
+      hazardLabelMaterial,
+    );
+    labelMesh.position.set(x, shoulderBase - 0.92, z);
+    group.add(labelMesh);
     // Brass cylinder valve on the crown of the dome: a collar, the valve
     // body with its outlet facing the wall, and a black handwheel on top.
     mesh(new CylinderGeometry(0.17, 0.2, 0.12, 8), '#6d6a5e', x, domeTop, z);
@@ -371,11 +399,14 @@ export function createXenonCylinders(options: XenonBankOptions) {
       regulator,
     );
     needle.geometry.translate(0, 0.026, 0);
-    // Left: cylinder contents, nearly full. Right: delivery, set by the knob.
+    // Left: source pressure, nearly full but dipping under flow. Right: delivery.
     needle.rotation.z = -1.6;
     designate(needle, {
       machine: 'Xenon supply',
-      name: side > 0 ? 'Delivery pressure needle' : 'Cylinder contents needle',
+      name:
+        side > 0
+          ? 'Delivery pressure needle'
+          : 'Cylinder source pressure needle',
       role: 'indicator',
     });
     if (side > 0) deliveryNeedle = needle;
@@ -541,6 +572,12 @@ export function createXenonCylinders(options: XenonBankOptions) {
     },
     /** Turn the knob one step clockwise, stopping at fully open or closed. */
     regulatorPivot,
+    /** Set the knob straight to a delivery setting, 0..1. */
+    setRegulator(value: number) {
+      setting = stepKnob(value, 0);
+      supply.setControl('xenon-supply.flow-valve', setting);
+      return setting;
+    },
     stepRegulator(direction = 1) {
       setting = stepKnob(setting, direction);
       supply.setControl('xenon-supply.flow-valve', setting);
@@ -556,9 +593,10 @@ export function createXenonCylinders(options: XenonBankOptions) {
         contents -
           (supply.display('xenon-flow-gauge.flow') * delta) / 60 / 3000,
       );
-      if (contentsNeedle)
-        contentsNeedle.rotation.z = Math.PI * (0.75 - contents * 1.5);
       const flow = supply.get('xenon-flow-gauge.flow');
+      if (contentsNeedle)
+        contentsNeedle.rotation.z =
+          Math.PI * (0.75 - xenonSourcePressure(contents, flow) * 1.5);
       const bob = reducedMotion ? 0 : Math.sin(seconds * 9) * 0.006 * flow;
       float.position.y =
         rotBottom + 0.05 + flow * (ROTAMETER_LENGTH - 0.1) + bob;

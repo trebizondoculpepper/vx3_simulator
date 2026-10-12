@@ -9,6 +9,12 @@ import { xenonReady } from './xenon-supply';
  */
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
+export const FERROCORE_MAX_ANGULAR_VELOCITY = 4; // radians per second
+
+/** The drum's angular velocity, using the same speed as its rendered rotation. */
+export function ferrocoreAngularVelocity(rig: RigState) {
+  return rig.spindle * FERROCORE_MAX_ANGULAR_VELOCITY;
+}
 const smoothstep = (from: number, to: number, value: number) => {
   const t = clamp((value - from) / (to - from));
   return t * t * (3 - 2 * t);

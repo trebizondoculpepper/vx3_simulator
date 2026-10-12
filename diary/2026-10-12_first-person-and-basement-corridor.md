@@ -64,6 +64,9 @@ Each new feature lives in its own module, with small hooks in `src/rendering/sta
   - The manifold runs to a single two-gauge regulator just past the right-hand cylinder, and the feed hose to the rotameter now starts at the regulator's actual outlet.
   - The cylinders stand hard against the lab wall, so a first placement behind them put the manifold inside the wall; it now sits just in front of the wall face.
 
+- Setting and bottle labels: the user fixed the fiction. The lab is a present-day museum: commissioned around 1975, updated around 1986, disused from the early 1990s, and now a tourist landmark as Europe's first fully functional VX laboratory. Equipment may be old, but consumables and legally required signs are modern. The xenon bottles therefore wear the EN 1089-3 bright green (RAL 6018) inert-gas shoulder, and a supplier label wrapped round the body facing the room: the green ADR 2.2 diamond, the GHS04 pictogram, UN 2036 XENON, VERDICHTET, Achtung H280. The cream XENON band moved down off the dome, which had poked green facets through it. The old cage gate gained current ISO 7010 W029 (gas cylinders) and P003 (no open flame) signs. Textures are in `src/scene/gas-signs.ts`.
+- Cheat board (testing aid, in English): `src/scene/cheat-board.ts` hangs on the corridor wall right of the door plate, headed CHEAT CODES. XENON ON opens the cage and sets the regulator to 5 SLPM (new `xenon.setRegulator` and `plantRoom.openGate`); MERCURY ARC RECTIFIER ON closes the plant master supply. Each row's lamp shows whether its state is already set. A headless click test lit both lamps. The first click on a freshly loaded page is swallowed in headless Chromium, as it was before this change.
+
 ## Outcomes
 
 - All 37 tests pass, and typecheck, lint, format and build are clean.

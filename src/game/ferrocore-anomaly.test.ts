@@ -4,6 +4,7 @@ import {
   anomalyStage,
   CHANNEL_HZ,
   ferrocoreActivity,
+  ferrocoreAngularVelocity,
   ferrocoresOperational,
 } from './ferrocore-anomaly';
 import { createRig } from './rig';
@@ -16,6 +17,12 @@ const rigAt = (spindle: number, field = 0) => {
 };
 
 describe('ferrocore anomaly', () => {
+  it('reports the angular velocity used to turn the drum', () => {
+    expect(ferrocoreAngularVelocity(rigAt(0))).toBe(0);
+    expect(ferrocoreAngularVelocity(rigAt(0.5))).toBe(2);
+    expect(ferrocoreAngularVelocity(rigAt(1))).toBe(4);
+  });
+
   it('stays dormant until the drum is turning, then grows with the field', () => {
     expect(ferrocoreActivity(rigAt(0.1))).toBe(0);
     const spinning = ferrocoreActivity(rigAt(0.9));

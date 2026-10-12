@@ -1,5 +1,13 @@
 /** Fictional installation's commissioning threshold, in standard litres/minute. */
 export const XENON_MIN_FLOW_SLPM = 2;
+
+/** The supply gauge dips a little under load, then recovers when flow stops. */
+export function xenonSourcePressure(contents: number, flowFraction: number) {
+  const remaining = Math.max(0, Math.min(1, contents));
+  const flow = Math.max(0, Math.min(1, flowFraction));
+  return remaining * (1 - 0.08 * flow);
+}
+
 export function xenonReady(flowSlpm: number) {
   return Number.isFinite(flowSlpm) && flowSlpm >= XENON_MIN_FLOW_SLPM;
 }

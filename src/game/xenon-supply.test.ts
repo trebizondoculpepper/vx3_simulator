@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { componentCatalogue, createRigModel } from './rig-model';
-import { XENON_SPINDLE_LIMIT, xenonHazard, xenonReady } from './xenon-supply';
+import {
+  XENON_SPINDLE_LIMIT,
+  xenonHazard,
+  xenonReady,
+  xenonSourcePressure,
+} from './xenon-supply';
 import { boardView, createBoard, stepBoard } from './control-board';
 import { createRig } from './rig';
 import { createRackControls } from './rack-controls';
@@ -39,6 +44,39 @@ describe('xenon commissioning', () => {
     expect(model.display('xenon-pressure-indicator.pressure')).toBeLessThan(
       0.02,
     );
+  });
+  it('keeps flow proportional to valve opening and lets source pressure dip under load', () => {
+    const model = createRigModel(
+      componentCatalogue.filter((c) => c.id.startsWith('xenon-')),
+    );
+    const contents = 0.92;
+    expect(xenonSourcePressure(contents, 0)).toBe(contents);
+    for (const opening of [0.2, 0.5, 0.8, 1]) {
+      model.setControl('xenon-supply.flow-valve', opening);
+      for (let i = 0; i < 90; i++) model.step(0.1);
+      const flowFraction = model.get('xenon-flow-gauge.flow');
+      expect(model.display('xenon-flow-gauge.flow')).toBeCloseTo(
+        opening * 10,
+        2,
+      );
+      expect(model.display('xenon-pressure-indicator.pressure')).toBeCloseTo(
+        opening * 4,
+        2,
+      );
+      expect(xenonSourcePressure(contents, flowFraction)).toBeLessThan(
+        contents,
+      );
+    }
+    const loaded = xenonSourcePressure(
+      contents,
+      model.get('xenon-flow-gauge.flow'),
+    );
+    model.setControl('xenon-supply.flow-valve', 0);
+    for (let i = 0; i < 90; i++) model.step(0.1);
+    expect(
+      xenonSourcePressure(contents, model.get('xenon-flow-gauge.flow')),
+    ).toBeGreaterThan(loaded);
+    expect(xenonSourcePressure(contents, 0)).toBe(contents);
   });
   it('flashes the flow tile while supply is insufficient, including before mains', () => {
     const board = createBoard();

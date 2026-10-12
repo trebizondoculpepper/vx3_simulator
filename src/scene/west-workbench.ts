@@ -13,6 +13,7 @@ import {
 import type { BufferGeometry, Material, Object3D } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { createSinkLeak } from '../game/sink-leak';
+import { createCassettePlayer } from './cassette-player';
 
 export interface WestWorkbenchOptions {
   floorY: number;
@@ -97,6 +98,16 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
   const topY = height - slab / 2;
   const basin = 0.38;
   const sinkFloor = height - basin;
+
+  // The upright cassette player faces the room from intact worktop north of the basin.
+  const cassette = createCassettePlayer(m);
+  cassette.group.position.set(
+    wallX + 0.32 * m,
+    floorY + height * m,
+    sinkNorth - 0.46 * m,
+  );
+  cassette.group.rotation.y = Math.PI / 2;
+  group.add(cassette.group);
 
   // Worktop in pieces around the sink cut-out, with a dark front edge.
   const run = (z0: number, z1: number, out0: number, out1: number) =>
@@ -364,6 +375,7 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
 
   return {
     group,
+    cassette,
     /** Every mesh of the tap, for clicking. */
     tapParts: tapParts as readonly Object3D[],
     toggleTap() {
@@ -372,6 +384,7 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
       return running;
     },
     update(seconds: number, reducedMotion: boolean) {
+      cassette.update(seconds, reducedMotion);
       const delta =
         last === undefined ? 0 : Math.min(0.1, Math.max(0, seconds - last));
       last = seconds;
@@ -385,6 +398,8 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
       return drip.impact;
     },
     dispose() {
+      cassette.dispose();
+      group.remove(cassette.group);
       group.traverse((object) => {
         if (object instanceof Mesh) object.geometry.dispose();
       });

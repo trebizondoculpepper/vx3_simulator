@@ -86,6 +86,7 @@ import { createBbcMicro } from '../scene/bbc-micro';
 import { createBbcDiskDrive } from '../scene/bbc-disk-drive';
 import { createAshtray } from '../scene/ashtray';
 import { createXenonCylinders } from '../scene/xenon-cylinders';
+import { createCheatBoard } from '../scene/cheat-board';
 import { createHotlinePhone } from '../scene/hotline-phone';
 import { createLabRoom } from '../scene/lab-room';
 import { createCorridor } from '../scene/corridor';
@@ -96,12 +97,14 @@ import { knobDirection, mountRotaryKnob, stepKnob } from '../scene/rotary-knob';
 import {
   XENON_HAZARD_STRAIN_PER_SECOND,
   xenonHazard,
+  xenonReady,
 } from '../game/xenon-supply';
 import { benchScreen, createBenchComputer } from '../game/bench-monitor';
 import {
   anomalyEffects,
   anomalyStage,
   ferrocoreActivity,
+  ferrocoreAngularVelocity,
 } from '../game/ferrocore-anomaly';
 import { createCrystalSparkles } from '../scene/crystal-sparkles';
 import { createToolRack } from '../scene/tool-rack';
@@ -481,6 +484,19 @@ export function startScene(canvas: HTMLCanvasElement) {
           : 'Sink tap off.',
       ),
     );
+  for (const control of workbench.cassette.controls)
+    for (const part of control.parts)
+      fixture(part, `Cassette player ${control.name}`, () => {
+        workbench.cassette.press(control.name);
+        audio.play('button');
+        write(
+          control.name === 'play'
+            ? 'Kassettenspieler: Wiedergabe.'
+            : control.name === 'stop'
+              ? 'Kassettenspieler: Stopp.'
+              : 'Kassettenspieler: Schneller Vorlauf.',
+        );
+      });
   // The door is used from within arm's reach, from either side.
   const doorReach = 2.8 * worldUnitsPerMetre;
   const doorParts = new Set<Object3D>(labRoom.door.parts);
@@ -1196,10 +1212,10 @@ export function startScene(canvas: HTMLCanvasElement) {
     }
   });
 
-  // A small glass ashtray on the worktop, just north of the sink.
+  // A small glass ashtray near the sink, forward of the cassette player.
   const ashtray = createAshtray();
   ashtray.group.position.set(
-    room.minX + 0.42 * worldUnitsPerMetre,
+    room.minX + 0.61 * worldUnitsPerMetre,
     floorY + 0.9 * worldUnitsPerMetre,
     room.maxZ - 0.85 * worldUnitsPerMetre,
   );
@@ -1279,6 +1295,33 @@ export function startScene(canvas: HTMLCanvasElement) {
   for (const part of xenon.regulatorParts)
     input(part, 'Xenon supply', 'Flow regulator', turnRegulator);
   for (const part of xenon.regulatorParts) withinReach.add(part);
+
+  // A testing aid on the corridor wall right of the door plate: buttons that
+  // set the xenon flowing and the rectifier running without the walk.
+  const cheats = createCheatBoard(worldUnitsPerMetre);
+  cheats.group.position.set(
+    labRoom.door.handle.x + labRoom.door.width / 2 + 1.15 * worldUnitsPerMetre,
+    floorY + 1.4 * worldUnitsPerMetre,
+    room.maxZ + wallThickness + 0.035,
+  );
+  lab.add(cheats.group);
+  fixture(cheats.xenonButton, 'Cheat: xenon on', () => {
+    plantRoom.openGate();
+    if (xenon.setting < 0.5) xenon.setRegulator(0.5);
+    audio.play('selector');
+    write('Cheat: xenon cage open, regulator set for 5 SLPM.');
+  });
+  fixture(cheats.rectifierButton, 'Cheat: mercury arc rectifier on', () => {
+    if (!plantRoom.powered) plantRoom.togglePower();
+    audio.play('breaker-on', 'rectifier');
+    write('Cheat: plant master supply on. Mercury arc struck.');
+  });
+  dynamic.push(() =>
+    cheats.update({
+      xenon: xenonReady(xenon.flowSlpm),
+      rectifier: plantRoom.powered,
+    }),
+  );
 
   // Corridor side of the lab entrance, left of the door so the room's door
   // plate on the right stays clear.
@@ -2401,7 +2444,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   renderer.setAnimationLoop((time) => {
     const delta = last ? Math.min(0.1, (time - last) / 1000) : 0;
     last = time;
-    plantRoom.update(delta, reducedMotion.matches);
+    plantRoom.update(delta, reducedMotion.matches, telltales.powerKw);
     rectifier.update(plantRoom.powered, time / 1000, reducedMotion.matches);
     audio.setPlantPower(plantRoom.powered);
     if (rig.controls.mains && !plantRoom.powered) {
@@ -2482,11 +2525,13 @@ export function startScene(canvas: HTMLCanvasElement) {
       powerKw: telltales.powerKw,
       energyKwh: telltales.energyKwh,
       delta: deltaScore(rig),
+      ferrocoreRadiansPerSecond: ferrocoreAngularVelocity(rig),
       seconds: delta,
     });
     audio.update(rig, settings, reducedMotion.matches);
     if (teleprinter.update(delta, reducedMotion.matches)) audio.play('printer');
-    if (!reducedMotion.matches) carousel.rotation.z -= rig.spindle * delta * 4;
+    if (!reducedMotion.matches)
+      carousel.rotation.z -= ferrocoreAngularVelocity(rig) * delta;
     for (const update of dynamic) update();
     footprints ??= collectFootprints();
     const held = (...codes: string[]) => codes.some((code) => keys.has(code));
@@ -2610,6 +2655,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     sparkles.dispose();
     plantRoom.dispose();
     rectifier.dispose();
+    cheats.dispose();
     hotline.dispose();
     labRoom.dispose();
     corridor.dispose();

@@ -2,6 +2,7 @@ import { designate } from '../game/machine-parts';
 import { BoxGeometry, CircleGeometry, Group, Mesh, PlaneGeometry } from 'three';
 import type { Material, Texture } from 'three';
 import { annunciatorLabels, boardHandles } from '../game/control-board';
+import { FERROCORE_MAX_ANGULAR_VELOCITY } from '../game/ferrocore-anomaly';
 import type { BoardView, gridChannels } from '../game/control-board';
 import { createPs1Material } from '../rendering/ps1-material';
 import {
@@ -19,6 +20,7 @@ export interface BoardDisplay {
   powerKw: number;
   energyKwh: number;
   delta: number;
+  ferrocoreRadiansPerSecond: number;
   seconds: number;
 }
 
@@ -284,34 +286,49 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
   ];
   const chart = createCanvasTexture(96, 160);
   textures.push(chart.texture);
-  chart.context.fillStyle = '#cfc5a2';
-  chart.context.fillRect(0, 0, 96, 160);
-  chart.context.strokeStyle = '#a69b7e';
-  chart.context.lineWidth = 1;
-  for (let y = 0; y < 160; y += 10) {
-    chart.context.beginPath();
-    chart.context.moveTo(0, y);
-    chart.context.lineTo(96, y);
-    chart.context.stroke();
-  }
-  for (let x = 0; x < 96; x += 12) {
-    chart.context.beginPath();
-    chart.context.moveTo(x, 0);
-    chart.context.lineTo(x, 160);
-    chart.context.stroke();
-  }
-  chart.context.strokeStyle = '#8f573e';
-  chart.context.beginPath();
-  for (let y = 0; y < 160; y++) {
-    const x = 40 + Math.sin(y * 0.09) * 10 + (y > 100 ? 18 : 0);
-    if (y === 0) chart.context.moveTo(x, y);
-    else chart.context.lineTo(x, y);
-  }
-  chart.context.stroke();
-  chart.texture.needsUpdate = true;
+  // Paper feeds downward: the newest quarter-second reading is at the top.
+  const chartSamples: number[] = Array(160).fill(0);
+  const drawChart = () => {
+    const { context } = chart;
+    context.fillStyle = '#cfc5a2';
+    context.fillRect(0, 0, 96, 160);
+    context.strokeStyle = '#a69b7e';
+    context.lineWidth = 1;
+    for (let y = 0; y < 160; y += 10) {
+      context.beginPath();
+      context.moveTo(0, y);
+      context.lineTo(96, y);
+      context.stroke();
+    }
+    for (let x = 12; x < 96; x += 18) {
+      context.beginPath();
+      context.moveTo(x, 0);
+      context.lineTo(x, 160);
+      context.stroke();
+    }
+    context.strokeStyle = '#8f573e';
+    context.lineWidth = 2;
+    context.beginPath();
+    chartSamples.forEach((speed, y) => {
+      const x =
+        9 +
+        (Math.max(0, Math.min(FERROCORE_MAX_ANGULAR_VELOCITY, speed)) /
+          FERROCORE_MAX_ANGULAR_VELOCITY) *
+          78;
+      if (y === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.stroke();
+    chart.texture.needsUpdate = true;
+  };
+  drawChart();
   box(0.21, 0.32, 0.035, '#303e34', -0.93, 1.15, 0.24);
-  face(chart.texture, 0.165, 0.275, -0.93, 1.15, 0.261);
-  label('LETZTER LAUF  /  1993', 0.34, -0.77, 0.956, 0.244);
+  indicator(
+    face(chart.texture, 0.165, 0.275, -0.93, 1.15, 0.261),
+    'Ferrocore angular velocity strip chart',
+  );
+  label('FERROCORE ω · rad/s', 0.32, -0.93, 1.34, 0.244);
+  label('0—4 rad/s', 0.19, -0.93, 0.963, 0.244);
   // Blatz trim, as set on the rack (IST) and as the field wants it (SOLL).
   const trimPointers = (['IST', 'SOLL'] as const).map((name, i) => {
     const x = [-0.67, -0.52][i];
@@ -470,7 +487,10 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
       readouts[2](display.delta.toFixed(2));
       sampleClock += display.seconds;
       if (sampleClock >= 0.25) {
-        sampleClock = 0;
+        sampleClock %= 0.25;
+        chartSamples.unshift(display.ferrocoreRadiansPerSecond);
+        if (chartSamples.length > 160) chartSamples.pop();
+        drawChart();
         trend.field.push(readings.field);
         trend.instability.push(readings.instability);
         if (trend.field.length > 64) {
