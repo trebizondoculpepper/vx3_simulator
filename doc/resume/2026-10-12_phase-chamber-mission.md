@@ -15,15 +15,16 @@ The aperture is a private joke for people who know the film. Never name it, labe
 - **Placement:** on the corridor's north wall, east of the lab door, clear of the tool board, the door plate and the generic staggered doors in `src/scene/corridor.ts`. The chamber sits behind the lab's east wall.
 - **Indicator:** a lamp and plate, designated an `indicator` in `src/game/machine-parts.ts`. It reads SICHERHEITSVERRIEGELUNG GESCHLOSSEN on a red lamp, and changes to SICHERHEITSVERRIEGELUNG OFFEN on a green lamp when the condition is met.
 - **The right speed:** `ferrocoresOperational(rig, xenonFlowSlpm)` from `src/game/ferrocore-anomaly.ts` must hold, and the phase spindle must sit inside a narrow speed band, for example 72–78% (about 2,600–2,800 rpm on the Nixie counters), for a few seconds without leaving it. Hint at the band somewhere in the world rather than stating it: a BBC diagnostics page, a teleprinter line, a page in the filing cabinet or a tachometer repeater beside the door.
-- **Losing the band:** the lamp goes red and the latch re-engages, but the lock only ever stops people getting in. The door always opens from the inside, so nobody can be shut in the chamber.
+- **Once open, open for good:** the first time the interlock releases, the door stays unlocked for the rest of the run, even if the speed band is lost; the lamp stays green. RESET locks it again, since a reset is a reset. The door always opens from the inside.
 - **Testing:** keep the unlock rule pure and tested in `src/game/`, in the style of `xenon-supply.ts` and `bench-monitor.ts`.
 
 ## Cadmium and the shovel
 
 - **The bin:** a lidded steel bin in the plant room, stencilled CADMIUM · NEUTRONENABSORBER · GIFTIG, with a coal shovel leaning on it, and a glove-and-mask notice nearby in the style of the xenon poster.
-- **Shovelling:** using the bin loads the shovel, which shows a visible heap of grey pellets while it is carried. Using the aperture tips the load in. One load at a time.
+- **Shovelling:** using the bin loads the shovel, which shows a visible heap of grey pellets while it is carried.
+- **Pouring:** using the aperture with a loaded shovel pours the pellets in: a short animation of the pellets sliding off the blade and dropping into the glow, with a sound to match. This is the payoff of every trip, so make it satisfying. One load at a time.
+- **No spills:** a loaded shovel never spills. The pellets stay on the blade until they are poured into the aperture, wherever the operator walks.
 - **Logging:** each step writes a deadpan line to the log, which the teleprinter prints.
-- **Mishaps:** walking through a door with a full shovel, or tipping it anywhere but the aperture, spills it. Spilled pellets stay on the floor.
 - **Fixtures:** the bin and shovel are room fixtures, not machine parts, so they use `fixture()`.
 
 ## What the cadmium does
@@ -66,7 +67,7 @@ Coherence unlocks a ladder of payoffs, each more stupid than the last. Each one 
 
 ## Owner's decisions
 
-1. **Escape:** the lock only keeps people out. The door always opens from the inside.
+1. **The lock:** it only ever keeps people out, and once the interlock has released it stays unlocked until RESET.
 2. **Persistence:** RESET clears coherence. Anything beyond that is undecided; it persists for now.
 3. **The aperture:** set into the floor, opening like an iris.
 4. **Rewards:** a series of payoffs, each more stupid than the last (see above).
