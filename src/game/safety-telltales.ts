@@ -1,5 +1,6 @@
 import type { RackControls } from './rack-controls';
 import type { RigState } from './rig';
+import { ferrocoreActivity, ferrocoresOperational } from './ferrocore-anomaly';
 
 /** Outputs of the connected VX3 apparatus, presented by the wall tell-tales. */
 export interface SafetyTelltales {
@@ -21,7 +22,11 @@ export function createSafetyTelltales(): SafetyTelltales {
 }
 
 /** A deliberately approximate supply-load and time-dilation model. */
-export function networkOutputs(rig: RigState, controls: RackControls) {
+export function networkOutputs(
+  rig: RigState,
+  controls: RackControls,
+  xenonFlowSlpm = 0,
+) {
   if (!rig.controls.mains) return { powerKw: 0, dilationActivity: 0 };
   const heaterKw = controls.toggles.ht ? 2.1 - rig.heater * 1.15 : 0.08;
   const powerKw =
@@ -33,12 +38,13 @@ export function networkOutputs(rig: RigState, controls: RackControls) {
     (controls.toggles.aux1 ? 0.42 : 0) +
     (controls.toggles.chromoAux ? 0.42 : 0) +
     (controls.toggles.aux2 ? 0.16 : 0);
-  const dilationActivity = Math.min(
-    1,
-    rig.field *
-      (0.25 + rig.instability * 0.85 + rig.strain * 0.45) *
-      (controls.toggles.damp ? 0.7 : 1),
-  );
+  const dilationActivity = ferrocoresOperational(rig, xenonFlowSlpm)
+    ? Math.min(
+        1,
+        (0.25 + ferrocoreActivity(rig) * 0.6 + rig.strain * 0.15) *
+          (controls.toggles.damp ? 0.7 : 1),
+      )
+    : 0;
   return { powerKw, dilationActivity };
 }
 
@@ -48,8 +54,9 @@ export function stepSafetyTelltales(
   rig: RigState,
   controls: RackControls,
   seconds: number,
+  xenonFlowSlpm = 0,
 ): void {
-  const output = networkOutputs(rig, controls);
+  const output = networkOutputs(rig, controls, xenonFlowSlpm);
   state.powerKw = output.powerKw;
   state.dilationActivity = output.dilationActivity;
   state.energyKwh += (output.powerKw * seconds) / 3600;
@@ -61,6 +68,7 @@ export function stepSafetyTelltales(
       state.crystalPulse = Math.max(0.2, output.dilationActivity);
     }
   } else {
+    state.crystalPulse = 0;
     state.pulsePhase = 0;
   }
 }

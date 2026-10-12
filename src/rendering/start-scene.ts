@@ -396,6 +396,8 @@ export function startScene(canvas: HTMLCanvasElement) {
       return;
     }
     if (!rig.controls.mains && !plantRoom.powered) {
+      // The lever springs back open, so it never shows a start that failed.
+      settings.mains = false;
       audio.play('warning');
       write(
         `${from}Start refused: plant-room master supply is off. Close HAUPTSCHALTER beside the rectifier.`,
@@ -414,6 +416,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   const resetRig = (from = '') => {
     Object.assign(rig, createRig());
+    settings.mains = false;
     applyRack(settings, rig.controls);
     write(`${from}RESET pressed. Rig reset, mostly.`);
   };
@@ -446,6 +449,7 @@ export function startScene(canvas: HTMLCanvasElement) {
           if (action.kind === 'emergency-stop') {
             const wasRunning = rig.controls.mains;
             rig.controls.mains = false;
+            settings.mains = false;
             applyRack(settings, rig.controls);
             if (wasRunning) audio.play('breaker-off');
             write(
@@ -1032,41 +1036,46 @@ export function startScene(canvas: HTMLCanvasElement) {
     register.texture.needsUpdate = true;
   });
 
-  // Prismatic tell-tale for the connected field: dim at rest, occasional pulses in operation.
-  const crystalY = wallDisplayTop - 6.17;
-  cube(lab, 1.82, 1.62, 0.13, '#495a55', wallDisplayX, crystalY, -3.5);
-  cube(lab, 1.58, 1.38, 0.028, '#263d3e', wallDisplayX, crystalY, -3.42);
-  label(lab, 'TIME DILATION', wallDisplayX, crystalY + 0.62, -3.385, 12);
-  disc(lab, 0.48, '#657873', wallDisplayX, crystalY - 0.11, -3.37);
-  disc(lab, 0.4, '#172f36', wallDisplayX, crystalY - 0.11, -3.35);
+  // Prismatic tell-tale for fully operational ferrocores: dark until ready,
+  // then glowing and sparkling. It is built here facing +z around its backing
+  // board's centre, and hung above the teleprinter once that is placed.
+  const crystalUnit = new Group();
+  cube(crystalUnit, 1.82, 1.62, 0.13, '#495a55', 0, 0, 0);
+  cube(crystalUnit, 1.58, 1.38, 0.028, '#263d3e', 0, 0, 0.08);
+  label(crystalUnit, 'TIME DILATION', 0, 0.62, 0.115, 12);
+  disc(crystalUnit, 0.48, '#657873', 0, -0.11, 0.13);
+  disc(crystalUnit, 0.4, '#172f36', 0, -0.11, 0.15);
   const crystalMaterial = material('#467888');
-  lamps.push(crystalMaterial as MeshStandardMaterial);
   const crystal = new Mesh(new OctahedronGeometry(0.4, 0), crystalMaterial);
   crystal.scale.set(0.72, 1.28, 0.56);
   crystal.rotation.z = 0.24;
-  crystal.position.set(wallDisplayX, crystalY - 0.11, -3.13);
-  lab.add(indicator(crystal, 'Time Dilation tell-tale', 'Crystal'));
+  crystal.position.set(0, -0.11, 0.37);
+  crystalUnit.add(indicator(crystal, 'Time Dilation tell-tale', 'Crystal'));
   const sparkles = createCrystalSparkles();
   sparkles.group.position.copy(crystal.position);
-  lab.add(sparkles.group);
+  crystalUnit.add(sparkles.group);
   const crystalLamp = indicator(
-    glows(
-      disc(lab, 0.09, '#425c5c', wallDisplayX + 0.61, crystalY - 0.5, -3.38),
-    ),
+    glows(disc(crystalUnit, 0.09, '#425c5c', 0.61, -0.5, 0.12)),
     'Time Dilation tell-tale',
     'Pulse lamp',
   );
   dynamic.push(() => {
     const pulse = telltales.crystalPulse;
+    const glow = telltales.dilationActivity;
     crystalMaterial.color.setRGB(
-      0.18 + pulse * 0.48,
-      0.35 + pulse * 0.46,
-      0.4 + pulse * 0.55,
+      0.08 + glow * 0.4,
+      0.14 + glow * 0.6,
+      0.2 + glow * 0.7,
+    );
+    (crystalMaterial as MeshStandardMaterial).emissive.setRGB(
+      glow * 0.2,
+      glow * 0.65,
+      glow * 0.9,
     );
     (crystalLamp.material as ReturnType<typeof material>).color.setRGB(
-      0.18 + pulse * 0.55,
-      0.33 + pulse * 0.52,
-      0.33 + pulse * 0.62,
+      0.03 + glow * 0.4 + pulse * 0.2,
+      0.05 + glow * 0.5 + pulse * 0.2,
+      0.06 + glow * 0.6 + pulse * 0.2,
     );
     crystal.scale.set(
       0.72,
@@ -1230,7 +1239,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     withinReach.add(part);
     input(part, 'Plant-room supply', 'HAUPTSCHALTER', () => {
       const on = plantRoom.togglePower();
-      audio.play(on ? 'breaker-on' : 'breaker-off');
+      // The switch is beside the rectifier, so it sounds from there.
+      audio.play(on ? 'breaker-on' : 'breaker-off', 'rectifier');
       write(
         on
           ? 'Plant master supply on. Mercury arc struck.'
@@ -1300,6 +1310,23 @@ export function startScene(canvas: HTMLCanvasElement) {
   for (const y of [printerY - 1.4, printerY + 0.9])
     cube(lab, 0.94, 0.09, 0.12, '#67736c', room.maxX - 0.38, y, printerZ);
   lab.add(teleprinter.group);
+  // The time-dilation tell-tale hangs on the east wall just above the
+  // teleprinter, at the size it had on the wall display, facing the room.
+  {
+    const scale = 1.8;
+    teleprinter.group.updateMatrixWorld(true);
+    const printerTop = new Box3().setFromObject(teleprinter.group).max.y;
+    crystalUnit.scale.setScalar(scale);
+    crystalUnit.rotation.y = -Math.PI / 2;
+    crystalUnit.position.set(
+      room.maxX - (0.13 / 2) * scale,
+      Math.max(printerTop, printerY + 0.9) +
+        0.12 * worldUnitsPerMetre +
+        (1.62 / 2) * scale,
+      printerZ,
+    );
+    lab.add(crystalUnit);
+  }
 
   // The wall outlet and the trailing rubber mains lead are visible at rack base.
   const socketX = -5.6;
@@ -2438,14 +2465,20 @@ export function startScene(canvas: HTMLCanvasElement) {
         write(event.text);
       }
     }
-    stepSafetyTelltales(telltales, rig, settings, delta);
+    stepSafetyTelltales(telltales, rig, settings, delta, xenon.flowSlpm);
     // Running ferrocores bend the room: colour, π, space and sparks.
     const activity = ferrocoreActivity(rig);
     anomaly = anomalyEffects(activity, time / 1000, reducedMotion.matches);
     ps1Uniforms.channels.value.set(...anomaly.channels);
     ps1Uniforms.warp.value = anomaly.warp;
     ps1Uniforms.time.value = time / 1000;
-    sparkles.update(delta, anomaly.sparkleRate, 1.2);
+    sparkles.update(
+      delta,
+      reducedMotion.matches || telltales.dilationActivity === 0
+        ? 0
+        : 6 + telltales.dilationActivity * 30,
+      1.2,
+    );
     const level = anomalyStage(activity);
     if (level > anomalyLevel)
       write(

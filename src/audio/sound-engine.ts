@@ -294,7 +294,7 @@ export function createSoundEngine() {
   let muted = false;
   let nextCounter = 0;
   let nextSpark = 0;
-  const pending: SoundCue[] = [];
+  const pending: Array<[SoundCue, SoundSource | undefined]> = [];
   let spatial: SpatialMix | null = null;
   let panned = false;
   // How much of each source gets through the doors to the listener's room.
@@ -312,10 +312,11 @@ export function createSoundEngine() {
     graph.master.gain.setTargetAtTime(level, graph.context.currentTime, 0.03);
     graph.setOneShotVolume(level * 0.16);
   };
-  const playNow = (cue: SoundCue) => {
+  /** `at` places the sound somewhere other than its usual source. */
+  const playNow = (cue: SoundCue, at?: SoundSource) => {
     if (!graph || muted || !visible || graph.context.state !== 'running')
       return;
-    const source = cueSources[cue];
+    const source = at ?? cueSources[cue];
     if (spatial && source) {
       const gain = distanceGain(source);
       if (gain > 0) graph.sounds[cue].play(gain, 1, 1, spatial.pan(source));
@@ -332,7 +333,7 @@ export function createSoundEngine() {
       if (!graph) graph = createGraph(await import('zzfx'));
       setMix(volume, muted);
       if (graph.context.state === 'suspended') await graph.context.resume();
-      while (pending.length) playNow(pending.shift()!);
+      while (pending.length) playNow(...pending.shift()!);
     })()
       .catch((error: unknown) => {
         console.warn('VX3 audio could not start.', error);
@@ -342,13 +343,13 @@ export function createSoundEngine() {
       });
     return loading;
   };
-  const play = (cue: SoundCue) => {
+  const play = (cue: SoundCue, at?: SoundSource) => {
     // Ambient drips must not queue while waiting for the first audio gesture.
     if (cue === 'drip' && graph?.context.state !== 'running') return;
     if (muted || disposed || !visible) return;
-    if (graph?.context.state === 'running') playNow(cue);
+    if (graph?.context.state === 'running') playNow(cue, at);
     else {
-      pending.push(cue);
+      pending.push([cue, at]);
       void unlock();
     }
   };

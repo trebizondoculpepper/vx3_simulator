@@ -1,4 +1,5 @@
 import type { RigState } from './rig';
+import { xenonReady } from './xenon-supply';
 
 /**
  * What happens to the room when the ferrocores wake up. Nothing here is
@@ -19,6 +20,19 @@ const smoothstep = (from: number, to: number, value: number) => {
  */
 export function ferrocoreActivity(rig: RigState) {
   return clamp(smoothstep(0.2, 0.9, rig.spindle) * (0.7 + 0.3 * rig.field));
+}
+
+/** Ready means warm, powered, safely supplied and settled at the selected speed. */
+export function ferrocoresOperational(rig: RigState, xenonFlowSlpm: number) {
+  const target = Math.min(rig.controls.spindle, rig.controls.governor ?? 1);
+  return (
+    rig.controls.mains &&
+    rig.heater >= 0.95 &&
+    xenonReady(xenonFlowSlpm) &&
+    target > 0.1 &&
+    rig.spindle > 0.1 &&
+    Math.abs(rig.spindle - target) <= 0.03
+  );
 }
 
 export interface AnomalyEffects {
