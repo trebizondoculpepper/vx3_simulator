@@ -6,6 +6,8 @@ The workstation presents a fixed six-section early-1970s VX3 rack in a low-resol
 
 ## Next
 
+A future mission is briefed in [the phase chamber brief](resume/2026-10-12_phase-chamber-mission.md): a third, interlocked door beside the lab that opens only with the ferrocores at the right speed, and a chamber where the operator shovels cadmium pellets into a great aperture to deepen phase coherence.
+
 The three framed advertisements now hang just above the west workbench, clear of its socket strip and sink. The query string ?view=workbench opens a direct inspection view of this arrangement.
 
 The compact east-wall control board blends 1970s mint process panels and a channel map with a beige 1980s CRT retrofit, using original geometry and procedural instrument textures. Its handles operate the rack and its instruments repeat machine state. The phone and its hazard sign sit on the corridor side of the lab door, clear of the toolboard, while the filing cabinet occupies the south-east corner. The query string ?view=control-panel opens a direct inspection view. Local development uses port 5174 when Idea Grabber occupies 5173.
