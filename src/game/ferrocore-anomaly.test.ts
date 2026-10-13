@@ -5,6 +5,7 @@ import {
   CHANNEL_HZ,
   ferrocoreActivity,
   ferrocoreAngularVelocity,
+  ferrocoreMonitorSample,
   ferrocoresOperational,
 } from './ferrocore-anomaly';
 import { createRig } from './rig';
@@ -29,6 +30,18 @@ describe('ferrocore anomaly', () => {
     expect(spinning).toBeGreaterThan(0.6);
     expect(ferrocoreActivity(rigAt(0.9, 1))).toBeGreaterThan(spinning);
     expect(ferrocoreActivity(rigAt(1, 1))).toBeLessThanOrEqual(1);
+  });
+
+  it('gives the 1986 monitor a moving VX trace only when the cores run', () => {
+    expect(ferrocoreMonitorSample(0.4, 0.2, 0, 2)).toEqual({
+      field: 0.4,
+      instability: 0.2,
+    });
+    const early = ferrocoreMonitorSample(0.4, 0.2, 1, 2);
+    const later = ferrocoreMonitorSample(0.4, 0.2, 1, 2.25);
+    expect(early.field).not.toBe(later.field);
+    expect(early.instability).not.toBe(later.instability);
+    expect(early.instability).toBeGreaterThan(0.2);
   });
 
   it('leaves the room untouched while the cores are dormant', () => {

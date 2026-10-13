@@ -28,6 +28,29 @@ export function ferrocoreActivity(rig: RigState) {
   return clamp(smoothstep(0.2, 0.9, rig.spindle) * (0.7 + 0.3 * rig.field));
 }
 
+/** The 1986 monitor picks up periodic VX noise while the ferrocores rotate. */
+export function ferrocoreMonitorSample(
+  field: number,
+  instability: number,
+  activity: number,
+  seconds: number,
+) {
+  return {
+    field: clamp(
+      field +
+        activity *
+          (0.045 * Math.sin(seconds * 8.7) + 0.02 * Math.sin(seconds * 3.1)),
+    ),
+    instability: clamp(
+      instability +
+        activity *
+          (0.11 +
+            0.07 * Math.sin(seconds * 11.3) +
+            0.035 * Math.sin(seconds * 4.1)),
+    ),
+  };
+}
+
 /** Ready means warm, powered, safely supplied and settled at the selected speed. */
 export function ferrocoresOperational(rig: RigState, xenonFlowSlpm: number) {
   const target = Math.min(rig.controls.spindle, rig.controls.governor ?? 1);

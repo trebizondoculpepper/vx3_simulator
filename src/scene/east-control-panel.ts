@@ -2,7 +2,10 @@ import { designate } from '../game/machine-parts';
 import { BoxGeometry, CircleGeometry, Group, Mesh, PlaneGeometry } from 'three';
 import type { Material, Texture } from 'three';
 import { annunciatorLabels, boardHandles } from '../game/control-board';
-import { FERROCORE_MAX_ANGULAR_VELOCITY } from '../game/ferrocore-anomaly';
+import {
+  FERROCORE_MAX_ANGULAR_VELOCITY,
+  ferrocoreMonitorSample,
+} from '../game/ferrocore-anomaly';
 import { redlineFraction } from '../game/redlines';
 import type { BoardView, gridChannels } from '../game/control-board';
 import { createPs1Material } from '../rendering/ps1-material';
@@ -22,6 +25,7 @@ export interface BoardDisplay {
   energyKwh: number;
   delta: number;
   ferrocoreRadiansPerSecond: number;
+  ferrocoreActivity: number;
   seconds: number;
 }
 
@@ -293,6 +297,8 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
       'spindle',
     ],
   ];
+  label('HEIZUNG', 0.17, -0.49, 1.81, 0.263);
+  label('SPINDEL', 0.17, -0.49, 1.6, 0.263);
   const chart = createCanvasTexture(96, 160);
   textures.push(chart.texture);
   // Paper feeds downward: the newest quarter-second reading is at the top.
@@ -365,7 +371,8 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
     ['strain', 'delta', 'load'],
   ] as const;
   for (const [side, x] of [-0.294, 0.294].entries())
-    for (let i = 0; i < 3; i++)
+    for (let i = 0; i < 3; i++) {
+      const channel = sideMeters[side][i];
       meters.push([
         gauge(
           x,
@@ -373,10 +380,21 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
           0.052,
           x * 2 + i * 0.2,
           false,
-          sideMeters[side][i] === 'field' ? redlineFraction('field') : null,
+          channel === 'field' ? redlineFraction('field') : null,
         ),
-        sideMeters[side][i],
+        channel,
       ]);
+      label(
+        [
+          ['FELD', 'TRIMM', 'INSTAB'],
+          ['DEHNUNG', 'DELTA', 'LAST'],
+        ][side][i],
+        0.145,
+        x,
+        1.823 - i * 0.205,
+        0.264,
+      );
+    }
   label('FERNANZEIGE · VX3', 0.38, 0, 1.24, 0.242);
   box(0.22, 0.13, 0.007, '#748478', 0.03, 1.055, 0.24);
   label('AUSSER BETRIEB', 0.2, 0.03, 1.055, 0.245);
@@ -386,9 +404,9 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
   box(0.34, 0.28, 0.06, '#343a31', 0.64, 1.64, 0.265);
   const crt = createCanvasTexture(128, 96);
   textures.push(crt.texture);
-  // A rolling trend of field strength and instability, a sample a quarter second.
+  // A rolling trend of field strength and VX instability, sampled four times a second.
   const trend = { field: [] as number[], instability: [] as number[] };
-  const drawTrend = () => {
+  const drawTrend = (activity: number) => {
     const { context } = crt;
     context.fillStyle = '#0d2118';
     context.fillRect(0, 0, 128, 96);
@@ -415,9 +433,11 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
     context.fillStyle = '#8aad88';
     context.font = '9px monospace';
     context.fillText('VX / FELD · INSTAB', 8, 13);
+    context.fillStyle = activity > 0.1 ? '#d6ac67' : '#66866c';
+    context.fillText(activity > 0.1 ? 'AKTIV' : 'RUHE', 90, 93);
     crt.texture.needsUpdate = true;
   };
-  drawTrend();
+  drawTrend(0);
   indicator(
     face(crt.texture, 0.282, 0.213, 0.64, 1.64, 0.298, true),
     'Trend screen',
@@ -426,7 +446,13 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
   const readouts = (['kW', 'kWh', 'δ'] as const).map((unit, i) => {
     const y = 1.74 - i * 0.12;
     box(0.15, 0.062, 0.025, '#30342c', 0.96, y, 0.27);
-    label(unit, 0.05, 1.075, y, 0.246);
+    label(
+      ['LEISTUNG kW', 'ENERGIE kWh', 'DELTA δ'][i],
+      0.15,
+      0.96,
+      y + 0.055,
+      0.302,
+    );
     const screen = createCanvasTexture(48, 22);
     textures.push(screen.texture);
     indicator(
@@ -451,6 +477,8 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
     [gauge(0.57, 1.28, 0.058, -0.2, true, redlineFraction('load')), 'load'],
     [gauge(0.76, 1.28, 0.058, 0.9, true), 'delta'],
   );
+  label('LAST', 0.13, 0.57, 1.19, 0.298);
+  label('DELTA', 0.13, 0.76, 1.19, 0.298);
   label('NACHRÜSTUNG 1986', 0.36, 0.73, 1.05, 0.262);
   box(0.036, 1.05, 0.045, '#818d81', 1.18, 1.24, 0.08);
   // Under each bay: BEREIT (mains), EIN (a bay switch on), STÖRUNG.
@@ -479,6 +507,7 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
   );
 
   let sampleClock = 0;
+  let trendClock = 0;
   return {
     group,
     /** Handles in board order, each with every mesh that should take a click. */
@@ -502,18 +531,26 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
       readouts[1](display.energyKwh.toFixed(1));
       readouts[2](display.delta.toFixed(2));
       sampleClock += display.seconds;
+      trendClock += display.seconds;
       if (sampleClock >= 0.25) {
         sampleClock %= 0.25;
         chartSamples.unshift(display.ferrocoreRadiansPerSecond);
         if (chartSamples.length > 160) chartSamples.pop();
         drawChart();
-        trend.field.push(readings.field);
-        trend.instability.push(readings.instability);
+        const activity = display.ferrocoreActivity;
+        const sample = ferrocoreMonitorSample(
+          readings.field,
+          readings.instability,
+          activity,
+          trendClock,
+        );
+        trend.field.push(sample.field);
+        trend.instability.push(sample.instability);
         if (trend.field.length > 64) {
           trend.field.shift();
           trend.instability.shift();
         }
-        drawTrend();
+        drawTrend(activity);
       }
     },
     dispose() {

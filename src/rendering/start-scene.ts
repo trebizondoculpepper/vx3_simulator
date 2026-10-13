@@ -124,6 +124,12 @@ import {
 import { createCrystalSparkles } from '../scene/crystal-sparkles';
 import { createToolRack } from '../scene/tool-rack';
 import { createWestWorkbench } from '../scene/west-workbench';
+import {
+  benchContraptionLayout,
+  contraptionNames,
+  contraptionNotes,
+  createBenchContraptions,
+} from '../scene/bench-contraptions';
 import { createEastControlPanel } from '../scene/east-control-panel';
 import { createTouchSticks } from '../ui/touch-sticks';
 import { slide } from '../game/walk-collision';
@@ -621,6 +627,35 @@ export function startScene(canvas: HTMLCanvasElement) {
     toZ: room.maxZ,
   });
   lab.add(workbench.group);
+  // Three baffling machines on the clear stretch of worktop between the
+  // vice at the north end and the cassette player near the sink, each
+  // plugged into the socket trunking behind it.
+  const contraptions = createBenchContraptions(
+    worldUnitsPerMetre,
+    benchContraptionLayout,
+  );
+  contraptions.group.position.set(
+    room.minX,
+    floorY + 0.9 * worldUnitsPerMetre,
+    room.minZ + 1.4 * worldUnitsPerMetre,
+  );
+  lab.add(contraptions.group);
+  dynamic.push(() =>
+    contraptions.update(performance.now() / 1000, reducedMotion.matches),
+  );
+  const contraptionVisits = [0, 0, 0];
+  for (const [i, parts] of contraptions.parts.entries())
+    for (const part of parts)
+      fixture(part, 'Bench apparatus', () => {
+        const on = contraptions.toggle(i);
+        audio.play(on ? 'toggle-up' : 'toggle-down');
+        const notes = contraptionNotes[i];
+        write(
+          on
+            ? notes[contraptionVisits[i]++ % notes.length]
+            : `Switched the ${contraptionNames[i]} off. It took a moment to agree.`,
+        );
+      });
   const eastControlPanel = createEastControlPanel(worldUnitsPerMetre);
   eastControlPanel.group.position.set(
     room.maxX - 0.025 * worldUnitsPerMetre,
@@ -2312,7 +2347,7 @@ export function startScene(canvas: HTMLCanvasElement) {
 
   const overlay = document.createElement('div');
   overlay.className = 'rack-ui';
-  overlay.innerHTML = `<div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Movement and zoom"><button type="button" data-pan="left" aria-label="Step left">◀</button><button type="button" data-pan="up" aria-label="Step forward">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Step back">▼</button><button type="button" data-pan="right" aria-label="Step right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook"><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log" hidden>▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: MOVE · ALT+WHEEL: HEIGHT · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
+  overlay.innerHTML = `<div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Movement and zoom"><button type="button" data-pan="left" aria-label="Step left">◀</button><button type="button" data-pan="up" aria-label="Step forward">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Step back">▼</button><button type="button" data-pan="right" aria-label="Step right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook" hidden><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log">▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: MOVE · ALT+WHEEL: HEIGHT · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
   const fireStatus = document.createElement('div');
   fireStatus.style.cssText =
     'position:absolute;left:50%;top:16%;transform:translateX(-50%);z-index:10;text-align:center;color:#ffd6b1;background:#420b08dd;padding:12px 20px;font:700 22px monospace;letter-spacing:2px;pointer-events:auto';
@@ -2439,7 +2474,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   document.addEventListener('keydown', gesture);
   const visibility = () => audio.setVisible(!document.hidden);
   document.addEventListener('visibilitychange', visibility);
-  let logOpen = true;
+  // The logbook starts put away; its tab counts what has been written.
+  let logOpen = false;
   let unseen = 0;
   const write = (line: string) => {
     const item = document.createElement('li');
@@ -2528,14 +2564,22 @@ export function startScene(canvas: HTMLCanvasElement) {
     stride: 0,
   };
   // A shareable inspection view for the east-wall installation.
-  const inspectionView = new URLSearchParams(window.location.search).get(
-    'view',
-  );
+  const inspectionParams = new URLSearchParams(window.location.search);
+  const inspectionView = inspectionParams.get('view');
+  if (inspectionParams.get('lights') === 'on') {
+    labRoom.lights.toggle();
+    plantRoom.toggleLights();
+  }
   if (inspectionView === 'control-panel') {
     walker.x = room.maxX - 2.8 * metre;
     walker.z = eastControlPanel.group.position.z;
     orbitYaw = Math.PI / 2;
     orbitPitch = -0.16;
+  } else if (inspectionView === 'rack') {
+    walker.x = 0;
+    walker.z = rack.position.z + 2.05 * metre;
+    orbitYaw = 0;
+    orbitPitch = -0.26;
   } else if (inspectionView === 'workbench') {
     walker.x = room.minX + 2.8 * metre;
     walker.z = room.minZ + 2.75 * metre;
@@ -2620,6 +2664,7 @@ export function startScene(canvas: HTMLCanvasElement) {
         rig,
         lights: labRoom.lights,
         plantRoom,
+        contraptions,
         /** Every machine with its inputs and indicators, and any problems. */
         parts: () => ({
           machines: Object.fromEntries(partInventory(partsInScene())),
@@ -3066,6 +3111,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       energyKwh: telltales.energyKwh,
       delta: deltaScore(rig),
       ferrocoreRadiansPerSecond: ferrocoreAngularVelocity(rig),
+      ferrocoreActivity: activity,
       seconds: delta,
     });
     audio.update(rig, settings, reducedMotion.matches);
@@ -3199,6 +3245,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     for (const plume of Object.values(heatSmoke)) plume.dispose();
     for (const { spray } of sprinklerEffects) spray.dispose();
     xenon.dispose();
+    contraptions.dispose();
     recirculator.dispose();
     sparkles.dispose();
     plantRoom.dispose();
