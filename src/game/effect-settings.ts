@@ -45,14 +45,16 @@ export interface EffectSettings {
   };
   /** Red, green and blue disagreeing about where things are. */
   divergence: {
-    /** Radial: the fraction red and blue are scaled about the centre. */
-    radial: number;
-    /** A turning shift, pixels of the PS1 picture. */
-    shift: number;
-    /** Parallax, pixels at one metre, falling off with distance. */
+    /** How far red and blue swing apart sideways, pixels of the PS1 picture. */
+    horizontalPx: number;
+    /** How far they swing apart up and down, pixels. */
+    verticalPx: number;
+    /** How often the sideways swing repeats, Hz; 0 holds it at full split. */
+    horizontalHz: number;
+    /** How often the up-and-down swing repeats, Hz. */
+    verticalHz: number;
+    /** Sideways parallax, pixels at one metre, falling off with distance. */
     parallax: number;
-    /** How fast the shift turns, revolutions per second. */
-    wobbleHz: number;
   };
   /** The universe losing numerical precision. */
   precision: {
@@ -83,8 +85,55 @@ export function settingsForActivity(activity: number): EffectSettings {
     },
     pi: { offset: 0, wander: a * a },
     phaser: { depth: 0.28 * a, hz: [...CHANNEL_HZ], spread: 2.1 },
-    divergence: { radial: 0, shift: 0, parallax: 0, wobbleHz: 0.2 },
+    divergence: {
+      horizontalPx: 0,
+      verticalPx: 0,
+      horizontalHz: 0.2,
+      verticalHz: 0.2,
+      parallax: 0,
+    },
     precision: { grid: 0, tremble: 0.5, flickerHz: 12 },
+  };
+}
+
+/** The effects the console can bypass, one per row. */
+export type EffectName =
+  'warp' | 'field' | 'precision' | 'pi' | 'phaser' | 'divergence';
+
+/**
+ * The settings with each bypassed effect switched off, leaving the rest
+ * (and the settings themselves, so the knobs keep their places) alone. A
+ * bypassed field bends all of space alike, as the lab does.
+ */
+export function withBypass(
+  settings: EffectSettings,
+  bypassed: ReadonlySet<EffectName>,
+): EffectSettings {
+  const off = (name: EffectName) => bypassed.has(name);
+  return {
+    warp: {
+      ...settings.warp,
+      amount: off('warp') ? 0 : settings.warp.amount,
+      radius: off('field') ? 0 : settings.warp.radius,
+    },
+    pi: off('pi') ? { offset: 0, wander: 0 } : { ...settings.pi },
+    phaser: {
+      ...settings.phaser,
+      hz: [...settings.phaser.hz],
+      depth: off('phaser') ? 0 : settings.phaser.depth,
+    },
+    divergence: off('divergence')
+      ? {
+          ...settings.divergence,
+          horizontalPx: 0,
+          verticalPx: 0,
+          parallax: 0,
+        }
+      : { ...settings.divergence },
+    precision: {
+      ...settings.precision,
+      grid: off('precision') ? 0 : settings.precision.grid,
+    },
   };
 }
 

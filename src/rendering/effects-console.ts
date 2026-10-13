@@ -35,6 +35,8 @@ export interface ConsoleRow {
   title: string;
   dials: ConsoleDial[];
   buttons?: ConsoleButton[];
+  /** A latching BYPASS button beside the title, lit while the row is off. */
+  bypass?: { on(): boolean; toggle(): void };
 }
 
 const PITCH = 0.052;
@@ -44,7 +46,9 @@ const TITLE_WIDTH = 0.085;
 /**
  * The effects room's console: rows of knobs, one row per effect, with
  * buttons at the ends of some rows and a character display that names the
- * last control touched and its value. Like every knob in the game, a click
+ * last control touched and its value. An effect's row starts with a
+ * BYPASS button, lit while that effect is switched off; its knobs keep
+ * their places. Like every knob in the game, a click
  * on a knob's left half turns it down a detent and on its right half up.
  * Each knob follows its value, so a preset turns them all. Built in
  * metres, facing +z, centred on the origin.
@@ -58,7 +62,9 @@ export function createEffectsConsole(
   const columns = Math.max(
     ...rows.map((row) => row.dials.length + (row.buttons?.length ?? 0) * 0.8),
   );
-  const width = TITLE_WIDTH + columns * PITCH + 0.03;
+  // The bypass buttons stand in a column of their own after the titles.
+  const bypassWidth = rows.some((row) => row.bypass) ? PITCH * 0.8 : 0;
+  const width = TITLE_WIDTH + bypassWidth + columns * PITCH + 0.03;
   const lcdHeight = 0.05;
   const height = rows.length * ROW + lcdHeight + 0.04;
   const plate = createPs1Material({ color: '#c3c7c0' });
@@ -106,7 +112,28 @@ export function createEffectsConsole(
     divider.position.set(0, y + ROW / 2 - 0.004, 0.0005);
     group.add(divider);
     caption(row.title, left + TITLE_WIDTH / 2 - 0.004, y, 0.0055, '#2b3a35');
-    let x = left + TITLE_WIDTH + PITCH / 2;
+    if (row.bypass) {
+      const { on, toggle } = row.bypass;
+      const button = createEightiesButton(kit, 'BYPASS', 'amber', {
+        latching: true,
+        size: 0.019,
+      });
+      button.group.position.set(
+        left + TITLE_WIDTH + bypassWidth / 2 - 0.004,
+        y + 0.004,
+        0,
+      );
+      group.add(button.group);
+      uses.set(button.cap, () => {
+        toggle();
+        touched = [`${row.title} · BYPASS`, on() ? 'ON: EFFECT OFF' : 'OFF'];
+      });
+      updates.push(button.update);
+      follow.push(() => {
+        if (button.lit !== on()) button.press();
+      });
+    }
+    let x = left + TITLE_WIDTH + bypassWidth + PITCH / 2;
     for (const dial of row.dials) {
       const share = () =>
         Math.min(

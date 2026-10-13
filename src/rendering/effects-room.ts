@@ -1,3 +1,5 @@
+import { devDoors, devWallPieces } from '../game/dev-room-links';
+import { createDevDoorways } from '../scene/dev-doorways';
 import {
   AmbientLight,
   BoxGeometry,
@@ -9,6 +11,7 @@ import {
   Mesh,
   PerspectiveCamera,
   PlaneGeometry,
+  PMREMGenerator,
   Raycaster,
   RepeatWrapping,
   Scene,
@@ -18,17 +21,29 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import type { BufferGeometry, Material, Object3D, Texture } from 'three';
+import type {
+  BufferGeometry,
+  Material,
+  MeshStandardMaterial,
+  Object3D,
+  Texture,
+} from 'three';
 import { TeapotGeometry } from 'three/addons/geometries/TeapotGeometry.js';
 import { RACK_METRE } from '../game/rack-layout';
 import type { Footprint } from '../game/walk-collision';
-import { effectFrame, settingsForActivity } from '../game/effect-settings';
-import type { EffectSettings } from '../game/effect-settings';
+import {
+  effectFrame,
+  settingsForActivity,
+  withBypass,
+} from '../game/effect-settings';
+import type { EffectName, EffectSettings } from '../game/effect-settings';
 import { createCanvasTexture } from '../scene/screens';
 import { createFirstPerson } from './first-person';
 import { createPs1Material, ps1Uniforms } from './ps1-material';
 import { createChromaticDivergence } from './chromatic-divergence';
 import { createEffectsConsole } from './effects-console';
+import { createExhibitPanel } from './exhibit-panel';
+import type { ExhibitTexture } from './exhibit-panel';
 import type { ConsoleDial } from './effects-console';
 import { createPanelKit, disposeKit } from '../scene/eighties-controls';
 import { knobDirection } from '../scene/rotary-knob';
@@ -142,29 +157,34 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
     0,
   );
   ceiling.rotation.x = Math.PI / 2;
-  // Walls are subdivided so the warp, which moves vertices, can bend them.
-  for (const [x, z, turn] of [
-    [0, -ROOM / 2, 0],
-    [ROOM / 2, 0, -Math.PI / 2],
-    [0, ROOM / 2, Math.PI],
-    [-ROOM / 2, 0, Math.PI / 2],
-  ]) {
-    const wall = add(
-      new PlaneGeometry(ROOM * m, HEIGHT * m, 20, 6),
+  // Subdivided masonry with genuine openings in the east and west walls.
+  const bounds = { minX: -half, maxX: half, minZ: -half, maxZ: half };
+  const doors = devDoors('dev1', bounds, m);
+  const wallPieces = devWallPieces(bounds, doors, m, HEIGHT * m);
+  const walls: Mesh[] = [];
+  for (const piece of wallPieces) {
+    const wall = new Mesh(
+      new BoxGeometry(
+        piece.maxX - piece.minX,
+        piece.top - piece.bottom,
+        piece.maxZ - piece.minZ,
+        20,
+        6,
+        1,
+      ),
       wallSurface,
-      x,
-      HEIGHT / 2,
-      z,
     );
-    wall.rotation.y = turn;
+    wall.position.set(
+      (piece.minX + piece.maxX) / 2,
+      (piece.bottom + piece.top) / 2,
+      (piece.minZ + piece.maxZ) / 2,
+    );
+    room.add(wall);
+    walls.push(wall);
+    if (piece.bottom === 0) solids.push(piece);
   }
-  for (const [x, z, w, d] of [
-    [0, -ROOM / 2, ROOM, 0.1],
-    [0, ROOM / 2, ROOM, 0.1],
-    [-ROOM / 2, 0, 0.1, ROOM],
-    [ROOM / 2, 0, 0.1, ROOM],
-  ])
-    solid(x, z, w, d);
+  const passages = createDevDoorways('dev1', doors, 0, m);
+  scene.add(passages.group);
 
   // A printed card on a wall: canvas art, unlit, facing into the room.
   const card = (
@@ -441,19 +461,47 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
     });
   };
 
+  const trueToPi: Object3D[] = [];
+  /** Hold these effects off everything under `root`. */
+  const exempt = (root: Object3D, effects: string[]) =>
+    root.traverse((object) => {
+      if (!(object instanceof Mesh)) return;
+      for (const item of [object.material].flat() as Material[])
+        for (const effect of effects) {
+          const share = item.userData[effect] as { value: number } | undefined;
+          if (share) share.value = 0;
+        }
+    });
+
   // ---- Test objects, each on a plinth -------------------------------------
+  // Plinths keep the true π, so the panels on them stay put.
   const plinth = (x: number, z: number, h = 0.8, w = 0.6) => {
-    add(
-      new BoxGeometry(w * m, h * m, w * m),
-      material({ color: '#4a4c49' }),
-      x,
-      h / 2,
-      z,
+    trueToPi.push(
+      add(
+        new BoxGeometry(w * m, h * m, w * m),
+        material({ color: '#4a4c49' }),
+        x,
+        h / 2,
+        z,
+      ),
     );
     solid(x, z, w, w);
     return h;
   };
   const spinners: Object3D[] = [];
+  // Each exhibit gets its own panel of looks; see createExhibitPanel.
+  const NAMES = ['TEAPOT', 'POLYGON', 'TORUS KNOT', 'SPHERE', 'CUBE'];
+  const exhibits: {
+    name: string;
+    surfaces: MeshStandardMaterial[];
+    x: number;
+    z: number;
+    /** Where smoke and embers rise from, metres. */
+    top: number;
+    /** The panel's centre on the plinth's south face. */
+    panelY: number;
+    panelZ: number;
+  }[] = [];
   const exhibit = (
     geometry: BufferGeometry,
     colour: string | Material,
@@ -470,6 +518,15 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
       z,
     );
     spinners.push(mesh);
+    exhibits.push({
+      name: NAMES[exhibits.length],
+      surfaces: [mesh.material as MeshStandardMaterial],
+      x,
+      z,
+      top: top + lift * 2,
+      panelY: top - 0.3,
+      panelZ: z + 0.3,
+    });
     return mesh;
   };
   // The teapot, of course.
@@ -492,25 +549,73 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
     0.27,
   );
   exhibit(new SphereGeometry(0.25 * m, 16, 10), '#5fa052', 1.5, 1, 0.27);
-  // A cube in a black-and-white checker, for straight edges.
-  {
+  // Surfaces to try on the exhibits, and the cube's own checker.
+  const pattern = (draw: (c: CanvasRenderingContext2D) => void) => {
     const { context, texture } = createCanvasTexture(64, 64);
-    for (let i = 0; i < 8; i++)
-      for (let j = 0; j < 8; j++) {
-        context.fillStyle = (i + j) % 2 ? '#111' : '#eee';
-        context.fillRect(i * 8, j * 8, 8, 8);
-      }
+    draw(context);
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
     texture.needsUpdate = true;
     textures.push(texture);
-    exhibit(
-      new BoxGeometry(0.4 * m, 0.4 * m, 0.4 * m, 4, 4, 4),
-      material({ map: texture }),
-      -3,
-      1,
-      0.22,
-    );
-  }
+    return texture;
+  };
+  const checkerboard = pattern((c) => {
+    for (let i = 0; i < 8; i++)
+      for (let j = 0; j < 8; j++) {
+        c.fillStyle = (i + j) % 2 ? '#111' : '#eee';
+        c.fillRect(i * 8, j * 8, 8, 8);
+      }
+  });
+  const brick = pattern((c) => {
+    c.fillStyle = '#c9c3b6';
+    c.fillRect(0, 0, 64, 64);
+    for (let row = 0; row < 8; row++)
+      for (let col = -1; col < 4; col++) {
+        const shade = 120 + ((row * 7 + col * 13) % 5) * 12;
+        c.fillStyle = `rgb(${shade + 40},${shade * 0.55},${shade * 0.4})`;
+        c.fillRect(col * 16 + (row % 2) * 8 + 1, row * 8 + 1, 14, 6);
+      }
+  });
+  const rust = pattern((c) => {
+    for (let i = 0; i < 64; i++)
+      for (let j = 0; j < 64; j++) {
+        const n =
+          Math.sin(i * 0.37 + Math.sin(j * 0.21) * 3) * 0.5 +
+          Math.sin(j * 0.53 + i * 0.11) * 0.5;
+        const v = 0.55 + n * 0.35;
+        c.fillStyle = `rgb(${Math.round(170 * v + 40)},${Math.round(90 * v)},${Math.round(40 * v)})`;
+        c.fillRect(i, j, 1, 1);
+      }
+  });
+  const noise = pattern((c) => {
+    for (let i = 0; i < 64; i++)
+      for (let j = 0; j < 64; j++) {
+        const v = Math.floor(
+          (Math.sin(i * 12.9898 + j * 78.233) * 43758.5453) % 1 > 0
+            ? ((Math.sin(i * 12.9898 + j * 78.233) * 43758.5453) % 1) * 200 + 40
+            : 120,
+        );
+        c.fillStyle = `rgb(${v},${v},${v})`;
+        c.fillRect(i, j, 1, 1);
+      }
+  });
+  const looks: ExhibitTexture[] = [
+    { name: 'OWN', map: null },
+    { name: 'CHK', map: checkerboard },
+    { name: 'BRK', map: brick },
+    { name: 'RST', map: rust },
+    { name: 'NSE', map: noise },
+  ];
+  // A cube in a black-and-white checker, for straight edges.
+  exhibit(
+    new BoxGeometry(0.4 * m, 0.4 * m, 0.4 * m, 4, 4, 4),
+    material({ map: checkerboard }),
+    -3,
+    1,
+    0.22,
+  );
   // A plain chair, on the floor.
+  const chairPlume = new Vector3();
   {
     const chair = new Group();
     chair.position.set(-1.5 * m, 0, -2.6 * m);
@@ -547,6 +652,28 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
       chair,
     );
     solid(-1.5, -2.6, 0.6, 0.6);
+    // The chair stands on the floor, so its panel has a pedestal beside it.
+    trueToPi.push(
+      add(
+        new BoxGeometry(0.55 * m, 0.7 * m, 0.2 * m),
+        material({ color: '#4a4c49' }),
+        -0.75,
+        0.35,
+        -2.6,
+      ),
+    );
+    solid(-0.75, -2.6, 0.55, 0.2);
+    exhibits.push({
+      name: 'CHAIR',
+      surfaces: [wood as MeshStandardMaterial],
+      // The panel is on the pedestal; the smoke rises from the seat.
+      x: -0.75,
+      z: -2.6,
+      top: 0.95,
+      panelY: 0.5,
+      panelZ: -2.6 + 0.1,
+    });
+    chairPlume.set(-1.5, 0.47, -2.6);
   }
   // A row of posts down the room's west side: a straight line to bend.
   for (let i = 0; i < 7; i++) {
@@ -587,6 +714,14 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
   const ph = () => settings.phaser;
   const dv = () => settings.divergence;
   const pr = () => settings.precision;
+  // Bypassed effects are off whatever their knobs say.
+  const bypassed = new Set<EffectName>();
+  const bypass = (name: EffectName) => ({
+    on: () => bypassed.has(name),
+    toggle: () => {
+      if (!bypassed.delete(name)) bypassed.add(name);
+    },
+  });
   const kit = createPanelKit();
   const desk = createEffectsConsole(
     kit,
@@ -617,6 +752,7 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
       },
       {
         title: 'WARP',
+        bypass: bypass('warp'),
         dials: [
           dial(
             'AMOUNT',
@@ -673,6 +809,7 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
       },
       {
         title: 'FIELD',
+        bypass: bypass('field'),
         dials: [
           dial(
             'CENTRE X',
@@ -699,14 +836,16 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
       },
       {
         title: 'PRECISION',
+        bypass: bypass('precision'),
         dials: [
           dial(
             'GRID M',
+            // A fine scale: even a few millimetres is plenty of jitter.
             0,
-            0.5,
+            0.05,
             () => pr().grid,
             (v) => (pr().grid = v),
-            3,
+            4,
           ),
           dial(
             'TREMBLE',
@@ -735,6 +874,7 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
       },
       {
         title: 'PI',
+        bypass: bypass('pi'),
         dials: [
           dial(
             'OFFSET',
@@ -755,6 +895,7 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
       },
       {
         title: 'PHASER',
+        bypass: bypass('phaser'),
         dials: [
           dial(
             'DEPTH',
@@ -795,22 +936,37 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
       },
       {
         title: 'DIVERGE',
+        bypass: bypass('divergence'),
         dials: [
           dial(
-            'RADIAL',
-            0,
-            0.08,
-            () => dv().radial,
-            (v) => (dv().radial = v),
-            3,
-          ),
-          dial(
-            'SHIFT PX',
+            'HORIZ PX',
             0,
             12,
-            () => dv().shift,
-            (v) => (dv().shift = v),
+            () => dv().horizontalPx,
+            (v) => (dv().horizontalPx = v),
             1,
+          ),
+          dial(
+            'HORIZ HZ',
+            0,
+            2,
+            () => dv().horizontalHz,
+            (v) => (dv().horizontalHz = v),
+          ),
+          dial(
+            'VERT PX',
+            0,
+            12,
+            () => dv().verticalPx,
+            (v) => (dv().verticalPx = v),
+            1,
+          ),
+          dial(
+            'VERT HZ',
+            0,
+            2,
+            () => dv().verticalHz,
+            (v) => (dv().verticalHz = v),
           ),
           dial(
             'PARALLAX',
@@ -819,13 +975,6 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
             () => dv().parallax,
             (v) => (dv().parallax = v),
             1,
-          ),
-          dial(
-            'TURN HZ',
-            0,
-            2,
-            () => dv().wobbleHz,
-            (v) => (dv().wobbleHz = v),
           ),
         ],
       },
@@ -873,17 +1022,7 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
   );
   // The console is a tool, not an exhibit: the geometry effects leave it
   // whole, so it can still be worked with space falling apart round it.
-  station.traverse((object) => {
-    if (!(object instanceof Mesh)) return;
-    for (const item of [object.material].flat() as Material[]) {
-      const exempt = item.userData as {
-        ps1Precision?: { value: number };
-        ps1Warp?: { value: number };
-      };
-      if (exempt.ps1Precision) exempt.ps1Precision.value = 0;
-      if (exempt.ps1Warp) exempt.ps1Warp.value = 0;
-    }
-  });
+  exempt(station, ['ps1Precision', 'ps1Warp', 'ps1Pi']);
   solid(0, 3.0, deskW, depth + 0.06);
 
   // The warp's centre, when it has one: a small glowing beacon on the floor.
@@ -895,12 +1034,69 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
     0,
   );
 
+  // Flat things (cards, dial faces) are round about their own normal, so
+  // a wrong π twists them in their plane instead of folding them. The
+  // room's own shell keeps the true π, so there is still a room.
+  room.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const flat = ['PlaneGeometry', 'CircleGeometry'].includes(
+      object.geometry.type,
+    );
+    for (const item of [object.material].flat() as Material[]) {
+      const axis = item.userData.ps1PiAxis as { value: Vector3 } | undefined;
+      if (flat) axis?.value.set(0, 0, 1);
+    }
+  });
+  // The π readout stays legible, so it can say what π is.
+  for (const part of [floor, ceiling, ...walls, ...trueToPi, piCard.mesh])
+    exempt(part, ['ps1Pi']);
+
+  // Every exhibit's own panel: glow, texture, reflection, smoke and embers.
+  // Reflections show the room itself, caught once from its middle.
+  const pmrem = new PMREMGenerator(renderer);
+  const reflections = pmrem.fromScene(scene, 0, 0.05, 40 * m, {
+    position: new Vector3(0, 1.4 * m, 0),
+  }).texture;
+  pmrem.dispose();
+  const panels = exhibits.map((exhibit) => {
+    const plume = new Group();
+    if (exhibit.name === 'CHAIR')
+      plume.position.copy(chairPlume).multiplyScalar(m);
+    else plume.position.set(exhibit.x * m, exhibit.top * m, exhibit.z * m);
+    plume.scale.setScalar(6);
+    room.add(plume);
+    const made = createExhibitPanel(
+      kit,
+      exhibit.name,
+      exhibit.surfaces,
+      plume,
+      {
+        textures: looks,
+        reflections,
+      },
+    );
+    made.group.position.set(
+      exhibit.x * m,
+      exhibit.panelY * m,
+      (exhibit.panelZ + 0.002) * m,
+    );
+    made.group.scale.setScalar(m);
+    room.add(made.group);
+    exempt(made.group, ['ps1Precision', 'ps1Warp', 'ps1Pi']);
+    return made;
+  });
+  const controls = new Map([
+    ...desk.uses,
+    ...passages.uses,
+    ...panels.flatMap((panel) => [...panel.uses]),
+  ]);
+
   const notes = document.createElement('div');
   notes.innerHTML =
     '<strong>Effects room</strong> · not part of the game · the console is in front of you<br>' +
     'Click: mouse look · WASD: walk · Shift: run · C: crouch · wheel: zoom · Esc: cursor<br>' +
     'Click a knob’s left or right half to turn it down or up<br>' +
-    '<kbd>P</kbd> toggles PS1 resolution · <a href="/?room=dev">developer room</a> · <a href="/">lab</a>';
+    'Doors: dev west · dev2 east · <kbd>P</kbd> toggles PS1 resolution · <a href="/?room=dev">developer room</a> · <a href="/">lab</a>';
   Object.assign(notes.style, {
     position: 'absolute',
     left: '12px',
@@ -920,9 +1116,11 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
   const usableAt = (x: number, y: number) => {
     pointer.set(x, y);
     raycaster.setFromCamera(pointer, camera);
-    const hit = raycaster.intersectObjects([...desk.uses.keys()], true)[0];
+    const hit = raycaster.intersectObjects([...controls.keys()], true)[0];
     for (let o: Object3D | null = hit?.object ?? null; o; o = o.parent) {
-      const use = desk.uses.get(o);
+      const use = controls.get(o);
+      if (passages.uses.has(o as Mesh) && hit && hit.distance > 2.8 * m)
+        return undefined;
       if (use && hit) return { object: o, use, point: hit.point };
     }
     return undefined;
@@ -951,6 +1149,7 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
   observer.observe(canvas);
   resize();
   const onKey = (event: KeyboardEvent) => {
+    if (canvas.parentElement?.hidden) return;
     if (event.target instanceof HTMLInputElement) return;
     if (event.key === 'p' || event.key === 'P') {
       ps1 = !ps1;
@@ -965,8 +1164,10 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
     camera,
     metre: m,
     floorY: 0,
-    start: { x: 0, z: 4.3 * m, yaw: 0, pitch: -0.25 },
-    solids: () => solids,
+    start: passages.arrival(
+      new URLSearchParams(location.search).get('from'),
+    ) ?? { x: 0, z: 4.3 * m, yaw: 0, pitch: -0.25 },
+    solids: () => [...solids, ...passages.solids()],
     use: useAt,
     aimed: () => Boolean(usableAt(0, 0)),
     reducedMotion: () => reducedMotion.matches,
@@ -986,6 +1187,10 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
       );
     },
     settings: () => settings,
+    /** Each exhibit's panel controls, in order: GLOW, TEXTURE, REFLECT, SMOKE, EMBERS. */
+    exhibitControls: (i: number) => [...panels[i].uses.values()],
+    /** The effects whose BYPASS button is lit. */
+    bypassed: () => bypassed,
     load(next: EffectSettings) {
       settings = next;
     },
@@ -1015,11 +1220,15 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
 
   let last = 0;
   renderer.setAnimationLoop((time) => {
+    if (canvas.parentElement?.hidden) {
+      last = 0;
+      return;
+    }
     const seconds = time / 1000;
     const delta = Math.min(0.1, last ? seconds - last : 0);
     last = seconds;
     if (!frozen) effectSeconds += delta * speed;
-    const frame = effectFrame(settings, effectSeconds);
+    const frame = effectFrame(withBypass(settings, bypassed), effectSeconds);
     latest = frame;
     ps1Uniforms.time.value = effectSeconds;
     ps1Uniforms.channels.value.set(...frame.channels);
@@ -1036,6 +1245,7 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
     teapotPrecision.value = teapotHolds ? 0 : 1;
     // The π instruments, read the way the lab reads its own.
     const pi = frame.pi;
+    ps1Uniforms.pi.value = pi;
     showPi(pi);
     placeRing(pi);
     const now = new Date();
@@ -1052,19 +1262,26 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
         ? 0
         : seconds * (0.25 + i * 0.05);
     desk.update(delta);
+    for (const panel of panels)
+      panel.update(seconds, delta, reducedMotion.matches);
     walk.update(delta);
+    passages.update(delta, walk.walker.x, walk.walker.z);
     if (divergence.active(frame.divergence))
       divergence.render(scene, camera, frame.divergence, effectSeconds);
     else renderer.render(scene, camera);
   });
 
-  return () => {
+  const dispose = () => {
     renderer.setAnimationLoop(null);
     observer.disconnect();
     window.removeEventListener('keydown', onKey);
     walk.dispose();
+    passages.dispose();
     notes.remove();
     divergence.dispose();
+    ps1Uniforms.pi.value = Math.PI;
+    for (const panel of panels) panel.dispose();
+    reflections.dispose();
     disposeKit(kit, desk.group);
     scene.traverse((object) => {
       if (object instanceof Mesh) object.geometry.dispose();
@@ -1073,4 +1290,14 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
     for (const item of textures) item.dispose();
     renderer.dispose();
   };
+  return Object.assign(dispose, {
+    enter(previous: string | null) {
+      const pose = passages.arrival(previous);
+      if (pose) {
+        walk.place(pose.x, pose.z, pose.yaw, pose.pitch);
+        walk.walker.crouched = false;
+        walk.walker.lowCrouched = false;
+      }
+    },
+  });
 }

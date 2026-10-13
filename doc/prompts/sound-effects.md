@@ -6,7 +6,7 @@ Paste everything below the line into the session that will build the game's soun
 
 ## Your task
 
-Design and implement all of the sound for **VX3 Simulator**, a browser game in `/Users/salimfadhley/workspace/vx3_simulator` (public repository `https://github.com/trebizondoculpepper/vx3_simulator`). Every sound must be **synthesised in code**. There are no recorded samples, so there are no third-party audio files to licence or credit.
+Design and implement all of the sound for **VX3 Simulator**, a browser game in `/Users/salimfadhley/workspace/vx3_simulator` (public repository `https://github.com/trebizondoculpepper/vx3_simulator`). Apparatus effects must be **synthesised in code**. The BBC Micro boot excerpt is the existing owner-requested exception, documented in `src/audio/assets/README.md`. Background music has its own handoff in [music-generation.md](music-generation.md).
 
 The game is a deadpan bench toy based on the r/VXJunkies subreddit. The player operates a historical "full" VX3 rig: a scrolling 19-inch equipment rack of mismatched 1970s rack-mount appliances, rendered in a PS1 style. The player flips toggles, turns knobs and throws a mains breaker. The simulation warms valves, spins up a phase spindle and holds a Helmholtz-Blatz field, which drifts and becomes unstable if the operator neglects the Blatz trim. When strain builds up, an incident trips the breaker and something odd happens (the logbook reports it in a calm, deadpan way).
 

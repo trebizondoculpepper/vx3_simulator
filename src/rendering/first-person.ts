@@ -107,6 +107,42 @@ export function createFirstPerson(options: FirstPersonOptions) {
   });
   canvas.parentElement?.appendChild(crosshair);
 
+  // The same small walking buttons as the lab, also usable without mouse capture.
+  const movement = document.createElement('div');
+  movement.setAttribute('role', 'group');
+  movement.setAttribute('aria-label', 'Movement');
+  Object.assign(movement.style, {
+    position: 'absolute',
+    left: '12px',
+    bottom: '12px',
+    display: 'flex',
+    gap: '4px',
+    padding: '6px',
+    background: '#20302bdd',
+  });
+  for (const [caption, label, forward, right] of [
+    ['◀', 'Step left', 0, -1],
+    ['▲', 'Step forward', 1, 0],
+    ['▼', 'Step back', -1, 0],
+    ['▶', 'Step right', 0, 1],
+  ] as const) {
+    const button = document.createElement('button');
+    button.textContent = caption;
+    button.setAttribute('aria-label', label);
+    Object.assign(button.style, {
+      color: '#e8e2cc',
+      background: '#34453c',
+      border: '1px solid #baac80',
+      padding: '8px',
+    });
+    button.addEventListener('click', () => {
+      nudge.forward += forward * 0.45 * metre;
+      nudge.right += right * 0.45 * metre;
+    });
+    movement.append(button);
+  }
+  canvas.parentElement?.append(movement);
+
   const locked = () => document.pointerLockElement === canvas;
   const typing = (event: Event) =>
     event.target instanceof HTMLInputElement ||
@@ -116,6 +152,7 @@ export function createFirstPerson(options: FirstPersonOptions) {
     Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
 
   const keydown = (event: KeyboardEvent) => {
+    if (canvas.parentElement?.hidden) return;
     if (typing(event)) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (WALK_KEYS.has(event.code)) {
@@ -311,6 +348,7 @@ export function createFirstPerson(options: FirstPersonOptions) {
       canvas.removeEventListener('wheel', wheel);
       if (locked()) document.exitPointerLock();
       crosshair.remove();
+      movement.remove();
     },
   };
 }

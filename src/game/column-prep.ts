@@ -170,6 +170,24 @@ export function driveLift(state: ColumnPrepState, target: 0 | 1) {
 }
 
 /**
+ * Move the rams toward their target at their own pace; closed clamps hold
+ * the head down. Reports `lowered` or `raised` on the step it arrives.
+ */
+export function stepLift(state: ColumnPrepState, dt: number) {
+  const events: ColumnPrepEvent[] = [];
+  if (!state.clamped && state.lift !== state.liftTarget) {
+    const step = dt / LIFT_SECONDS;
+    state.lift =
+      state.liftTarget > state.lift
+        ? Math.min(1, state.lift + step)
+        : Math.max(0, state.lift - step);
+    if (state.lift === state.liftTarget)
+      events.push({ kind: state.lift === 0 ? 'lowered' : 'raised' });
+  }
+  return events;
+}
+
+/**
  * Close or open the clamps. They only close on a head that is fully down,
  * and once closed they hold it there, whatever the rams were doing.
  */
@@ -204,16 +222,7 @@ export function stepColumnPrep(
   const events: ColumnPrepEvent[] = [];
   const wasStage = coreStage(state);
 
-  // The rams; closed clamps hold the head down.
-  if (!state.clamped && state.lift !== state.liftTarget) {
-    const step = dt / LIFT_SECONDS;
-    state.lift =
-      state.liftTarget > state.lift
-        ? Math.min(1, state.lift + step)
-        : Math.max(0, state.lift - step);
-    if (state.lift === state.liftTarget)
-      events.push({ kind: state.lift === 0 ? 'lowered' : 'raised' });
-  }
+  events.push(...stepLift(state, dt));
 
   if (!isSealed(state)) {
     // Open to the room: the chamber fills with air and the xenon escapes.

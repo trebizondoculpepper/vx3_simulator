@@ -5,6 +5,7 @@ import type { SoundParameters } from './sound-parameters';
 import { createSpatialMix } from './spatial-mix';
 import type { Emitter, SpatialMix, SpatialOptions } from './spatial-mix';
 import type { ZZFXSound } from 'zzfx';
+import { createPrinterSound } from './printer-sound';
 
 export type SoundCue =
   | 'toggle-up'
@@ -27,7 +28,7 @@ export type SoundCue =
   | 'drip'
   | 'printer';
 
-type SoundBank = Record<SoundCue, ZZFXSound>;
+type SoundBank = Record<SoundCue, Pick<ZZFXSound, 'play'>>;
 
 /** Places in the rack that sounds come from, positioned by the scene. */
 export type SoundSource =
@@ -239,9 +240,7 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
 
   // ZzFX parameter order: volume, variation, Hz, attack, sustain, release, shape, curve, slide, ...
   const sounds: SoundBank = {
-    printer: new library.ZZFXSound([
-      0.1, 0.08, 180, 0, 0.025, 0.045, 4, 1.1, -80, 0, 0, 0, 0.09,
-    ]),
+    printer: createPrinterSound(library),
     drip: new library.ZZFXSound([
       0.045, 0.015, 1250, 0, 0.025, 0.11, 0, 1.5, -650, 0, 0, 0, 0, 0.15,
     ]),
@@ -398,8 +397,12 @@ export function createSoundEngine() {
     return loading;
   };
   const play = (cue: SoundCue, at?: SoundSource) => {
-    // Ambient drips must not queue while waiting for the first audio gesture.
-    if (cue === 'drip' && graph?.context.state !== 'running') return;
+    // Ambient sounds must not accumulate before the first audio gesture.
+    if (
+      (cue === 'drip' || cue === 'printer') &&
+      graph?.context.state !== 'running'
+    )
+      return;
     if (muted || disposed || !visible) return;
     if (graph?.context.state === 'running') playNow(cue, at);
     else {

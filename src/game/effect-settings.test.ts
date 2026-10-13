@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { anomalyEffects } from './ferrocore-anomaly';
-import { effectFrame, settingsForActivity } from './effect-settings';
+import {
+  effectFrame,
+  settingsForActivity,
+  withBypass,
+} from './effect-settings';
 
 describe('effect settings', () => {
   it('reproduces the lab at every activity', () => {
@@ -25,5 +29,46 @@ describe('effect settings', () => {
     const settings = settingsForActivity(0);
     settings.pi.offset = 0.1;
     expect(effectFrame(settings, 5).pi).toBeCloseTo(Math.PI + 0.1, 12);
+  });
+
+  it('splits red and blue sideways and up and down, off by default', () => {
+    const settings = settingsForActivity(1);
+    expect(settings.divergence).toMatchObject({
+      horizontalPx: 0,
+      verticalPx: 0,
+      parallax: 0,
+    });
+    settings.divergence.horizontalPx = 4;
+    settings.divergence.verticalHz = 0.5;
+    expect(effectFrame(settings, 2).divergence).toMatchObject({
+      horizontalPx: 4,
+      verticalPx: 0,
+      verticalHz: 0.5,
+    });
+  });
+
+  it('bypasses an effect without touching its settings or the others', () => {
+    const settings = settingsForActivity(1);
+    settings.divergence.horizontalPx = 6;
+    settings.precision.grid = 0.1;
+    settings.pi.offset = 0.2;
+    const frame = effectFrame(
+      withBypass(settings, new Set(['divergence', 'pi', 'phaser'])),
+      3,
+    );
+    expect(frame.divergence.horizontalPx).toBe(0);
+    expect(frame.pi).toBe(Math.PI);
+    expect(frame.channels).toEqual([1, 1, 1]);
+    expect(frame.precision[0]).toBe(0.1);
+    expect(frame.warp).toBe(1);
+    expect(settings.divergence.horizontalPx).toBe(6);
+    expect(settings.pi.offset).toBe(0.2);
+  });
+
+  it('changes nothing when nothing is bypassed', () => {
+    const settings = settingsForActivity(0.7);
+    expect(effectFrame(withBypass(settings, new Set()), 9)).toEqual(
+      effectFrame(settings, 9),
+    );
   });
 });

@@ -1,3 +1,5 @@
+import { devDoors, devWallPieces } from '../game/dev-room-links';
+import { createDevDoorways } from '../scene/dev-doorways';
 import {
   AmbientLight,
   Box3,
@@ -92,9 +94,21 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     block(0.012, 0.002, size, '#494b48', i, 0.001, 0);
     block(size, 0.002, 0.012, '#494b48', 0, 0.001, i);
   }
-  block(size, 3.2, 0.1, '#8a8d88', 0, 1.6, -size / 2);
-  block(0.1, 3.2, size, '#80837e', -size / 2, 1.6, 0);
-  block(0.1, 3.2, size, '#80837e', size / 2, 1.6, 0);
+  const bounds = { minX: -5, maxX: 5, minZ: -5, maxZ: 5 };
+  const doors = devDoors('dev', bounds, 1);
+  const walls = devWallPieces(bounds, doors, 1, 3.2);
+  for (const wall of walls)
+    block(
+      wall.maxX - wall.minX,
+      wall.top - wall.bottom,
+      wall.maxZ - wall.minZ,
+      '#80837e',
+      (wall.minX + wall.maxX) / 2,
+      (wall.top + wall.bottom) / 2,
+      (wall.minZ + wall.maxZ) / 2,
+    );
+  const passages = createDevDoorways('dev', doors, 0, 1);
+  scene.add(passages.group);
   const kit = createPanelKit();
   const sign = createMicroLabel(
     kit,
@@ -147,6 +161,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     ...rig.clickables.map((c) => [c.object, c.use] as const),
     ...board.uses,
     ...modelDrive.uses,
+    ...passages.uses,
   ]);
 
   // On-screen notes.
@@ -156,7 +171,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     '<strong>Developer room</strong> · not part of the game<br>' +
     'Click: mouse look · WASD: walk · Shift: run · C: crouch · V: lower crouch<br>' +
     'Click / E: work the control under the crosshair · wheel: zoom · Alt+wheel: height · Esc: cursor<br>' +
-    '<kbd>P</kbd> toggles PS1 resolution · <a href="/">back to the lab</a>';
+    'Doors: corridor north · dev1 east · <kbd>P</kbd> toggles PS1 resolution · <a href="/">back to the lab</a>';
   Object.assign(notes.style, {
     position: 'absolute',
     left: '12px',
@@ -336,6 +351,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   // The core's voice. Browsers allow sound only after a gesture, so it
   // starts on the button.
   let audio: AudioContext | null = null;
+  let resumeAudio = false;
   let voice: CoreVoice | null = null;
   let sounds: RigSounds | null = null;
   let wasClamped = false;
@@ -448,6 +464,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   observer.observe(canvas);
   resize();
   const onKey = (event: KeyboardEvent) => {
+    if (canvas.parentElement?.hidden) return;
     if (event.key === 'p' || event.key === 'P') {
       ps1 = !ps1;
       resize();
@@ -576,6 +593,8 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     const hit = raycaster.intersectObjects([...uses.keys()], true)[0];
     for (let o: Object3D | null = hit?.object ?? null; o; o = o.parent) {
       const use = uses.get(o);
+      if (passages.uses.has(o as Mesh) && hit && hit.distance > 2.8 * 1)
+        return undefined;
       if (use && hit)
         return { object: o, use, point: hit.point, mesh: hit.object };
     }
@@ -594,32 +613,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
 
   // Walk the room as in the lab. The walls, the open front and the three
   // exhibits are solid.
-  const solids: Footprint[] = [
-    {
-      minX: -size / 2 - 1,
-      maxX: size / 2 + 1,
-      minZ: -size / 2 - 1,
-      maxZ: -size / 2 + 0.05,
-    },
-    {
-      minX: -size / 2 - 1,
-      maxX: -size / 2 + 0.05,
-      minZ: -size / 2,
-      maxZ: size / 2,
-    },
-    {
-      minX: size / 2 - 0.05,
-      maxX: size / 2 + 1,
-      minZ: -size / 2,
-      maxZ: size / 2,
-    },
-    {
-      minX: -size / 2 - 1,
-      maxX: size / 2 + 1,
-      minZ: size / 2,
-      maxZ: size / 2 + 1,
-    },
-  ];
+  const solids: Footprint[] = walls.filter((wall) => wall.bottom === 0);
   for (const exhibit of [rig.group, board.group, modelDrive.group]) {
     const bounds = new Box3().setFromObject(exhibit);
     if (bounds.isEmpty()) continue;
@@ -637,8 +631,10 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     metre: 1,
     floorY: 0,
     // Where the orbit camera used to start, facing the concept rig.
-    start: { x: 0.3, z: 2.9, yaw: Math.atan2(-0.3, 2.9), pitch: -0.27 },
-    solids: () => solids,
+    start: passages.arrival(
+      new URLSearchParams(location.search).get('from'),
+    ) ?? { x: 0.3, z: 2.9, yaw: Math.atan2(-0.3, 2.9), pitch: -0.27 },
+    solids: () => [...solids, ...passages.solids()],
     use: useAt,
     aimed: () => Boolean(usableAt(0, 0)),
     reducedMotion: () => reducedMotion.matches,
@@ -646,11 +642,16 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
 
   let last = 0;
   renderer.setAnimationLoop((time) => {
+    if (canvas.parentElement?.hidden) {
+      last = 0;
+      return;
+    }
     const seconds = time / 1000;
     const delta = Math.min(0.1, last ? seconds - last : 0);
     last = seconds;
     ps1Uniforms.time.value = seconds;
     walk.update(delta);
+    passages.update(delta, walk.walker.x, walk.walker.z);
     rig.update(seconds, delta, reducedMotion.matches);
     board.update(seconds, delta);
     modelDrive.update(delta);
@@ -659,11 +660,12 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     renderer.render(scene, camera);
   });
 
-  return () => {
+  const dispose = () => {
     renderer.setAnimationLoop(null);
     observer.disconnect();
     window.removeEventListener('keydown', onKey);
     walk.dispose();
+    passages.dispose();
     notes.remove();
     model.remove();
     voice?.dispose();
@@ -678,6 +680,24 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       if (object instanceof Mesh) object.geometry.dispose();
     });
     for (const material of materials) material.dispose();
+
     renderer.dispose();
   };
+  return Object.assign(dispose, {
+    suspend() {
+      resumeAudio = audio?.state === 'running';
+      if (resumeAudio) void audio?.suspend();
+    },
+    resume() {
+      if (resumeAudio) void audio?.resume();
+    },
+    enter(previous: string | null) {
+      const pose = passages.arrival(previous);
+      if (pose) {
+        walk.place(pose.x, pose.z, pose.yaw, pose.pitch);
+        walk.walker.crouched = false;
+        walk.walker.lowCrouched = false;
+      }
+    },
+  });
 }

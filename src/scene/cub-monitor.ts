@@ -215,6 +215,8 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
 
   return {
     group,
+    /** The picture on the tube, for looking straight at it. */
+    screen: face,
     /** Redraw the text if it has changed, and blink the cursor about once a second. */
     update(
       seconds: number,

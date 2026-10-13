@@ -151,13 +151,15 @@ export function createPanelMeter(
     0,
     0.006,
   );
+  // Face, needle, shroud and hub each a millimetre clear of the one
+  // behind, so they never flicker into each other.
   add(
     group,
     new PlaneGeometry(width, h),
     printed(kit, art.texture),
     0,
     0,
-    0.0122,
+    0.013,
   );
   const rim = kitPaint(kit, '#2a2b2e');
   for (const s of [-1, 1]) {
@@ -185,7 +187,7 @@ export function createPanelMeter(
     kitPaint(kit, '#1b1b1d'),
     0,
     -h * 0.4,
-    0.0128,
+    0.0148,
   );
   add(
     group,
@@ -193,10 +195,10 @@ export function createPanelMeter(
     kitPaint(kit, '#bfc2c2', 0.6),
     0,
     -h * 0.4,
-    0.0142,
+    0.0165,
   ).rotation.x = Math.PI / 2;
   const pivot = new Group();
-  pivot.position.set(0, h / 2 - cy * (h / ph), 0.0126);
+  pivot.position.set(0, h / 2 - cy * (h / ph), 0.014);
   group.add(pivot);
   const length = (r / ph) * h * 0.98;
   add(
@@ -266,6 +268,11 @@ export function createRoundGauge(
   c.font = `bold 10px ${PANEL_FONT}`;
   c.fillText(label, m, m + 26);
   art.texture.needsUpdate = true;
+  // The face, needle and hub each stand clear of the layer below by at
+  // least a millimetre, so small gauges do not flicker into their bodies.
+  const front = radius * 0.24;
+  const faceZ = front + Math.max(radius * 0.005, 0.001);
+  const needleZ = faceZ + 0.001;
   const chrome = kitPaint(kit, '#d4d7d7', 0.7);
   const ring = add(
     group,
@@ -290,10 +297,10 @@ export function createRoundGauge(
     printed(kit, art.texture),
     0,
     0,
-    radius * 0.245,
+    faceZ,
   );
   const pivot = new Group();
-  pivot.position.z = radius * 0.26;
+  pivot.position.z = needleZ;
   group.add(pivot);
   const black = kitPaint(kit, '#1b1b18');
   add(
@@ -310,7 +317,7 @@ export function createRoundGauge(
     black,
     0,
     0,
-    radius * 0.27,
+    needleZ + 0.0008,
   ).rotation.x = Math.PI / 2;
   const needle = easedNeedle(pivot, (Math.PI * 3) / 2, -(Math.PI * 3) / 4);
   needle.update(1);

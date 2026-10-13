@@ -25,6 +25,7 @@ export interface CorridorOptions {
   doorX: number;
   doorWidth: number;
   doorHeight: number;
+  devDoor?: { x: number; width: number; height: number };
   plantDoor?: { x: number; width: number; height: number };
 }
 
@@ -136,11 +137,39 @@ export function createCorridor(options: CorridorOptions) {
     box(w, 0.06, 0.08, RAIL, x, floorY + 0.9 * m, z + face * 0.04);
     box(w, 0.15, 0.1, SKIRT, x, floorY + 0.075, z + face * 0.05);
   };
-  box(length, height, wallThickness, WALL, 0, midY, southZ + wallThickness / 2);
+  const devDoor = options.devDoor;
+  const southRanges = devDoor
+    ? [
+        [-halfLength, devDoor.x - devDoor.width / 2],
+        [devDoor.x + devDoor.width / 2, halfLength],
+      ]
+    : [[-halfLength, halfLength]];
+  for (const [a, b] of southRanges) {
+    box(
+      b - a,
+      height,
+      wallThickness,
+      WALL,
+      (a + b) / 2,
+      midY,
+      southZ + wallThickness / 2,
+    );
+    run(a, b, southZ, -1);
+  }
+  if (devDoor)
+    box(
+      devDoor.width,
+      height - devDoor.height,
+      wallThickness,
+      WALL,
+      devDoor.x,
+      floorY + (height + devDoor.height) / 2,
+      southZ + wallThickness / 2,
+    );
   // The north wall stops short of its back face, so where a room such as
   // the plant room lies behind it the two walls do not share a surface.
   const backedWall = wallThickness - 0.04;
-  run(-halfLength, halfLength, southZ, -1);
+
   for (const [x0, x1] of [
     [-halfLength, labMinX],
     [labMaxX, halfLength],
@@ -378,6 +407,13 @@ export function createCorridor(options: CorridorOptions) {
       [-1, 3.5 * m],
     ]) {
       const dx = x + offset;
+      if (
+        face < 0 &&
+        options.devDoor &&
+        Math.abs(dx - options.devDoor.x) <
+          options.devDoor.width / 2 + otherDoorWidth
+      )
+        continue;
       // Remove the nearest decorative doorway to the left of the real plant room.
       if (
         face > 0 &&

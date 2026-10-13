@@ -14,22 +14,23 @@ import { ps1Uniforms } from './ps1-material';
  * Chromatic divergence: red, green and blue stop agreeing about where
  * things are. The scene is drawn once into a target with its depth, then
  * each channel is read back from its own place. Green stays true; red and
- * blue are pushed apart three ways:
+ * blue are pushed apart, in opposite directions:
  *
- * - radially, as if each wavelength saw through a different lens;
- * - by a fixed shift whose direction slowly turns, out of step per channel;
- * - by parallax, so near things split further than far ones, as if each
- *   channel's eye stood a little to one side.
+ * - sideways and up and down, each swinging to and fro at its own rate;
+ * - by sideways parallax, so near things split further than far ones, as
+ *   if each channel's eye stood a little to one side.
  */
 export interface DivergenceFrame {
-  /** Radial disagreement: the fraction red and blue are scaled from centre. */
-  radial: number;
-  /** A shift, in pixels of the PS1 picture. */
-  shift: number;
+  /** The sideways split at full swing, pixels of the PS1 picture. */
+  horizontalPx: number;
+  /** The up-and-down split at full swing, pixels. */
+  verticalPx: number;
+  /** How often the sideways swing repeats, Hz; 0 holds it at full split. */
+  horizontalHz: number;
+  /** How often the up-and-down swing repeats, Hz. */
+  verticalHz: number;
   /** Parallax, in pixels at one metre; it falls off with distance. */
   parallax: number;
-  /** How fast the shift's direction turns, revolutions per second. */
-  wobbleHz: number;
 }
 
 const vertexShader = `
@@ -48,6 +49,7 @@ const fragmentShader = `
   uniform float metre;
   uniform float time;
   uniform vec4 split;
+  uniform float parallax;
   varying vec2 vUv;
 
   float distanceAt(vec2 uv) {
@@ -55,18 +57,18 @@ const fragmentShader = `
     return 2.0 * clip.x * clip.y / (clip.y + clip.x - z * (clip.y - clip.x));
   }
 
-  vec2 place(float side, float phase, float nearness) {
-    float turn = time * split.w * 6.2831853 + phase;
-    vec2 direction = vec2(cos(turn), sin(turn));
-    vec2 pixels = direction * side * (split.y + split.z * nearness);
-    return 0.5 + (vUv - 0.5) * (1.0 + side * split.x) + pixels / resolution;
+  // split: sideways and up-and-down pixels, then their rates in Hz.
+  vec2 place(float side, float nearness) {
+    vec2 swing = cos(time * split.zw * 6.2831853);
+    vec2 pixels = side * (split.xy * swing + vec2(parallax * nearness, 0.0));
+    return vUv + pixels / resolution;
   }
 
   void main() {
     float nearness = min(4.0, metre / max(distanceAt(vUv), 0.001));
-    float r = texture2D(colour, place(1.0, 0.0, nearness)).r;
+    float r = texture2D(colour, place(1.0, nearness)).r;
     vec4 g = texture2D(colour, vUv);
-    float b = texture2D(colour, place(-1.0, 2.1, nearness)).b;
+    float b = texture2D(colour, place(-1.0, nearness)).b;
     gl_FragColor = linearToOutputTexel(vec4(r, g.g, b, 1.0));
   }
 `;
@@ -89,6 +91,7 @@ export function createChromaticDivergence(
       metre: { value: worldUnitsPerMetre },
       time: { value: 0 },
       split: { value: new Vector4() },
+      parallax: { value: 0 },
     },
     vertexShader,
     fragmentShader,
@@ -101,7 +104,11 @@ export function createChromaticDivergence(
   return {
     /** Whether these settings disagree at all; if not, render as usual. */
     active(frame: DivergenceFrame) {
-      return frame.radial !== 0 || frame.shift !== 0 || frame.parallax !== 0;
+      return (
+        frame.horizontalPx !== 0 ||
+        frame.verticalPx !== 0 ||
+        frame.parallax !== 0
+      );
     },
     /** Draw the scene through the divergence, to the screen. */
     render(
@@ -119,11 +126,12 @@ export function createChromaticDivergence(
       u.clip.value.set(lens.near, lens.far);
       u.time.value = seconds;
       u.split.value.set(
-        frame.radial,
-        frame.shift,
-        frame.parallax,
-        frame.wobbleHz,
+        frame.horizontalPx,
+        frame.verticalPx,
+        frame.horizontalHz,
+        frame.verticalHz,
       );
+      u.parallax.value = frame.parallax;
       ps1Uniforms.linearTarget.value = 1;
       renderer.setRenderTarget(target);
       renderer.render(scene, camera);

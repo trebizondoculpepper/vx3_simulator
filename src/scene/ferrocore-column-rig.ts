@@ -16,10 +16,11 @@ import {
   TubeGeometry,
   Vector3,
 } from 'three';
-import type { Material, MeshBasicMaterial, Object3D } from 'three';
+import type { Material, MeshStandardMaterial, Object3D } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { createCanvasTexture } from './screens';
 import { createGasVent } from './gas-vent';
+import { createSealPuff } from './seal-puff';
 import {
   createBarGraph,
   createEightiesButton,
@@ -53,6 +54,7 @@ import {
   AMBIENT,
   FULL_BOTTLE,
   FULL_POWER,
+  MAXIMUM,
   acknowledge,
   chamberPressure,
   createColumnPrep,
@@ -63,8 +65,10 @@ import {
   isStarved,
   lambdaVolts,
   oxygenPercent,
+  setActivation,
   setClamped,
   stepColumnPrep,
+  stepLift,
 } from '../game/column-prep';
 import type { ColumnPrepEvent, ColumnPrepState } from '../game/column-prep';
 import {
@@ -77,7 +81,8 @@ import {
 } from './panel-instruments';
 
 /**
- * Design concept, not wired to the game: a full VX3 rebuilt round a
+ * The second-generation VX3, installed in the lab (and kept in the
+ * developer room for building): a full VX3 rebuilt round a
  * vertically mounted ferrocore column, after reference art posted to
  * r/VXJunkies. Two mismatched racks crowd one olive skid: a grey-blue
  * 19-inch rack of controllers, heatsinks and an open bay where the beam
@@ -89,8 +94,9 @@ import {
  * Built at real size in metres with the origin on the floor under the
  * middle of the skid, facing +z. Every panel part is a component from
  * `eighties-controls.ts`, `panel-switchgear.ts` or `panel-instruments.ts`,
- * laid out after the reference. Every control moves when clicked, though
- * none is wired to anything. Printed labels are placeholders for now; the
+ * laid out after the reference. Every control moves when clicked; the
+ * head, clamp, valve, supply and NETZ controls work the column's model,
+ * and the rest are not wired yet. Printed labels are placeholders for now; the
  * text passed to `label` records what each one is meant to say.
  */
 
@@ -166,6 +172,25 @@ function describe(event: ColumnPrepEvent): string {
 export const PART_CLEARANCE = 0.001;
 /** And at least this far from their panel's edge, metres. */
 export const EDGE_CLEARANCE = 0.005;
+
+/**
+ * The chamber's windows, as [angle round from the front, height, neck
+ * radius, neck length] in metres: five small ones in a row high up, the big
+ * front viewport, and one low on the left.
+ */
+const WINDOWS: [number, number, number, number][] = [
+  ...[0, 1, 2, 3, 4].map((i): [number, number, number, number] => [
+    -1.0 + i * 0.5,
+    0.9,
+    0.026,
+    0.04,
+  ]),
+  [0, 0.71, 0.06, 0.07],
+  [-0.8, 0.6, 0.03, 0.05],
+];
+const FRONT_WINDOW = 5;
+/** A window's clear bore, as a share of its neck's radius. */
+const WINDOW_BORE = 0.78;
 
 /** Full scale of the chamber pressure gauges, bar. */
 const CHAMBER_GAUGE_BAR = 2.5;
@@ -662,6 +687,13 @@ export function createFerrocoreColumnRig(
     box(g, 0.6, 0.03, 0.72, BLUE_TRIM, 0, skidTop + H - 0.015, 0);
     box(g, 0.6, 0.03, 0.72, BLUE_TRIM, 0, skidTop + 0.015, 0);
     box(g, 0.56, H, 0.02, '#1a1b1d', 0, y, -0.34);
+    // The rig's own supply isolator, on a plate over the front of the left
+    // upright near the top, where it can be reached from the aisle: OFF
+    // darkens everything whatever the NETZ button says.
+    box(g, 0.13, 0.19, 0.01, '#8f9483', -0.31, 1.76, 0.355);
+    supply.group.position.set(-0.31, 1.76, 0.36);
+    g.add(supply.group);
+    worked(supply.group, 'supply isolator', supply.toggle, supply.update);
   }
   {
     // 2U: a strip of eight small channel modules, each with a slide
@@ -1004,12 +1036,6 @@ export function createFerrocoreColumnRig(
     box(g, 0.66, 0.06, 0.76, OLIVE, 0, skidTop + 0.03, 0);
     box(g, 0.56, H, 0.02, '#1a1b1d', 0, y, -0.37);
     box(g, 0.02, 0.12, 0.03, '#8f9483', 0.335, 1.15, 0.2);
-    // The rig's own supply isolator, surface-mounted on the cabinet's
-    // side: OFF darkens everything whatever the NETZ button says.
-    supply.group.position.set(0.33, 1.4, 0.06);
-    supply.group.rotation.y = Math.PI / 2;
-    g.add(supply.group);
-    worked(supply.group, 'supply isolator', supply.toggle, supply.update);
     box(g, 0.1, 0.022, 0.003, '#d0d0c4', -0.2, skidTop + H - 0.025, 0.382);
   }
   {
@@ -1397,8 +1423,68 @@ export function createFerrocoreColumnRig(
         },
       );
     }
-    const c = panel(right, 32, 3, '#aeada3');
-    box(c.group, 0.05, 0.03, 0.001, '#d9d4bf', 0.2, 0.01, 0.0005);
+    {
+      // 3U: the core, under the column station. AKTIVIERUNG sets the
+      // core's activation temperature in 19 detents of about 195 K, which
+      // the core then follows; HELLIGKEIT sets its brightness. The readout
+      // shows the set point; the core's own temperature is on the readouts
+      // at the top of the cabinet.
+      const c = panel(right, 32, 3, '#aeada3');
+      label(c.group, 'KERN', -0.22, 0.045, { height: 0.0028, ink: INK });
+      const span = MAXIMUM - AMBIENT;
+      const setShare = () => (prep.setpoint - AMBIENT) / span;
+      const activation = createKnob(kit, {
+        radius: 0.016,
+        style: 'skirted',
+        scale: true,
+        ink: INK,
+        value: setShare(),
+      });
+      place(c.group, activation.group, -0.15, 0.004);
+      worked(
+        activation.group,
+        'activation temperature knob',
+        (direction = 1) =>
+          setActivation(
+            prep,
+            AMBIENT + stepKnob(setShare(), direction, 19) * span,
+          ),
+        (delta) => {
+          activation.set(setShare());
+          activation.update(delta);
+        },
+      );
+      label(c.group, 'AKTIVIERUNG', -0.15, -0.04, {
+        height: 0.0022,
+        ink: INK,
+      });
+      seg(c.group, 4, -0.06, 0.012, () => String(Math.round(prep.setpoint)));
+      label(c.group, 'SOLL K', -0.06, -0.012, { height: 0.0022, ink: INK });
+      const brightness = createKnob(kit, {
+        radius: 0.012,
+        style: 'skirted',
+        scale: true,
+        ink: INK,
+        value: prep.brightness,
+      });
+      place(c.group, brightness.group, 0.05, 0.004);
+      worked(
+        brightness.group,
+        'brightness knob',
+        (direction = 1) => {
+          prep.brightness = stepKnob(prep.brightness, direction, 10);
+        },
+        (delta) => {
+          brightness.set(prep.brightness);
+          brightness.update(delta);
+        },
+      );
+      label(c.group, 'HELLIGKEIT', 0.05, -0.035, {
+        height: 0.0022,
+        ink: INK,
+      });
+      box(c.group, 0.05, 0.03, 0.001, '#d9d4bf', 0.2, 0.01, 0.0005);
+    }
   }
   {
     // 4U: the cabinet's own supply: a mains rocker, a meter and a tag.
@@ -1459,27 +1545,25 @@ export function createFerrocoreColumnRig(
       );
     }
   };
-  /** A radial port: a short neck, a bolted flange, and a window or blank. */
+  /**
+   * A radial port: a short neck, a bolted flange, and a blank or a window.
+   * A window's neck is open right through the wall (the wall has a hole
+   * cut for it), so the glass looks into the vessel and the vessel's light
+   * shows out through it.
+   */
   const port = (
     angle: number,
     y: number,
     r: number,
     length: number,
-    window: Material | null,
+    glazed: boolean,
     bodyR = 0.22,
   ) => {
     const pivot = new Group();
     pivot.position.set(0, y, 0);
     pivot.rotation.y = angle;
     column.add(pivot);
-    cyl(pivot, r, length, steel, 0, 0, bodyR + length / 2 - 0.01, {
-      axis: 'z',
-      segments: 14,
-    });
-    cyl(pivot, r * 1.45, 0.014, steel, 0, 0, bodyR + length, {
-      axis: 'z',
-      segments: 18,
-    });
+    const outer = bodyR + length;
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
       cyl(
@@ -1489,25 +1573,69 @@ export function createFerrocoreColumnRig(
         '#d0d3d3',
         Math.cos(a) * r * 1.25,
         Math.sin(a) * r * 1.25,
-        bodyR + length,
+        outer,
         { axis: 'z', segments: 6 },
       );
     }
-    // The port's bore, seen from inside the vessel.
-    cyl(pivot, r * 0.8, 0.003, '#0d0e0f', 0, 0, bodyR - 0.014, {
-      axis: 'z',
-      segments: 14,
-    });
-    if (window)
-      cyl(pivot, r * 0.75, 0.004, window, 0, 0, bodyR + length + 0.0075, {
+    if (!glazed) {
+      cyl(pivot, r, length, steel, 0, 0, bodyR + length / 2 - 0.01, {
         axis: 'z',
         segments: 14,
       });
-    else
-      cyl(pivot, r * 0.5, 0.01, '#9ea3a4', 0, 0, bodyR + length + 0.012, {
+      cyl(pivot, r * 1.45, 0.014, steel, 0, 0, outer, {
+        axis: 'z',
+        segments: 18,
+      });
+      // The port's bore, seen from inside the vessel.
+      cyl(pivot, r * 0.8, 0.003, '#0d0e0f', 0, 0, bodyR - 0.014, {
+        axis: 'z',
+        segments: 14,
+      });
+      cyl(pivot, r * 0.5, 0.01, '#9ea3a4', 0, 0, outer + 0.012, {
         axis: 'z',
         segments: 10,
       });
+      return pivot;
+    }
+    const bore = r * WINDOW_BORE;
+    /** An open-ended tube along the port's axis, from `near` to `far`. */
+    const sleeve = (
+      radius: number,
+      near: number,
+      far: number,
+      material: Material,
+    ) => {
+      const mesh = new Mesh(
+        new CylinderGeometry(radius, radius, far - near, 14, 1, true),
+        material,
+      );
+      mesh.rotation.x = Math.PI / 2;
+      mesh.position.z = (near + far) / 2;
+      pivot.add(mesh);
+    };
+    /** A flat ring facing out along the port's axis. */
+    const annulus = (inner: number, outerR: number, z: number) => {
+      const mesh = new Mesh(new RingGeometry(inner, outerR, 18), rimSteel);
+      mesh.position.z = z;
+      pivot.add(mesh);
+    };
+    // The neck, outside and in: its bore runs from the vessel's inner wall
+    // to the glass.
+    sleeve(r, bodyR - 0.01, outer - 0.007, steel);
+    sleeve(bore, innerR - 0.002, outer + 0.004, insideSteel);
+    // The flange, a ring with the bore through it.
+    sleeve(r * 1.45, outer - 0.007, outer + 0.007, steel);
+    annulus(bore, r * 1.45, outer - 0.007);
+    annulus(bore, r * 1.45, outer + 0.007);
+    // The glass, and the clamping ring that holds it.
+    const pane = new Mesh(new CircleGeometry(bore, 14), glass);
+    pane.position.z = outer + 0.004;
+    pivot.add(pane);
+    sleeve(r * 1.1, outer + 0.007, outer + 0.012, steel);
+    sleeve(bore * 0.92, outer + 0.004, outer + 0.012, rimSteel);
+    annulus(bore * 0.92, r * 1.1, outer + 0.012);
+    // A lip where the bore meets the inner wall, seen from inside.
+    annulus(bore * 0.86, bore, innerR - 0.0015);
     return pivot;
   };
 
@@ -1531,27 +1659,83 @@ export function createFerrocoreColumnRig(
   const chamberMiddle = (chamberBottom + chamberTop) / 2;
   const outerR = 0.22;
   const innerR = 0.208;
+  // Holes cut through the wall for the windows, as an alpha map on the
+  // shell and lining: a cylinder's u runs round it from +z the same way a
+  // port's angle does, and v up it.
+  const holes = createCanvasTexture(512, 256);
+  kit.textures.push(holes.texture);
+  holes.context.fillStyle = '#fff';
+  holes.context.fillRect(0, 0, 512, 256);
+  holes.context.fillStyle = '#000';
+  for (const [angle, y, r] of WINDOWS) {
+    const u = (((angle / (Math.PI * 2)) % 1) + 1) % 1;
+    const across = ((r * WINDOW_BORE) / (Math.PI * 2 * innerR)) * 512;
+    const up = ((r * WINDOW_BORE) / chamberHeight) * 256;
+    for (const wrap of [-512, 0, 512]) {
+      holes.context.beginPath();
+      holes.context.ellipse(
+        u * 512 + wrap,
+        ((chamberTop - y) / chamberHeight) * 256,
+        across,
+        up,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      holes.context.fill();
+    }
+  }
+  holes.texture.needsUpdate = true;
+  const shellSteel = createPs1Material({
+    color: STEEL,
+    metalness: 0.55,
+    alphaMap: holes.texture,
+    alphaTest: 0.5,
+  });
   const insideSteel = createPs1Material({
     color: '#5d6264',
     metalness: 0.4,
     side: BackSide,
   });
+  const liningSteel = createPs1Material({
+    color: '#5d6264',
+    metalness: 0.4,
+    side: BackSide,
+    alphaMap: holes.texture,
+    alphaTest: 0.5,
+  });
+  // The windows' glass: faintly tinted, and lit from inside by the core.
+  const glass = createPs1Material({
+    color: '#a9c2c8',
+    metalness: 0.2,
+    transparent: true,
+    opacity: 0.28,
+    depthWrite: false,
+    side: DoubleSide,
+  }) as MeshStandardMaterial;
   const floorSteel = createPs1Material({ color: '#4c5153', metalness: 0.3 });
   const rimSteel = createPs1Material({
     color: STEEL,
     metalness: 0.55,
     side: DoubleSide,
   });
-  kit.materials.push(insideSteel, floorSteel, rimSteel);
+  kit.materials.push(
+    shellSteel,
+    insideSteel,
+    liningSteel,
+    glass,
+    floorSteel,
+    rimSteel,
+  );
   const shell = new Mesh(
     new CylinderGeometry(outerR, outerR, chamberHeight, 28, 1, true),
-    steel,
+    shellSteel,
   );
   shell.position.y = chamberMiddle;
   column.add(shell);
   const lining = new Mesh(
     new CylinderGeometry(innerR, innerR, chamberHeight, 28, 1, true),
-    insideSteel,
+    liningSteel,
   );
   lining.position.y = chamberMiddle;
   column.add(lining);
@@ -1671,51 +1855,17 @@ export function createFerrocoreColumnRig(
     metalness: 0.5,
   });
 
-  // With the core lowered and lit, its light shows at every window.
-  // What the windows show: the core seen through the glass, drawn as
-  // bright coil bands that sweep sideways as it spins, tinted by its glow.
-  const windowView = createCanvasTexture(64, 64);
-  kit.textures.push(windowView.texture);
-  const windowGlow = createPs1Material(
-    { map: windowView.texture, color: '#2a2622' },
-    true,
-    true,
-  ) as MeshBasicMaterial;
-  kit.materials.push(windowGlow);
-  let windowPhase = -1;
-  const drawWindowView = (phase: number) => {
-    const quantised = Math.round(phase * 64) / 64;
-    if (quantised === windowPhase) return;
-    windowPhase = quantised;
-    const c = windowView.context;
-    c.fillStyle = '#1c1c1c';
-    c.fillRect(0, 0, 64, 64);
-    // Four coil bands round the core, foreshortened toward its edges.
-    for (let i = 0; i < 4; i++) {
-      const around = ((i / 4 + quantised) % 1) * Math.PI * 2;
-      const facing = Math.cos(around);
-      if (facing <= 0) continue;
-      const x = 32 + Math.sin(around) * 26;
-      const width = 4 + facing * 9;
-      const glow = Math.round(90 + facing * 165);
-      c.fillStyle = `rgb(${glow},${glow},${glow})`;
-      c.fillRect(x - width / 2, 0, width, 64);
-    }
-    // The glowing gaps between the windings, across the whole view.
-    c.fillStyle = 'rgba(255,255,255,0.55)';
-    for (let y = 6; y < 64; y += 14) c.fillRect(0, y, 64, 4);
-    windowView.texture.needsUpdate = true;
-  };
-  drawWindowView(0);
+  // The core seen through the glass is the core itself; lit, it lights the
+  // glass from inside.
   const coreGlow = kitGlow(kit, '#34373a');
-  for (let i = 0; i < 5; i++)
-    port(-1.0 + i * 0.5, 0.9, 0.026, 0.04, windowGlow);
-  // The big front viewport with its rotary feedthrough across it.
-  const front = port(0, 0.71, 0.06, 0.07, windowGlow);
+  const windows = WINDOWS.map(([angle, y, r, length]) =>
+    port(angle, y, r, length, true),
+  );
+  // The big front viewport's rotary feedthrough runs across it.
+  const front = windows[FRONT_WINDOW];
   box(front, 0.14, 0.012, 0.012, STEEL_DARK, 0, 0, 0.31);
   cyl(front, 0.013, 0.05, '#2a2a2a', 0.08, 0, 0.31, { axis: 'x' });
-  port(0.55, 0.56, 0.032, 0.05, null);
-  port(-0.8, 0.6, 0.03, 0.05, windowGlow);
+  port(0.55, 0.56, 0.032, 0.05, false);
   // Clamp lugs on either side.
   for (const sx of [-1, 1]) {
     box(column, 0.05, 0.09, 0.03, '#a7abab', sx * 0.235, 0.62, 0.12, 0.4);
@@ -2004,19 +2154,29 @@ export function createFerrocoreColumnRig(
     ink: '#241f14',
   });
 
-  // ---- The oxygen sensor ----------------------------------------------------
-  // A narrowband lambda probe, as in a motorcycle exhaust, screwed into a
-  // boss on the chamber wall and angled down a little; its lead runs round
-  // to the olive cabinet's back.
-  {
+  // ---- The oxygen sensors ---------------------------------------------------
+  // Narrowband lambda probes, as in a motorcycle exhaust, each screwed into
+  // a boss on the chamber wall and angled down a little, with its slotted
+  // tip showing just inside the wall. Returns where its lead leaves the
+  // boot, in the rig's coordinates.
+  const lambdaProbe = (angle: number, y: number, name: string) => {
     const probe = new Group();
-    probe.position.set(0, 0.79, 0);
-    probe.rotation.y = -0.5;
+    probe.position.set(0, y, 0);
+    probe.rotation.y = angle;
     column.add(probe);
     const tilt = new Group();
     tilt.position.z = 0.22;
     tilt.rotation.x = 0.35;
     probe.add(tilt);
+    // The tip inside, short of the heater coil.
+    cyl(tilt, 0.0065, 0.014, '#9ea3a4', 0, 0, -0.017, {
+      axis: 'z',
+      segments: 8,
+      metalness: 0.5,
+    });
+    for (let i = 0; i < 4; i++)
+      box(tilt, 0.0012, 0.0136, 0.004, '#1c1d1e', 0, 0, -0.019).rotation.z =
+        (i / 4) * Math.PI;
     cyl(tilt, 0.017, 0.016, steel, 0, 0, 0.006, { axis: 'z', segments: 14 });
     cyl(tilt, 0.0125, 0.012, '#b9bcbc', 0, 0, 0.02, {
       axis: 'z',
@@ -2038,18 +2198,35 @@ export function createFerrocoreColumnRig(
       segments: 10,
       bottom: 0.0085,
     });
-    // The lead, from the end of the boot round the back.
-    const end = new Vector3(0, 0, 0.098);
+    // Its tag, on the chamber wall below the boss.
+    const tagged = new Group();
+    tagged.rotation.y = angle;
+    column.add(tagged);
+    tag(tagged, name, 0, y - 0.034, 0.2235, { height: 0.0035 });
     tilt.updateMatrixWorld(true);
     column.updateMatrixWorld(true);
-    const start = tilt.localToWorld(end.clone());
-    group.worldToLocal(start);
+    const start = group.worldToLocal(
+      tilt.localToWorld(new Vector3(0, 0, 0.098)),
+    );
+    return [start.x, start.y, start.z] as [number, number, number];
+  };
+  /** A point round the chamber, in the rig's coordinates. */
+  const around = (angle: number, y: number, r: number) =>
+    [Math.sin(angle) * r, y, Math.cos(angle) * r + column.position.z] as [
+      number,
+      number,
+      number,
+    ];
+
+  // The first probe's lead runs round to the olive cabinet's back.
+  {
+    const start = lambdaProbe(-0.5, 0.79, 'O2-SONDE\nLAMBDA');
     const leadEnd: [number, number, number] = [0.66, 0.6, backRight];
     tube(
       group,
       [
-        [start.x, start.y, start.z],
-        [start.x - 0.05, start.y - 0.07, start.z + 0.04],
+        start,
+        [start[0] - 0.05, start[1] - 0.07, start[2] + 0.04],
         [-0.27, 0.62, 0.1],
         [-0.3, 0.55, -0.2],
         [0.0, 0.5, -0.33],
@@ -2061,11 +2238,38 @@ export function createFerrocoreColumnRig(
       80,
     );
     gland(leadEnd, 0.006);
-    // Its tag, on the chamber wall below the boss.
-    const tagged = new Group();
-    tagged.rotation.y = -0.5;
-    column.add(tagged);
-    tag(tagged, 'O2-SONDE\nLAMBDA', 0, 0.756, 0.2235, { height: 0.0035 });
+  }
+
+  // The second, round the back, has a lead far too long for the run. Its
+  // spare is wound round the foot of the chamber, in the clear band between
+  // the bottom flange and the lowest port, before it leaves for the olive
+  // cabinet's back.
+  {
+    const start = lambdaProbe(2.9, 0.72, 'O2-SONDE 2\nREFERENZ');
+    const lead: [number, number, number][] = [
+      start,
+      around(2.93, 0.64, 0.3),
+      around(3.0, 0.57, 0.262),
+      around(3.1, 0.522, 0.234),
+    ];
+    const from = 3.2;
+    const to = 2.6 + Math.PI * 4;
+    const turnsPoints = Math.ceil(((to - from) / (Math.PI * 2)) * 32);
+    for (let i = 0; i <= turnsPoints; i++) {
+      const share = i / turnsPoints;
+      lead.push(
+        around(from + (to - from) * share, 0.506 - share * 0.024, 0.2285),
+      );
+    }
+    const leadEnd: [number, number, number] = [0.56, 0.64, backRight];
+    lead.push(
+      around(2.62, 0.5, 0.29),
+      [0.2, 0.55, -0.32],
+      [0.42, 0.62, -0.47],
+      leadEnd,
+    );
+    tube(group, lead, 0.0018, '#d8cfae', 260);
+    gland(leadEnd, 0.005);
   }
 
   // ---- The purge port --------------------------------------------------------
@@ -2210,6 +2414,11 @@ export function createFerrocoreColumnRig(
     clampArms.push(arm);
   }
   let clampShown = 0;
+  // The puff at the seam the instant the head's flange lands on the
+  // chamber's.
+  const sealPuff = createSealPuff({ radius: 0.252 });
+  sealPuff.group.position.y = chamberTop + 0.032;
+  column.add(sealPuff.group);
 
   // ---- Leads that ride with the head --------------------------------------
   // Their head ends move with it, so they are rebuilt whenever it moves.
@@ -2276,21 +2485,7 @@ export function createFerrocoreColumnRig(
   }
   let leadsDrop = 0;
 
-  // A thin thermocouple lead wound round the chamber, a black hose coiled
-  // on the skid, and a mains plug left on the floor.
-  const wire: [number, number, number][] = [];
-  for (let i = 0; i <= 28; i++) {
-    const a = -1.2 + (i / 28) * Math.PI * 1.8;
-    wire.push([
-      Math.cos(a) * 0.227,
-      0.8 - i * 0.004,
-      Math.sin(a) * 0.227 + 0.06,
-    ]);
-  }
-  const wireEnd: [number, number, number] = [0.56, 0.64, backRight];
-  wire.push([0.2, 0.68, -0.32], [0.42, 0.66, -0.47], wireEnd);
-  tube(group, wire, 0.0018, '#d8cfae', 90);
-  gland(wireEnd, 0.005);
+  // A black hose coiled on the skid, and a mains plug left on the floor.
   tube(
     group,
     [
@@ -2325,7 +2520,7 @@ export function createFerrocoreColumnRig(
     (c) => new Color(c),
   );
   const shade = new Color();
-  const dark = new Color('#2a2622');
+  const BLACK = new Color('#000000');
   const display = { kelvin: AMBIENT, brightness: 0.6, failed: false };
   const coreLook = (seconds: number) => {
     if (display.failed) {
@@ -2358,11 +2553,15 @@ export function createFerrocoreColumnRig(
   // ---- Running state -------------------------------------------------------
   const update = (seconds: number, delta: number, reducedMotion: boolean) => {
     motion = reducedMotion ? 0 : 1;
-    if (!drive.hold)
-      for (const event of stepColumnPrep(prep, delta, {
-        powered: drive.power ?? running,
-      }))
-        log(describe(event));
+    // Held, the model's physics stop but the rams still run.
+    const events = drive.hold
+      ? stepLift(prep, delta)
+      : stepColumnPrep(prep, delta, { powered: drive.power ?? running });
+    for (const event of events) {
+      log(describe(event));
+      if (event.kind === 'lowered') sealPuff.burst();
+    }
+    sealPuff.update(delta, reducedMotion);
     display.kelvin = prep.temperature;
     display.brightness = prep.brightness;
     display.failed = prep.failure !== null;
@@ -2396,10 +2595,10 @@ export function createFerrocoreColumnRig(
       display.kelvin < ACTIVATION && !display.failed ? COLD : lit,
     );
     const inChamber = prep.lift < 0.03;
-    windowGlow.color.copy(
+    glass.emissive.copy(
       inChamber && level > 0
-        ? scratch.copy(dark).lerp(shade, Math.min(1, level))
-        : dark,
+        ? scratch.copy(BLACK).lerp(shade, Math.min(1, level) * 0.5)
+        : BLACK,
     );
     coreLight.color.copy(shade);
     // Sealed in the steel chamber, only what leaks from the windows lights
@@ -2407,7 +2606,6 @@ export function createFerrocoreColumnRig(
     coreLight.intensity = level * (inChamber ? 0.8 : 2.6);
     // The model turns the core; reduced motion holds it still.
     if (motion) core.rotation.y = prep.spinAngle * Math.PI * 2;
-    drawWindowView((((core.rotation.y / (Math.PI * 2)) % 1) + 1) % 1);
     // Gas vents from the purge port while the purge is open on a sealed,
     // pressurised chamber.
     const venting =
@@ -2495,6 +2693,7 @@ export function createFerrocoreColumnRig(
     update,
     dispose() {
       purgeVent.dispose();
+      sealPuff.dispose();
       disposeKit(kit, group);
     },
   };

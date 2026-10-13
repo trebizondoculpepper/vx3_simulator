@@ -1,0 +1,31 @@
+# Prompt: audit the second-generation VX3's cold start in the lab
+
+You are the creative lead on the VX3 Simulator. Read `AGENTS.md` first and follow its rules (stay on `main`, run the five checks before committing, one paragraph per line in Markdown, designations, the knob rule, the control graph, the diary). This is an audit with fixes: check that the second-generation VX3 can be cold-started in the lab using only what a player can see and touch, and put right whatever stops it.
+
+## Where things stand
+
+The first-generation VX3 (the 42U rack, side cabinet and ferrocore drum) has been retired to room dev3 as an unwired archive (`src/scene/gen1-vx3.ts`, `src/rendering/gen1-room.ts`). The second generation, the ferrocore column built in the developer room (`src/scene/ferrocore-column-rig.ts`, model in `src/game/column-prep.ts`), now stands in the lab's bay, beside the computer desk, and has started to be wired in (`src/game/gen2-wiring.ts`, and the `gen2` sections of `src/rendering/start-scene.ts`):
+
+- **Control circuit:** the column is powered only when the plant room's HAUPTSCHALTER is closed, the east board's NETZ contactor is closed, and the column's own NETZ button and side supply isolator are both on (`gen2Powered`).
+- **Xenon circuit:** the plant room's cylinder bank feeds the column's buffer (the model's "bottle") through the cage regulator; at 2 SLPM or more it refills (`feedFromLine`).
+- **Console:** on the east board, NETZ is the column's contactor (refused without the plant master), NOT-AUS opens it, SPÜLEN opens or shuts the column's outlet to the pump, RÜCKS. fits a fresh core and tops up the buffer, QUITT acknowledges the board's alarms. The board's other handles (HT, LT, SPIN, H-B, BLATZ, DÄMPF., ERDE?, AUX, XTAL) still flip the retired rig's settings and do nothing useful.
+- **Indicators:** the board's annunciators (NETZ supply, PUMPE outlet open, FLUSS inlet open or xenon flow short, DRUCK starved or over-pressure, STÖRUNG core failure), its eight-channel grid and meters (see `gen2BoardReadings` for what each channel now means), the IST/SOLL pointers (core temperature against set point), the readouts, the wall load meter, the time-dilation crystal and the room's anomaly effects all read the column.
+
+The cold start the model expects (`column-prep.ts` explains it): lower the head, clamp it, open the xenon inlet and the outlet together to purge the air (the O2 lambda probe reads purge complete above 0.7 V), shut the outlet and let the xenon build to working pressure (1.2 bar; regulator 1.8 bar), then raise the core's activation temperature past 800 K to make it glow and to 3200 K or more for full power, when it spins. Heating with the chamber open or still holding air burns the core out; leaving the outlet open on a hot core with the buffer running dry is a flux inductance catastrophe. A scripted run through the model, driving the state directly, reaches full power in the lab with no failure, so the physics and wiring are sound; what is in doubt is whether a player can do it.
+
+## Known gap
+
+Nothing on the column sets the core's activation temperature (`prep.setpoint`, via `setActivation`) or its brightness (`prep.brightness`). In the developer room they were set from outside, by an HTML stand-in slider and the model drive board, neither of which is in the lab. So a cold start cannot be completed in the lab yet. Choose fitting controls on the column (an existing unwired knob, near the TEMP TIEGEL readout, may do) and wire them, following the knob rule.
+
+## What to check, and fix
+
+1. **A cold start is possible.** Walk it in the lab (`npm run dev`, then `/`), from the corridor, with the lights off as the game starts, using only clicks and keys a player has: the light switch, the plant room's HAUPTSCHALTER and xenon cage and regulator, the east board, and the column itself. No developer hooks. Reach full power without a failure, then shut down. Record each step and the control used.
+2. **Every control a cold start needs is present and wired.** For each step: the control exists, is reachable from where a player can stand, is designated an input (`input()` in `start-scene.ts`; `vx3Walker.parts()` lists every machine's inputs and indicators in development), and actually changes the model. Many of the column's panel controls are still decorative (their clicks move the part and nothing else). Decide which of them a cold start, or its safety, ought to use, wire those, and leave the rest decorative.
+3. **Every control and indicator has a lore-appropriate label.** The column's printed labels are still placeholders (`LABEL 01` and so on; the `label` calls record the intended text). Replace them with real legends in the column's German-engineering voice, consistent with the lore register (`doc/lore/summary.md`: keep borrowed community terms and invented local parts distinct) and with the rest of the lab (the east board, the plant room). A label says what the part does, not what it is.
+4. **Every control and indicator is the right kind of part for its job.** A continuous quantity wants a knob, a discrete choice a selector, a state that persists a latching switch or latching button, an action a momentary button, something dangerous a guarded or key-locked control; a state wants a lamp, a quantity a needle, bar or digits. Change any part whose type fights its function, and make sure no indicator is clickable.
+5. **Indicators the player needs are present.** For each step the player must be able to see that it worked: head position, clamps, valves, chamber pressure, purge (the lambda probe's reading), xenon in the line, core temperature against its set point, full power, failure. Designate each with `indicator()` (none of the column's indicators is designated yet).
+6. **Keep the docs true.** Update `doc/design/control-graph.md` (GitHub renders its Mermaid) for every input you wire, so it records the column's links; keep `README.md` (in-universe) and `doc/plan.md` aligned; add a diary entry.
+
+## Deliverables
+
+A short report (in the diary entry) listing the cold-start sequence as a player performs it, every gap found and how it was fixed, every label changed, and every part whose type was changed. Run the five checks before committing; commit only your own files.

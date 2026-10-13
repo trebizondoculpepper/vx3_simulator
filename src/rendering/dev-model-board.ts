@@ -8,7 +8,9 @@ import {
   FULL_BOTTLE,
   MAXIMUM,
   coreStage,
+  driveLift,
   setActivation,
+  setClamped,
 } from '../game/column-prep';
 import type { FerrocoreColumnRig } from '../scene/ferrocore-column-rig';
 import {
@@ -32,7 +34,8 @@ const KNOB_STEPS = 20;
  * into the concept rig's column model, so the rig can be driven to any
  * state without playing the cold start. Every control follows the model,
  * so its position always shows the live value. HOLD freezes the model's
- * physics, so values set by hand stay where they are put.
+ * physics, so values set by hand stay where they are put; the rams still
+ * run, so HEAD UP always gets the head where it was sent.
  */
 export function createModelDriveBoard(
   kit: PanelKit,
@@ -98,21 +101,25 @@ export function createModelDriveBoard(
       },
     ],
     [
+      // Sets where the rams are going, not where the head is: the
+      // mechanism takes it there at its own pace, held or not.
       'HEAD UP',
-      () => prep.lift === 1,
+      () => prep.liftTarget === 1,
       () => {
-        const up = prep.lift !== 1;
-        if (up) prep.clamped = false;
-        prep.lift = prep.liftTarget = up ? 1 : 0;
+        const up = prep.liftTarget !== 1;
+        if (up && prep.clamped) {
+          setClamped(prep, false);
+          log('Model drive: clamps released to raise the head.');
+        }
+        driveLift(prep, up ? 1 : 0);
       },
     ],
     [
       'CLAMP',
       () => prep.clamped,
       () => {
-        prep.clamped = !prep.clamped;
-        // The clamps only hold a head that is down, so clamping lowers it.
-        if (prep.clamped) prep.lift = prep.liftTarget = 0;
+        if (!setClamped(prep, !prep.clamped))
+          log('Model drive: the clamps only close on a head that is down.');
       },
     ],
     ['INLET', () => prep.inletOpen, () => (prep.inletOpen = !prep.inletOpen)],

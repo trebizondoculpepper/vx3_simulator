@@ -58,7 +58,22 @@ export function stepSafetyTelltales(
   seconds: number,
   xenonFlowSlpm = 0,
 ): void {
-  const output = networkOutputs(rig, controls, xenonFlowSlpm);
+  stepTelltaleOutputs(
+    state,
+    networkOutputs(rig, controls, xenonFlowSlpm),
+    seconds,
+  );
+}
+
+/**
+ * Advance the meter and crystal from a machine's load and dilation
+ * activity, whichever machine supplies them.
+ */
+export function stepTelltaleOutputs(
+  state: SafetyTelltales,
+  output: { powerKw: number; dilationActivity: number },
+  seconds: number,
+): void {
   state.powerKw = output.powerKw;
   state.dilationActivity = output.dilationActivity;
   state.energyKwh += (output.powerKw * seconds) / 3600;

@@ -3,6 +3,8 @@ import type { RigState } from './rig';
 import type { RackControls, ToggleId } from './rack-controls';
 import type { SafetyTelltales } from './safety-telltales';
 import { xenonReady } from './xenon-supply';
+import type { ColumnPrepState } from './column-prep';
+import { gen2Alarms, gen2BoardReadings } from './gen2-wiring';
 
 /**
  * The east wall's 1974 process board, rewired in 1986 as a remote station
@@ -108,12 +110,23 @@ export interface BoardInputs {
   xenonFlowSlpm?: number;
   plantPowered?: boolean;
   recirculatorWorking?: boolean;
+  /**
+   * The second-generation VX3, once it is installed: the board then reads
+   * its column instead of the first rig (see gen2-wiring.ts).
+   */
+  gen2?: { prep: ColumnPrepState; powered: boolean };
 }
 
-const alarmConditions = ({ rig }: BoardInputs): Record<AlarmId, boolean> => ({
-  pressure: rig.strain > 0.5,
-  fault: rig.instability > WARNING_LEVEL,
-});
+const alarmConditions = ({
+  rig,
+  gen2,
+}: BoardInputs): Record<AlarmId, boolean> =>
+  gen2
+    ? gen2Alarms(gen2.prep)
+    : {
+        pressure: rig.strain > 0.5,
+        fault: rig.instability > WARNING_LEVEL,
+      };
 
 export function stepBoard(
   board: BoardState,
@@ -171,7 +184,14 @@ export function handleTurned(
 }
 
 /** Normalised readings shared by the grid, the meters and the readouts. */
-export function boardReadings({ rig, controls, telltales }: BoardInputs) {
+export function boardReadings({
+  rig,
+  controls,
+  telltales,
+  gen2,
+}: BoardInputs): Record<(typeof gridChannels)[number], number> {
+  const load = Math.min(1, telltales.powerKw / BOARD_FULL_LOAD_KW);
+  if (gen2) return gen2BoardReadings(gen2.prep, gen2.powered, load);
   return {
     heater: rig.heater,
     spindle: rig.spindle,
@@ -182,8 +202,8 @@ export function boardReadings({ rig, controls, telltales }: BoardInputs) {
     instability: rig.instability,
     strain: rig.strain,
     delta: deltaScore(rig) / YALGETH_LIMIT,
-    load: Math.min(1, telltales.powerKw / BOARD_FULL_LOAD_KW),
-  } satisfies Record<(typeof gridChannels)[number], number>;
+    load,
+  };
 }
 
 export interface BoardView {
@@ -203,14 +223,26 @@ export function boardView(board: BoardState, inputs: BoardInputs): BoardView {
   const flashOn = board.clock % 0.8 < 0.4;
   const alarmLit = (phase: AlarmPhase) =>
     phase === 'acknowledged' || (phase === 'unacknowledged' && flashOn);
-  const tileStates: boolean[] = [
-    rig.controls.mains,
-    rig.controls.mains && rig.spindle > 0.15,
-    rig.controls.mains && rig.field > 0.1,
-    alarmLit(board.alarms.pressure),
-    rig.controls.mains && !controls.toggles.hb,
-    alarmLit(board.alarms.fault),
-  ];
+  const { gen2 } = inputs;
+  // NETZ, PUMPE, FLUSS, DRUCK, RESERVE, STÖRUNG. On the column: supply,
+  // the outlet open to the pump, the inlet open to the xenon line.
+  const tileStates: boolean[] = gen2
+    ? [
+        gen2.powered,
+        gen2.prep.outletOpen,
+        gen2.prep.inletOpen,
+        alarmLit(board.alarms.pressure),
+        false,
+        alarmLit(board.alarms.fault),
+      ]
+    : [
+        rig.controls.mains,
+        rig.controls.mains && rig.spindle > 0.15,
+        rig.controls.mains && rig.field > 0.1,
+        alarmLit(board.alarms.pressure),
+        rig.controls.mains && !controls.toggles.hb,
+        alarmLit(board.alarms.fault),
+      ];
   const readings = boardReadings(inputs);
   const grid = gridChannels.flatMap((channel) =>
     Array.from({ length: 8 }, (_, column) => readings[channel] > column / 8),
@@ -218,7 +250,7 @@ export function boardView(board: BoardState, inputs: BoardInputs): BoardView {
   const anyAlarm =
     alarmLit(board.alarms.pressure) || alarmLit(board.alarms.fault);
   const status = [0, 1, 2].flatMap((bay) => [
-    rig.controls.mains,
+    gen2 ? gen2.powered : rig.controls.mains,
     boardHandles
       .slice(bay * 6, bay * 6 + 6)
       .some(

@@ -49,6 +49,14 @@ export const ps1Uniforms = {
    * display encoding instead, and the picture looks the same.
    */
   linearTarget: { value: 0 },
+  /**
+   * The universe's π. Every round thing is built with it: each vertex is
+   * set round its object's axis at an angle scaled by π / Math.PI, so with
+   * a wrong π a ring will not close, or wraps over itself. Each material
+   * scales it through `userData.ps1Pi` (0 holds it true) and names its
+   * round axis, in its own space, in `userData.ps1PiAxis`.
+   */
+  pi: { value: Math.PI },
   /** Seconds, for anything that moves with time. */
   time: { value: 0 },
 };
@@ -75,6 +83,8 @@ export function createPs1Material(
   // whole and straight.
   material.userData.ps1Precision = { value: 1 };
   material.userData.ps1Warp = { value: 1 };
+  material.userData.ps1Pi = { value: 1 };
+  material.userData.ps1PiAxis = { value: new Vector3(0, 1, 0) };
   material.onBeforeCompile = (shader) => {
     shader.uniforms.ps1Resolution = ps1Uniforms.resolution;
     shader.uniforms.ps1SnapPixels = ps1Uniforms.snapPixels;
@@ -94,6 +104,11 @@ export function createPs1Material(
     shader.uniforms.ps1WarpScale = material.userData.ps1Warp as {
       value: number;
     };
+    shader.uniforms.ps1Pi = ps1Uniforms.pi;
+    shader.uniforms.ps1PiScale = material.userData.ps1Pi as { value: number };
+    shader.uniforms.ps1PiAxis = material.userData.ps1PiAxis as {
+      value: Vector3;
+    };
     shader.uniforms.ps1LinearTarget = ps1Uniforms.linearTarget;
     shader.uniforms.ps1Time = ps1Uniforms.time;
     shader.vertexShader = `uniform vec2 ps1Resolution;
@@ -107,9 +122,29 @@ export function createPs1Material(
       uniform float ps1PrecisionScale;
       uniform float ps1WarpScale;
       uniform float ps1Time;
-      ${shader.vertexShader}`.replace(
-      '#include <project_vertex>',
-      `#include <project_vertex>
+      uniform float ps1Pi;
+      uniform float ps1PiScale;
+      uniform vec3 ps1PiAxis;
+      ${shader.vertexShader}`
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+      // A wrong π: angles round the object's axis are measured with it.
+      float ps1Bend = mix(1.0, ps1Pi / 3.14159265, ps1PiScale);
+      if (abs(ps1Bend - 1.0) > 1e-6) {
+        vec3 ps1Axis = normalize(ps1PiAxis);
+        vec3 ps1Across = normalize(cross(ps1Axis, abs(ps1Axis.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+        vec3 ps1Up = cross(ps1Axis, ps1Across);
+        float ps1Along = dot(transformed, ps1Axis);
+        vec2 ps1Plane = vec2(dot(transformed, ps1Across), dot(transformed, ps1Up));
+        float ps1Around = atan(ps1Plane.y, ps1Plane.x) * ps1Bend;
+        ps1Plane = vec2(cos(ps1Around), sin(ps1Around)) * length(ps1Plane);
+        transformed = ps1Axis * ps1Along + ps1Across * ps1Plane.x + ps1Up * ps1Plane.y;
+      }`,
+      )
+      .replace(
+        '#include <project_vertex>',
+        `#include <project_vertex>
       float ps1Grid = ps1Precision.x * ps1PrecisionScale;
       if (ps1Warp * ps1WarpScale > 0.0 || ps1Grid > 0.0) {
         vec4 world = vec4(transformed, 1.0);
@@ -157,7 +192,7 @@ export function createPs1Material(
         screen = mix(screen, snapped, ps1SnapStrength);
         gl_Position.xy = (screen / ps1Resolution * 2.0 - 1.0) * gl_Position.w;
       }`,
-    );
+      );
     // A restrained 2x2 ordered pattern, quantized in display colour space.
     shader.fragmentShader = `uniform float ps1RoomLight;
       uniform float ps1Dims;
@@ -177,7 +212,7 @@ export function createPs1Material(
       gl_FragColor.rgb = shown;`,
     );
   };
-  material.customProgramCacheKey = () => 'ps1-snap-dither-v6';
+  material.customProgramCacheKey = () => 'ps1-snap-dither-v7';
   return material;
 }
 

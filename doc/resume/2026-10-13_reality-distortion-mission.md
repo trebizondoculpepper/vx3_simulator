@@ -9,9 +9,10 @@ Mathematical horror, not psychedelic horror. The room must stay perfectly real w
 ## Already in the effects room
 
 - **Non-Euclidean warp** (in the lab already): a vertex twist about the line of sight and a swell of distances. It can now be centred on a point with a reach, so space recovers as you walk away. The lab still bends everywhere alike; centring it on the ferrocores is a small step.
-- **π drift** (in the lab already): drives the clock, dials and the π ring. Still to do: let it reach circular geometry itself, by rescaling each vertex's angle about its object's axis by π′/π, so cylinders, knobs and dials visibly fail to close.
+- **π drift** (in the lab already): drives the clock, dials and the π ring. In the effects room it now reaches geometry itself: the vertex shader rescales each vertex's angle about its object's axis by π′/π (`ps1Uniforms.pi`), so round things fail to close or wrap over themselves and flat cards shear in their own plane. A material holds the true π with `userData.ps1Pi` and names its axis in `userData.ps1PiAxis`; the room's shell, plinths, console and panels hold it. Still to do: feed the lab's drifting π into the same uniform.
+- **Exhibit panels** (effects room only): each test object has its own panel with GLOW, TEXTURE (own, checker, brick, rust, noise), REFLECT (a reflection of the room caught once at start), SMOKE and EMBERS, for judging how the effects read on different surfaces.
 - **Colour channel phaser** (in the lab already): each channel's brightness breathes on its own cycle.
-- **Chromatic divergence** (effects room only): red and blue drawn from different places than green, radially, by a turning shift, and by depth parallax so near things split further than far ones. It is a full-screen pass over a target with depth; `ps1Uniforms.linearTarget` keeps the dither looking the same.
+- **Chromatic divergence** (effects room only): red and blue drawn from different places than green, split sideways and up and down by amounts that each swing at their own rate, and by sideways depth parallax so near things split further than far ones. It is a full-screen pass over a target with depth; `ps1Uniforms.linearTarget` keeps the dither looking the same.
 - **Lost numerical precision** (effects room only): world positions snap to a coarse grid and tremble. Each material can opt out through `userData.ps1Precision`, so some things hold together while others disintegrate.
 - **Topological tears**, found by accident: a strong warp pulls apart surfaces that only meet at their edges. Worth keeping on purpose.
 

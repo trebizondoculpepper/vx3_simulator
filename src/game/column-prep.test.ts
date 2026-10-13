@@ -21,6 +21,7 @@ import {
   setActivation,
   setClamped,
   stepColumnPrep,
+  stepLift,
 } from './column-prep';
 import type { ColumnPrepEvent, ColumnPrepState } from './column-prep';
 
@@ -189,5 +190,19 @@ describe('column cold start', () => {
     setActivation(state, MAXIMUM);
     run(state, 20, { powered: false });
     expect(coreStage(state)).toBe('cold');
+  });
+
+  it('moves the rams to their target on their own, and only while unclamped', () => {
+    const state = createColumnPrep();
+    driveLift(state, 0);
+    expect(state.lift).toBe(1);
+    expect(stepLift(state, LIFT_SECONDS / 2)).toEqual([]);
+    expect(state.lift).toBeCloseTo(0.5);
+    expect(stepLift(state, LIFT_SECONDS)).toEqual([{ kind: 'lowered' }]);
+    expect(state.lift).toBe(0);
+    setClamped(state, true);
+    state.liftTarget = 1;
+    expect(stepLift(state, LIFT_SECONDS)).toEqual([]);
+    expect(state.lift).toBe(0);
   });
 });

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "title": "Nachtschicht \u2014 Laborkassette",
+  "tracks": [
+    {
+      "id": "01-nachtschicht",
+      "title": "Morgenstrom",
+      "url": "/music/01-nachtschicht.mp3",
+      "durationSeconds": 196.66106575963718,
+      "bpm": 78.303,
+      "loopStartSeconds": 0.25,
+      "loopEndSeconds": 196.41106575963718,
+      "integratedLufs": -20.24,
+      "truePeakDbtp": -5.42
+    },
+    {
+      "id": "02-aufheizen",
+      "title": "Fernverbindung",
+      "url": "/music/02-aufheizen.mp3",
+      "durationSeconds": 184.77430839002267,
+      "bpm": 83.354,
+      "loopStartSeconds": 0.25,
+      "loopEndSeconds": 184.52430839002267,
+      "integratedLufs": -20.25,
+      "truePeakDbtp": -6.13
+    },
+    {
+      "id": "03-ferrokerne",
+      "title": "Leichte Arbeit",
+      "url": "/music/03-ferrokerne.mp3",
+      "durationSeconds": 198.1485941043084,
+      "bpm": 92.285,
+      "loopStartSeconds": 0.25,
+      "loopEndSeconds": 197.8985941043084,
+      "integratedLufs": -20.25,
+      "truePeakDbtp": -4.58
+    },
+    {
+      "id": "04-zeitfenster",
+      "title": "Offener Horizont",
+      "url": "/music/04-zeitfenster.mp3",
+      "durationSeconds": 201.12138321995465,
+      "bpm": 71.777,
+      "loopStartSeconds": 0.25,
+      "loopEndSeconds": 200.87138321995465,
+      "integratedLufs": -20.26,
+      "truePeakDbtp": -7.18
+    }
+  ]
+}
