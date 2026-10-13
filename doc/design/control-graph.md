@@ -2,7 +2,7 @@
 
 Every operator input in the running game, the machine state it sets, and the indicators that show it, as wired on 12 October 2026. Read each diagram left to right: what a person touches, what the machine does about it, and where you can see the result. Taken from the code in `src/game/rig.ts`, `rack-controls.ts`, `safety-telltales.ts` and `start-scene.ts`.
 
-Since 13 October 2026 the rack, side cabinet and ferrocore drum are no longer in the lab: the first-generation rig is kept, unwired, as an archive in room dev3 (`src/scene/gen1-vx3.ts`), so its controls below no longer work anywhere, and the diagrams below record the first rig as it was wired. The bay now holds the second-generation VX3, the ferrocore column, whose wiring into the plant room, the east board and the tell-tales is in `src/game/gen2-wiring.ts`; its graph is still to be drawn.
+Since 13 October 2026 the rack, side cabinet and ferrocore drum are no longer in the lab: the first-generation rig is kept, unwired, as an archive in room dev3 (`src/scene/gen1-vx3.ts`), so its controls below no longer work anywhere, and the diagrams below record the first rig as it was wired. The bay now holds the second-generation VX3, the ferrocore column, whose ferrocore drive is this same drive model, worked from the column's panels as well as the east board, and interlocked by the vessel's atmosphere (`src/game/gen2-wiring.ts`); the diagrams below still hold for the drive, and the vessel's own graph is still to be drawn.
 
 In each diagram, amber boxes are inputs set by an operator, green circles are machine state and blue boxes are indicators driven by that state.
 

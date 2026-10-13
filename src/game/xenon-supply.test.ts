@@ -6,7 +6,13 @@ import {
   xenonReady,
   xenonSourcePressure,
 } from './xenon-supply';
-import { boardView, createBoard, stepBoard } from './control-board';
+import {
+  acknowledge,
+  annunciators,
+  boardView,
+  createBoard,
+  stepBoard,
+} from './control-board';
 import { createRig } from './rig';
 import { createRackControls } from './rack-controls';
 import { createSafetyTelltales } from './safety-telltales';
@@ -78,7 +84,7 @@ describe('xenon commissioning', () => {
     ).toBeGreaterThan(loaded);
     expect(xenonSourcePressure(contents, 0)).toBe(contents);
   });
-  it('flashes the flow tile while supply is insufficient, including before mains', () => {
+  it('flashes XE FLUSS while the drive is on and the flow is insufficient', () => {
     const board = createBoard();
     const inputs = {
       rig: createRig(),
@@ -86,11 +92,17 @@ describe('xenon commissioning', () => {
       telltales: createSafetyTelltales(),
       xenonFlowSlpm: 0,
     };
-    expect(boardView(board, inputs).tiles[2]).toBe(true);
+    const flow = annunciators.findIndex((w) => w.label === 'XE FLUSS');
+    stepBoard(board, inputs, 0.1);
+    expect(boardView(board, inputs).tiles[flow]).toBe(false);
+    inputs.rig.controls.mains = true;
+    stepBoard(board, inputs, 0.1);
+    expect(boardView(board, inputs).tiles[flow]).toBe(true);
     stepBoard(board, inputs, 0.45);
-    expect(boardView(board, inputs).tiles[2]).toBe(false);
+    expect(boardView(board, inputs).tiles[flow]).toBe(false);
     inputs.xenonFlowSlpm = 3;
+    acknowledge(board, inputs);
     stepBoard(board, inputs, 0.45);
-    expect(boardView(board, inputs).tiles[2]).toBe(false);
+    expect(boardView(board, inputs).tiles[flow]).toBe(false);
   });
 });

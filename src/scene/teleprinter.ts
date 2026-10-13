@@ -265,7 +265,6 @@ export function createTeleprinter() {
     ribbonGeometry.computeBoundingSphere();
   };
   shapeRibbon(0);
-  let clatter = 0;
 
   return {
     group,
@@ -276,7 +275,7 @@ export function createTeleprinter() {
       ribbon.userData.lastLogEntry = message;
     },
     update(delta: number, reducedMotion: boolean) {
-      const printing = log.step(delta);
+      log.step(delta);
       const phase = reducedMotion ? 0 : log.phase;
       shapeRibbon(phase);
       printed.texture.offset.y = reducedMotion ? 0 : log.phase;
@@ -291,12 +290,7 @@ export function createTeleprinter() {
             ? 0
             : Math.max(0, Math.sin(phase * Math.PI * 2 - i * 0.8)) * 0.075);
       });
-      clatter = printing ? clatter + delta : 0;
-      if (clatter >= 0.18) {
-        clatter %= 0.18;
-        return true;
-      }
-      return false;
+      return log.linesStarted > 0;
     },
     dispose() {
       group.traverse((object) => {

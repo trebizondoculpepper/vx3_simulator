@@ -1,7 +1,7 @@
 import { designate } from '../game/machine-parts';
 import { BoxGeometry, CircleGeometry, Group, Mesh, PlaneGeometry } from 'three';
 import type { Material, Texture } from 'three';
-import { annunciatorLabels, boardHandles } from '../game/control-board';
+import { annunciators, boardHandles } from '../game/control-board';
 import {
   FERROCORE_MAX_ANGULAR_VELOCITY,
   ferrocoreMonitorSample,
@@ -187,25 +187,13 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
     box(0.72, 0.14, 0.02, '#304139', x, 2.055, 0.227);
     for (let i = 0; i < 6; i++) {
       const ax = x - 0.293 + i * 0.117;
+      const window = annunciators[bay * 6 + i];
       tiles.push({
         mesh: box(0.105, 0.09, 0.006, '#b5b09a', ax, 2.055, 0.24),
-        on: paint(
-          bay === 0 && i === 2 ? '#b66fe5' : i === 5 ? '#d9765a' : '#e0c47a',
-          true,
-        ),
+        on: paint(window.colour === 'red' ? '#d9765a' : '#e0c47a', true),
         off: paint('#b5b09a'),
       });
-      label(
-        bay === 0 && i === 2
-          ? 'XE FLUSS'
-          : bay === 0 && i === 4
-            ? 'XE RÜCKL.'
-            : annunciatorLabels[i],
-        0.093,
-        ax,
-        2.055,
-        0.245,
-      );
+      label(window.label, 0.093, ax, 2.055, 0.245);
     }
     for (const sx of [-0.342, 0.342])
       for (const sy of [0.95, 1.84])
@@ -490,7 +478,7 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
       );
 
   tiles.forEach((tile, i) =>
-    indicator(tile.mesh, `${annunciatorLabels[i % 6]} alarm window`),
+    indicator(tile.mesh, `${annunciators[i].label} alarm window`),
   );
   grid.forEach((lamp, i) =>
     indicator(

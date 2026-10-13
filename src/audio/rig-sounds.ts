@@ -1,5 +1,8 @@
+import { defaultControlRecording } from './control-sound-defaults';
+import { createRecordedEffects } from './recorded-effects';
+
 /**
- * The concept rig's mechanical sounds, synthesised in Web Audio: one-shots
+ * The concept rig's mechanical sounds: recorded control clicks and Web Audio one-shots
  * for every kind of control, and the continuous sounds of the column (the
  * rams' hydraulic pump while the head moves, the purge port's hiss). Create
  * after a user gesture, on the same context as the core's voice.
@@ -87,6 +90,10 @@ export const controlSounds: Record<ControlSound, Click> = {
 
 export function createRigSounds(context: BaseAudioContext) {
   const output = context.createGain();
+  const recordings = createRecordedEffects(context, output);
+  void recordings
+    .preload()
+    .catch((error) => console.warn('Control recordings unavailable.', error));
   output.gain.value = 0.8;
   const noise = context.createBuffer(1, context.sampleRate, context.sampleRate);
   const samples = noise.getChannelData(0);
@@ -167,6 +174,11 @@ export function createRigSounds(context: BaseAudioContext) {
     output: output as AudioNode,
     /** One control's sound, now. */
     play(kind: ControlSound) {
+      const recording = defaultControlRecording(kind);
+      if (recording) {
+        void recordings.play(recording, 1, 0);
+        return;
+      }
       const click = controlSounds[kind];
       const at = context.currentTime + 0.005;
       const [count, gap] = click.repeat ?? [1, 0];
@@ -190,6 +202,7 @@ export function createRigSounds(context: BaseAudioContext) {
       hissBand.frequency.setTargetAtTime(2400 + venting * 1600, t, 0.2);
     },
     dispose() {
+      recordings.dispose();
       for (const source of [pump, whine, hissSource]) source.stop();
       output.disconnect();
     },

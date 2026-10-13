@@ -6,7 +6,7 @@ Paste everything below the line into the session that will build the game's soun
 
 ## Your task
 
-Design and implement all of the sound for **VX3 Simulator**, a browser game in `/Users/salimfadhley/workspace/vx3_simulator` (public repository `https://github.com/trebizondoculpepper/vx3_simulator`). Apparatus effects must be **synthesised in code**. The BBC Micro boot excerpt is the existing owner-requested exception, documented in `src/audio/assets/README.md`. Background music has its own handoff in [music-generation.md](music-generation.md).
+Design and implement all of the sound for **VX3 Simulator**, a browser game in `/Users/salimfadhley/workspace/vx3_simulator` (public repository `https://github.com/trebizondoculpepper/vx3_simulator`). Use model-driven procedural sound for continuous apparatus behaviour and suitable edited recordings for physical actions. Existing recordings and their authors/source URLs are listed in `CREDITS.md`; technical details are in `src/audio/assets/README.md`. Background music has its own handoff in [music-generation.md](music-generation.md).
 
 The game is a deadpan bench toy based on the r/VXJunkies subreddit. The player operates a historical "full" VX3 rig: a scrolling 19-inch equipment rack of mismatched 1970s rack-mount appliances, rendered in a PS1 style. The player flips toggles, turns knobs and throws a mains breaker. The simulation warms valves, spins up a phase spindle and holds a Helmholtz-Blatz field, which drifts and becomes unstable if the operator neglects the Blatz trim. When strain builds up, an incident trips the breaker and something odd happens (the logbook reports it in a calm, deadpan way).
 
@@ -59,7 +59,7 @@ Mix guidance: keep everything below the music level of a typical web game, and l
 - **Respect `prefers-reduced-motion`** by removing wobble and tremolo modulation, and stop audio when the tab is hidden.
 - **Performance:** no allocation in the per-frame update; build ZzFX sounds once; reuse nodes; ramp parameters with `setTargetAtTime` rather than setting them directly, so nothing clicks.
 - **Tests:** keep the mapping from simulation state to sound parameters pure (for example `soundParameters(state) → { humGain, spindleHz, ... }`) and unit-test that. Do not test the audio output itself.
-- **Credits:** add ZzFX and "sound effects synthesised in code" to the README credits if they are not there.
+- **Credits:** record sound-effect authors, author links, original source URLs, stated licences and edits in `CREDITS.md`. Link to that central record from README; keep asset encoding notes separately.
 
 ## Repository rules
 

@@ -57,7 +57,7 @@ describe('bench monitor', () => {
     inputs.rig.controls.mains = false;
     expect(benchWarnings(inputs)).toEqual([
       'MASCHINE AUSGESCHALTET',
-      'NETZSCHALTER AM RACK EINSCHALTEN',
+      'NETZ AM OSTPULT SCHLIESSEN',
     ]);
   });
 
@@ -175,4 +175,13 @@ it('ships pre-rendered assets containing every displayed clue', () => {
     for (const [text] of lines.filter(([text]) => text))
       expect(svg, id).toContain(text);
   }
+});
+
+it('shows the vessel page while the drive waits for the atmosphere', () => {
+  const inputs = running(0, 0);
+  expect(benchPage({ ...inputs, permit: false })).toBe('vessel');
+  expect(benchWarnings({ ...inputs, permit: false })).toContain(
+    'HEIZUNG GESPERRT',
+  );
+  expect(benchPage({ ...inputs, permit: true })).not.toBe('vessel');
 });

@@ -1,3 +1,7 @@
+import { defaultControlRecording } from '../audio/control-sound-defaults';
+import type { ControlSound } from '../audio/rig-sounds';
+import { describeMachineChange } from '../game/machine-change';
+import { createDelayedPrinter } from '../game/delayed-printer';
 import { createMachineActionLog } from '../game/machine-action-log';
 import { DEV_DOOR_WIDTH, DEV_DOOR_HEIGHT } from '../game/dev-room-links';
 import { createDevDoorways } from '../scene/dev-doorways';
@@ -50,10 +54,11 @@ import { PANEL_WIDTH } from '../game/rack-layout';
 import {
   applyRack,
   createRackControls,
+  knobLine,
   toggleLine,
 } from '../game/rack-controls';
-import type { ToggleId } from '../game/rack-controls';
-import { createRig, stepRig } from '../game/rig';
+import type { KnobId, ToggleId } from '../game/rack-controls';
+import { createRig, deltaScore, idealTrim, stepRig } from '../game/rig';
 import { redlineFraction } from '../game/redlines';
 import { createOverheatState, stepOverheat } from '../game/overheat';
 import {
@@ -64,6 +69,7 @@ import {
 } from '../game/fire-incident';
 import {
   acknowledge,
+  annunciators,
   boardHandles,
   boardReadings,
   boardView,
@@ -75,7 +81,7 @@ import {
 } from '../game/control-board';
 import {
   createSafetyTelltales,
-  stepTelltaleOutputs,
+  stepSafetyTelltales,
 } from '../game/safety-telltales';
 import { createCanvasTexture, createLabelTexture } from '../scene/screens';
 import { createWorldMapTexture } from '../scene/world-map';
@@ -83,17 +89,12 @@ import { createCubMonitor } from '../scene/cub-monitor';
 import { createOfficeChair } from '../scene/office-chair';
 import { createFerrocoreColumnRig } from '../scene/ferrocore-column-rig';
 import {
-  AMBIENT,
-  MAXIMUM,
   acknowledge as acknowledgeColumn,
-  isSealed,
+  isExposed,
+  setActivation,
 } from '../game/column-prep';
-import {
-  feedFromLine,
-  gen2Activity,
-  gen2PowerKw,
-  gen2Powered,
-} from '../game/gen2-wiring';
+import { atmospherePermit, feedFromLine, lineFlow } from '../game/gen2-wiring';
+import { driveBrightness, driveTemperature } from '../game/cold-start';
 import { createBbcMicro } from '../scene/bbc-micro';
 import { createBbcDiskDrive } from '../scene/bbc-disk-drive';
 import { createBbcUserGuide } from '../scene/bbc-user-guide';
@@ -122,7 +123,12 @@ import {
   xenonReady,
 } from '../game/xenon-supply';
 import { benchScreen, createBenchComputer } from '../game/bench-monitor';
-import { anomalyEffects, anomalyStage } from '../game/ferrocore-anomaly';
+import {
+  anomalyEffects,
+  anomalyStage,
+  ferrocoreActivity,
+  ferrocoreAngularVelocity,
+} from '../game/ferrocore-anomaly';
 import { createCrystalSparkles } from '../scene/crystal-sparkles';
 import { createToolRack } from '../scene/tool-rack';
 import { createWestWorkbench } from '../scene/west-workbench';
@@ -243,9 +249,17 @@ export function startScene(canvas: HTMLCanvasElement) {
     parent.add(mesh);
     return mesh;
   };
+  /** The control being worked, whose name heads the next log line. */
+  let pressed: string | null = null;
+  /** Set while a room fitting is worked: it writes nothing to the log. */
+  let quiet = false;
+  const delayedPrinter = createDelayedPrinter((line) =>
+    teleprinter.record(line),
+  );
   const machineActions = createMachineActionLog(
     () =>
       JSON.stringify({
+        powerSelections: gen2.powerSelections,
         column: gen2.prep,
         columnPower: gen2.running,
         rack: settings,
@@ -255,8 +269,9 @@ export function startScene(canvas: HTMLCanvasElement) {
         alarms: board.alarms,
         fire,
       }),
-    (line) => teleprinter.record(line),
-    (label) => write(`${label} operated.`),
+    (line) => delayedPrinter.queue(line),
+    (label, before, after) =>
+      write(describeMachineChange(label, before, after)),
   );
   const bind = (object: Object3D, action: (hit: Intersection) => void) => {
     interactive.push(object);
@@ -280,7 +295,13 @@ export function startScene(canvas: HTMLCanvasElement) {
   ) => {
     designate(object, { machine, name, role: 'input' });
     bind(object, (hit) => {
-      if (!fire.ruinCause) action(hit);
+      if (fire.ruinCause) return;
+      // The operator's log names the control exactly, for debugging: the
+      // first line the action writes is prefixed with it. Unlogged state
+      // changes are described by the transaction fallback.
+      pressed = `${machine}: ${name}`;
+      action(hit);
+      pressed = null;
     });
   };
   const indicator = <T extends Object3D>(
@@ -298,8 +319,16 @@ export function startScene(canvas: HTMLCanvasElement) {
         !fire.ruinCause ||
         name.includes('door') ||
         name === 'Xenon cage gate'
-      )
-        action();
+      ) {
+        // Room fittings (lights, doors, taps, drawers, the chair) are not
+        // the machine, and stay out of the operator's log.
+        quiet = true;
+        try {
+          action();
+        } finally {
+          quiet = false;
+        }
+      }
     });
   };
 
@@ -323,10 +352,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   // The scene's fill lights stand in for whichever room the viewer is in:
   // the plant room's tubes in there, the lab's everywhere else. Rooms out
   // of sight are not drawn, so only one room's lighting is ever on show.
-  const fillLevel = () =>
-    roomAt(roomPlan, walker.x, walker.z) === 'plant'
-      ? plantRoom.lightLevel
-      : labRoom.lights.level;
+  const fillLevel = () => labRoom.lights.level;
   /** Room light for the signs on the plant-room door, set each frame. */
   const plantDoorLight = { value: 1 };
   const backWallHeight = room.ceilingY - floorY;
@@ -701,11 +727,68 @@ export function startScene(canvas: HTMLCanvasElement) {
   // It is built in metres. Its supply comes through the plant room's
   // master and the east board's NETZ contactor, its xenon from the plant
   // room's cylinder bank (see src/game/gen2-wiring.ts).
-  const gen2 = createFerrocoreColumnRig({ log: (text) => write(text) });
+  // The column's panels work the ferrocore drive (the drive model, `rig`,
+  // through the rack controls `settings`): DREHZAHL, FELD, TRIMM and
+  // UNTERSETZUNG, the heater switches and ZÜND, the SCHWEBUNG band, the
+  // trips and the remote xenon regulator.
+  const driveDial = (id: KnobId) => ({
+    get: () => settings.knobs[id],
+    set: (value: number) => {
+      settings.knobs[id] = value;
+      applyRack(settings, rig.controls);
+      write(knobLine(id, value));
+    },
+  });
+  const gen2 = createFerrocoreColumnRig({
+    log: (text) => write(text),
+    onEvent: (event) => {
+      if (event.kind !== 'catastrophe') return;
+      // A ruined core takes the drive's breaker with it.
+      rig.controls.mains = false;
+      settings.mains = false;
+      audio.play('incident');
+      window.setTimeout(() => audio.play('breaker-off'), 180);
+    },
+    drive: {
+      dials: {
+        spindle: driveDial('spindle'),
+        field: driveDial('field'),
+        trim: driveDial('trim'),
+        ratio: driveDial('ratio'),
+      },
+      heaters: {
+        get: (id) => settings.toggles[id],
+        flip: (id) => flipToggle(id),
+      },
+      ignite: () => {
+        for (const id of ['ht', 'lt'] as const)
+          if (!settings.toggles[id]) flipToggle(id);
+      },
+      band: {
+        get: () => settings.knobs.insulationBand,
+        set: (value) => {
+          settings.knobs.insulationBand = value;
+          applyRack(settings, rig.controls);
+        },
+      },
+      trip: (source) => {
+        const wasOn = rig.controls.mains;
+        rig.controls.mains = false;
+        settings.mains = false;
+        if (wasOn) audio.play('breaker-off');
+        write(`${source}: drive tripped. Column supply off.`);
+      },
+      regulator: (direction) => {
+        xenon.stepRegulator(direction);
+        write(
+          `XE-REGLER ${direction < 0 ? 'down' : 'up'}: ${xenon.flowSlpm.toFixed(1)} SLPM.`,
+        );
+      },
+    },
+  });
   gen2.group.scale.setScalar(worldUnitsPerMetre);
   gen2.group.position.set(4.6, floorY, room.minZ + 0.52 * worldUnitsPerMetre);
   lab.add(gen2.group);
-  let gen2On = false;
   // The column's supply isolator is not on the machine here but on the west
   // wall, at shoulder height between the Volt Xoccula advertisement and the
   // computer desk, in PVC trunking: one run up to the ceiling for the
@@ -767,6 +850,10 @@ export function startScene(canvas: HTMLCanvasElement) {
   const gen2Cue = (object: Object3D): SoundCue => {
     for (let o: Object3D | null = object; o; o = o.parent) {
       const kind = o.userData.sound as string | undefined;
+      const recording = kind
+        ? defaultControlRecording(kind as ControlSound)
+        : undefined;
+      if (recording) return recording;
       if (kind === 'knob' || kind === 'handwheel') return 'knob';
       if (kind === 'selector') return 'selector';
       if (kind === 'isolator') return 'breaker-on';
@@ -797,29 +884,33 @@ export function startScene(canvas: HTMLCanvasElement) {
     audio.play(settings.toggles[id] ? 'toggle-up' : 'toggle-down');
     write(from + toggleLine(id, settings.toggles[id]));
   };
-  // NETZ is the contactor feeding the column; it only closes with the
-  // plant room's master supply on.
+  // NETZ closes the drive's breaker. It only closes with the plant room's
+  // master supply on and the column's own switches (its isolator, NETZ
+  // button and cabinet rocker) on.
   const flipMains = (from = '') => {
     settings.mains = !settings.mains;
     if (!settings.mains) {
+      rig.controls.mains = false;
       audio.play('breaker-off');
-      write(`${from}Column supply off.`);
+      write(`${from}Drive supply off. Rig settling.`);
       return;
     }
-    if (!plantRoom.powered) {
+    const refusal = !plantRoom.powered
+      ? 'plant-room master supply is off. Close HAUPTSCHALTER beside the rectifier.'
+      : !gen2.running
+        ? 'the column is switched off at its isolator, its NETZ button or its cabinet rocker.'
+        : null;
+    if (refusal) {
       // The lever springs back open, so it never shows a start that failed.
       settings.mains = false;
       audio.play('warning');
-      write(
-        `${from}Start refused: plant-room master supply is off. Close HAUPTSCHALTER beside the rectifier.`,
-      );
+      write(`${from}Start refused: ${refusal}`);
       return;
     }
+    rig.controls.mains = true;
     audio.play('breaker-on');
     window.setTimeout(() => audio.play('relay'), 110);
-    write(
-      `${from}Column supply on.${gen2.running ? '' : ' The column itself is switched off at its own NETZ or isolator.'}`,
-    );
+    write(`${from}Drive supply on. The heaters wait for the vessel.`);
   };
   // RÜCKS. changes a failed core for a fresh one and tops up the buffer;
   // SPÜLEN opens or shuts the column's outlet to the pump.
@@ -841,10 +932,19 @@ export function startScene(canvas: HTMLCanvasElement) {
     controls: settings,
     telltales,
     get gen2() {
-      return { prep: gen2.prep, powered: gen2On };
+      return { prep: gen2.prep };
+    },
+    get permit() {
+      return atmospherePermit(gen2.prep, recirculator.working);
+    },
+    get smoking() {
+      return overheat.roomSmoke > 0.05;
+    },
+    get burning() {
+      return fire.alarm;
     },
     get xenonFlowSlpm() {
-      return xenon.flowSlpm;
+      return lineFlow(xenon.flowSlpm, recirculator.working);
     },
     get plantPowered() {
       return plantRoom.powered;
@@ -853,7 +953,8 @@ export function startScene(canvas: HTMLCanvasElement) {
       return recirculator.working;
     },
   };
-  const fromBoard = 'East board: ';
+  // The log line already names the board's handle.
+  const fromBoard = '';
   for (const [index, parts] of eastControlPanel.handles.entries()) {
     const { action, label: name } = boardHandles[index];
     for (const part of parts)
@@ -864,11 +965,12 @@ export function startScene(canvas: HTMLCanvasElement) {
           pressHandle(board, index);
           audio.play('selector');
           if (action.kind === 'emergency-stop') {
-            const wasRunning = settings.mains;
+            const wasRunning = rig.controls.mains;
+            rig.controls.mains = false;
             settings.mains = false;
             if (wasRunning) audio.play('breaker-off');
             write(
-              `${fromBoard}NOT-AUS. Column supply off. The clock kept going.`,
+              `${fromBoard}NOT-AUS. Drive supply off. The clock kept going.`,
             );
           } else if (action.kind === 'acknowledge') {
             write(
@@ -901,13 +1003,14 @@ export function startScene(canvas: HTMLCanvasElement) {
     for (const part of control.parts)
       fixture(part, `Cassette player ${control.name}`, () => {
         workbench.cassette.press(control.name);
+        void audio.setTapeTransport(control.name);
         void audio.playCassetteButton(control.name);
         write(
           control.name === 'play'
             ? 'Kassettenspieler: Wiedergabe.'
             : control.name === 'stop'
               ? 'Kassettenspieler: Stopp.'
-              : 'Kassettenspieler: Schneller Vorlauf.',
+              : 'Kassettenspieler: Schneller Vorlauf (5×, Viertellautstärke).',
         );
       });
   // The door is used from within arm's reach, from either side.
@@ -949,7 +1052,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   for (const part of labRoom.door.parts)
     fixture(part, 'Lab door', () => {
       const open = labRoom.door.toggle();
-      audio.play(open ? 'relay' : 'breaker-off');
+      // Just the latch: the recorded hinge creak was too loud and squeaky.
+      audio.play('button');
       write(open ? 'Lab door opened.' : 'Lab door closed.');
     });
   // Steel document cabinet for the operating papers.
@@ -993,14 +1097,15 @@ export function startScene(canvas: HTMLCanvasElement) {
     });
   }
   label(fileCabinet, 'VX3 REFERENCE FILES', 0, 1.36, 0.44, 10);
-  // The safety notices hang on the north wall left of the computer desk,
-  // as far into the corner as the west wall allows.
+  // Safety notices above the west-wall trunking, clear of the cabinet.
   const pinBoard = new Group();
   pinBoard.position.set(
-    room.minX + 0.3 * worldUnitsPerMetre,
-    floorY + 13.05,
-    -3.55,
+    room.minX + 0.025 * worldUnitsPerMetre,
+    floorY + 1.95 * worldUnitsPerMetre,
+    room.minZ + 0.65 * worldUnitsPerMetre,
   );
+  pinBoard.name = 'Safety pin-board';
+  pinBoard.rotation.y = Math.PI / 2;
   pinBoard.scale.setScalar(1.8);
   lab.add(pinBoard);
   cube(pinBoard, 2.8, 1.6, 0.11, '#5d4a32', 0, 0, 0);
@@ -1468,9 +1573,10 @@ export function startScene(canvas: HTMLCanvasElement) {
     const screen = benchScreen(
       {
         rig,
-        xenonFlowSlpm: xenon.flowSlpm,
+        xenonFlowSlpm: lineFlow(xenon.flowSlpm, recirculator.working),
         plantPowered: plantRoom.powered,
         rack: settings,
+        permit: atmospherePermit(gen2.prep, recirculator.working),
       },
       seconds % 1 < 0.67,
       benchComputer.elapsed,
@@ -1573,11 +1679,40 @@ export function startScene(canvas: HTMLCanvasElement) {
       new Vector3().setFromMatrixPosition(mesh.matrixWorld).z >
         plantRoom.bounds.maxZ - 0.01,
   );
+  // Plant-room light does not borrow the lab's fill while viewed through its door.
+  perspectiveCamera.layers.enable(1);
+  const plantFill = new AmbientLight('#fff0d7', 0.03);
+  const plantLamp = new DirectionalLight('#ffe4ad', 0);
+  plantLamp.position.copy(lamp.position);
+  const plantRim = new DirectionalLight('#829a98', 0);
+  plantRim.position.copy(rim.position);
+  for (const light of [plantFill, plantLamp, plantRim]) {
+    light.layers.set(1);
+    scene.add(light);
+  }
+  for (const group of [
+    plantRoom.group,
+    rectifier.group,
+    recirculator.group,
+    xenon.group,
+  ])
+    group.traverse((object) => {
+      object.layers.set(1);
+      if (object instanceof PointLight) object.shadow.camera.layers.set(1);
+    });
+  // The outward-facing entrance leaf retains the corridor's lighting.
+  for (const part of plantRoom.entryParts) part.layers.set(0);
+  dynamic.push(() => {
+    const level = plantRoom.lightLevel;
+    plantFill.intensity = 1.5 * (0.02 + 0.98 * level);
+    plantLamp.intensity = 2.1 * level;
+    plantRim.intensity = 0.7 * level;
+  });
   for (const part of plantRoom.entryParts) {
     withinReach.add(part);
     fixture(part, 'Plant room door', () => {
       const open = plantRoom.toggleEntry();
-      audio.play('selector');
+      audio.play('button');
       write(open ? 'Plant-room door opening.' : 'Plant-room door closing.');
     });
   }
@@ -1618,7 +1753,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     withinReach.add(part);
     fixture(part, 'Xenon cage gate', () => {
       const open = plantRoom.toggle();
-      audio.play('selector');
+      audio.play('button');
       write(
         open
           ? 'Plant room: xenon cage opening. Set flow to at least 2 SLPM.'
@@ -1773,6 +1908,12 @@ export function startScene(canvas: HTMLCanvasElement) {
       z: (room.minZ + room.maxZ) / 2,
     },
     {
+      id: 'recirculator',
+      x: recirculator.group.position.x,
+      y: floorY + 0.8 * worldUnitsPerMetre,
+      z: recirculator.group.position.z,
+    },
+    {
       id: 'rectifier',
       x: rectifier.group.position.x,
       y: floorY + worldUnitsPerMetre,
@@ -1822,19 +1963,21 @@ export function startScene(canvas: HTMLCanvasElement) {
   freshRun.hidden = true;
   fireStatus.append(ruinTitle, freshRun);
   overlay.append(fireStatus);
-  freshRun.addEventListener('click', () => {
-    if (!fire.ruinCause || fire.ruinAge < 20) return;
-    Object.assign(fire, createFireIncident());
-    Object.assign(overheat, createOverheatState());
-    Object.assign(telltales, createSafetyTelltales());
-    Object.assign(board, createBoard());
-    Object.assign(settings, createRackControls());
-    resetRig();
-    if (labRoom.lights.on) labRoom.lights.toggle();
-    fireStatus.hidden = true;
-    freshRun.hidden = true;
-    write('Incident cleared. New cold run authorised.');
-  });
+  freshRun.addEventListener('click', () =>
+    machineActions.run('Incident reset', () => {
+      if (!fire.ruinCause || fire.ruinAge < 20) return;
+      Object.assign(fire, createFireIncident());
+      Object.assign(overheat, createOverheatState());
+      Object.assign(telltales, createSafetyTelltales());
+      Object.assign(board, createBoard());
+      Object.assign(settings, createRackControls());
+      resetRig();
+      if (labRoom.lights.on) labRoom.lights.toggle();
+      fireStatus.hidden = true;
+      freshRun.hidden = true;
+      write('Incident cleared. New cold run authorised.');
+    }),
+  );
   const manualSheet = document.createElement('aside');
   manualSheet.className = 'manual-sheet';
   manualSheet.hidden = true;
@@ -1845,7 +1988,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     {
       title: 'OPERATING GUIDE / VX3 GEN. 2 COLD START',
       content:
-        'TECHNIKRAUM\n1  HAUPTSCHALTER closed.\n2  Xenon cage open; regulator to 2 SLPM or more.\nEAST BOARD\n3  NETZ handle on.\nCOLUMN\n4  Isolator (west wall, by the desk) ON,\n   NETZ button (foot of grey cabinet) lit.\n5  SÄULE: SENKEN. Wait for UNTEN steady.\n6  SPANNEN. DICHT lamp lit.\n7  XE EIN, and open the outlet handwheel\n   (or SPÜLEN). Purge until O2 = 0 lights.\n8  Shut the outlet. KAMMERDRUCK above 1.2 bar.\n9  KERN: AKTIVIERUNG up. 800 K glow,\n   3200 K full power.\n\nNEVER heat an open or unpurged chamber.\nNEVER leave the outlet open on a hot core.\nQUITT or RÜCKS. fits a fresh core.',
+        'TECHNIKRAUM\n1  HAUPTSCHALTER closed. KREISLAUF on.\n2  Xenon cage open; regulator 2 SLPM or more.\nCOLUMN AND WEST WALL\n3  Isolator ON, NETZ button lit, rocker up.\nEAST BOARD\n4  NETZ on. Heaters stay interlocked until\n   the vessel is ready: read the alarm row.\nVESSEL (SÄULE)\n5  SENKEN; wait for UNTEN. SPANNEN.\n6  XE EIN, outlet open: purge to O2 = 0.\n7  Outlet shut: KAMMERDRUCK over 1.2 bar.\nDRIVE\n8  Heaters warm by themselves; core glows.\n9  DREHZAHL, FELD up; TRIMM for a steady\n   field. Core to full power.\n\nNEVER heat an open or unpurged chamber.\nQUITT or RÜCKS. fits a fresh core.',
     },
     {
       title: 'INSTRUCTION MANUAL / CORE HANDLING',
@@ -1942,7 +2085,15 @@ export function startScene(canvas: HTMLCanvasElement) {
   // The logbook starts put away; its tab counts what has been written.
   let logOpen = false;
   let unseen = 0;
-  const write = (line: string) => {
+  const write = (text: string) => {
+    if (quiet) return;
+    // Lines written while a control is worked carry its name.
+    const line = pressed
+      ? text
+        ? `${pressed} — ${text}`
+        : `${pressed}.`
+      : text;
+    pressed = null;
     const item = document.createElement('li');
     item.textContent = `${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}  ${line}`;
     entries.prepend(item);
@@ -1955,7 +2106,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       tab.setAttribute('aria-label', `Open logbook, ${unseen} new entries`);
     }
   };
-  write('Rack opened. Original full VX3 cold. For educational use only.');
+  write('Lab opened. Second-generation VX3 cold. For educational use only.');
   overlay.querySelector('#close-log')!.addEventListener('click', () => {
     audio.play('paper');
     logOpen = false;
@@ -2044,11 +2195,17 @@ export function startScene(canvas: HTMLCanvasElement) {
   const inspectionView = inspectionParams.get('view');
   if (inspectionParams.get('lights') === 'on') {
     labRoom.lights.toggle();
-    plantRoom.toggleLights();
   }
+  if (inspectionParams.get('plant-lights') === 'on') plantRoom.toggleLights();
   // Named viewpoints: shareable inspection links (?view=rack) and the
   // teleport board's destinations.
   const viewpoints: Record<string, () => void> = {
+    'safety-notices': () => {
+      walker.x = room.minX + 1.4 * metre;
+      walker.z = pinBoard.position.z;
+      orbitYaw = -Math.PI / 2;
+      orbitPitch = Math.atan2(1.95 - 1.8034, 1.4);
+    },
     'control-panel': () => {
       walker.x = room.maxX - 2.8 * metre;
       walker.z = eastControlPanel.group.position.z;
@@ -2066,6 +2223,12 @@ export function startScene(canvas: HTMLCanvasElement) {
       walker.z = room.minZ + 2.75 * metre;
       orbitYaw = -Math.PI / 2;
       orbitPitch = -0.16;
+    },
+    cassette: () => {
+      walker.x = workbench.cassette.group.position.x + 1.4 * metre;
+      walker.z = workbench.cassette.group.position.z + 0.15 * metre;
+      orbitYaw = -Math.PI / 2;
+      orbitPitch = -Math.atan2(1.8034 - 0.9 - 0.324, 1.4);
     },
     computer: () => {
       walker.x = bbc.group.position.x - 0.4 * worldUnitsPerMetre;
@@ -2210,6 +2373,13 @@ export function startScene(canvas: HTMLCanvasElement) {
     return objects;
   };
   if (import.meta.env.DEV) {
+    // Every control on the column needs its own name for the log.
+    const names = gen2.clickables.map((c) => c.name);
+    const repeated = names.filter((n, i) => names.indexOf(n) !== i);
+    if (repeated.length)
+      console.error(
+        `Repeated control names on the column: ${repeated.join(', ')}`,
+      );
     const problems = auditParts(partsInScene());
     if (problems.length)
       console.error(`Machine part designations:\n${problems.join('\n')}`);
@@ -2236,8 +2406,41 @@ export function startScene(canvas: HTMLCanvasElement) {
         /** The second-generation VX3 and the xenon bank that feeds it. */
         gen2,
         xenon,
+        recirculator,
+        settings,
+        board: () => ({
+          lit: annunciators
+            .filter((_, i) => board.alarms[i] !== 'normal')
+            .map((window) => window.label),
+        }),
         /** Close or open the east board's NETZ contactor. */
         netz: () => flipMains('Test: '),
+        /**
+         * Work a control by the name the log gives it ("machine: control"),
+         * or a room fitting by its name, as a click on it would.
+         */
+        press(name: string) {
+          let found: Object3D | undefined;
+          scene.traverse((object) => {
+            if (found || !actions.has(object.id)) return;
+            const part = designationOf(object);
+            const label = part
+              ? `${part.machine}: ${part.name}`
+              : fixtureOf(object);
+            if (label === name) found = object;
+          });
+          if (!found) return false;
+          const at = found.getWorldPosition(new Vector3());
+          actions.get(found.id)?.({
+            object: found,
+            point: at,
+            distance: 1,
+          } as Intersection);
+          return true;
+        },
+        /** The newest operator's log lines, newest first. */
+        log: () =>
+          [...entries.children].slice(0, 8).map((item) => item.textContent),
         /** Sit in the chair at the BBC, as clicking it does. */
         sit: sitAtComputer,
         chair: () => chair.group.position.clone(),
@@ -2508,6 +2711,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let last = 0;
   let xenonWarned = false;
+  let exposedWarned = false;
   let nextFireCue = 0;
   renderer.setAnimationLoop((time) => {
     if (canvas.parentElement?.hidden) {
@@ -2524,35 +2728,41 @@ export function startScene(canvas: HTMLCanvasElement) {
     );
     rectifier.update(plantRoom.powered, time / 1000, reducedMotion.matches);
     audio.setPlantPower(plantRoom.powered);
-    // The column: xenon from the plant room's line, power through the
-    // plant master, the east board's contactor and its own switches.
-    if (settings.mains && !plantRoom.powered) {
+    // The machine. The xenon reaching it comes through the recirculator;
+    // the drive's breaker drops with the plant master or the column's own
+    // switches; and the drive only runs with the vessel's atmosphere
+    // permit: sealed, purged, at working pressure and recirculating.
+    const flow = lineFlow(xenon.flowSlpm, recirculator.working);
+    if (rig.controls.mains && (!plantRoom.powered || !gen2.running)) {
+      rig.controls.mains = false;
       settings.mains = false;
       audio.play('breaker-off');
       write(
-        'Plant master supply disconnected. Column off; lighting unchanged.',
+        plantRoom.powered
+          ? 'Column switched off at the machine. Drive supply off.'
+          : 'Plant master supply disconnected. Machinery off; lighting unchanged.',
       );
     }
-    feedFromLine(gen2.prep, xenon.flowSlpm, delta);
-    gen2On = gen2Powered({
-      plantPowered: plantRoom.powered,
-      rigOn: gen2.running,
-      remoteMains: settings.mains,
-    });
-    gen2.drive.power = gen2On;
+    feedFromLine(gen2.prep, flow, delta);
+    rig.controls.permit = atmospherePermit(gen2.prep, recirculator.working);
+    // The drive heats the core: warm heaters to a glow, activity beyond.
+    setActivation(gen2.prep, driveTemperature(rig));
+    gen2.prep.brightness = driveBrightness(rig);
+    gen2.drive.power = rig.controls.mains;
     gen2.update(time / 1000, delta, reducedMotion.matches);
-    if (rig.controls.mains && !plantRoom.powered) {
-      rig.controls.mains = false;
-      audio.play('breaker-off');
-      write(
-        'Plant master supply disconnected. Machinery off; lighting unchanged.',
-      );
+    audio.updateColumn(gen2.prep);
+    audio.setRecirculator(recirculator.working);
+    // A core warming in a chamber that would burn it: warn once.
+    const exposed = isExposed(gen2.prep);
+    if (exposed && !exposedWarned) {
+      audio.play('warning');
+      write('Column: core warming in an unsealed or unpurged chamber!');
     }
+    exposedWarned = exposed;
     // Xenon is needed for safe running, but nothing stops anyone running
     // without it: past the spindle limit the bench monitor flashes a
     // warning and strain creeps up until something gives.
-    const unsafe =
-      rig.controls.mains && xenonHazard(rig.spindle, xenon.flowSlpm);
+    const unsafe = rig.controls.mains && xenonHazard(rig.spindle, flow);
     if (unsafe && !xenonWarned) {
       audio.play('warning');
       write('Monitor: XENON CIRCUIT NOT PRESSURISED. Carrying on.');
@@ -2583,25 +2793,13 @@ export function startScene(canvas: HTMLCanvasElement) {
         // The fault printout first, with clues to what went wrong, then the
         // operator's own note of what it did to the room.
         for (const line of tripClues(event.report, {
-          xenonFlowSlpm: xenon.flowSlpm,
+          xenonFlowSlpm: flow,
         }))
           write(line);
         write(event.text);
       }
     }
-    // The wall meter shows the column's load; the crystal wakes with an
-    // active core, sealed in, powered and on the xenon line.
-    stepTelltaleOutputs(
-      telltales,
-      {
-        powerKw: gen2PowerKw(gen2.prep, gen2On),
-        dilationActivity:
-          gen2On && isSealed(gen2.prep) && xenonReady(xenon.flowSlpm)
-            ? gen2Activity(gen2.prep)
-            : 0,
-      },
-      delta,
-    );
+    stepSafetyTelltales(telltales, rig, settings, delta, flow);
     const startedSmoking = stepOverheat(
       overheat,
       {
@@ -2696,7 +2894,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       freshRun.hidden = fire.ruinAge < 20;
     }
     // Running ferrocores bend the room: colour, π, space and sparks.
-    const activity = gen2Activity(gen2.prep);
+    const activity = ferrocoreActivity(rig);
     anomaly = anomalyEffects(activity, time / 1000, reducedMotion.matches);
     ps1Uniforms.channels.value.set(...anomaly.channels);
     ps1Uniforms.warp.value = anomaly.warp;
@@ -2725,17 +2923,17 @@ export function startScene(canvas: HTMLCanvasElement) {
     eastControlPanel.update({
       view: boardView(board, boardInputs),
       readings: boardReadings(boardInputs),
-      // SOLL is the core's set point, IST its temperature.
-      trimSet: (gen2.prep.temperature - AMBIENT) / (MAXIMUM - AMBIENT),
-      trimIdeal: (gen2.prep.setpoint - AMBIENT) / (MAXIMUM - AMBIENT),
+      trimSet: settings.knobs.trim,
+      trimIdeal: idealTrim(rig),
       powerKw: telltales.powerKw,
       energyKwh: telltales.energyKwh,
-      delta: gen2.prep.xenon,
-      ferrocoreRadiansPerSecond: gen2.prep.spinRate * Math.PI * 2,
+      delta: deltaScore(rig),
+      ferrocoreRadiansPerSecond: ferrocoreAngularVelocity(rig),
       ferrocoreActivity: activity,
       seconds: delta,
     });
     audio.update(rig, settings, reducedMotion.matches);
+    delayedPrinter.step(delta);
     if (teleprinter.update(delta, reducedMotion.matches)) audio.play('printer');
     for (const update of dynamic) update();
     footprints ??= collectFootprints();

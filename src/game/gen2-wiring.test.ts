@@ -1,30 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import {
-  FULL_BOTTLE,
-  FULL_POWER,
-  MAXIMUM,
-  createColumnPrep,
-} from './column-prep';
-import {
-  feedFromLine,
-  gen2Activity,
-  gen2Alarms,
-  gen2BoardReadings,
-  gen2PowerKw,
-  gen2Powered,
-} from './gen2-wiring';
-import { boardView, createBoard, stepBoard } from './control-board';
-import { createRig } from './rig';
-import { createRackControls } from './rack-controls';
-import { createSafetyTelltales } from './safety-telltales';
+import { FULL_BOTTLE, createColumnPrep, isExposed } from './column-prep';
+import { atmospherePermit, feedFromLine, lineFlow } from './gen2-wiring';
+import { createRig, stepRig } from './rig';
+import { driveTemperature } from './cold-start';
+
+/** A vessel lowered, clamped, purged and at working pressure. */
+function readyVessel() {
+  const state = createColumnPrep();
+  state.lift = 0;
+  state.liftTarget = 0;
+  state.clamped = true;
+  state.air = 0;
+  state.xenon = 1.5;
+  return state;
+}
 
 describe('gen2 wiring', () => {
-  it('needs the plant master, the rig and the east board all closed', () => {
-    const on = { plantPowered: true, rigOn: true, remoteMains: true };
-    expect(gen2Powered(on)).toBe(true);
-    expect(gen2Powered({ ...on, plantPowered: false })).toBe(false);
-    expect(gen2Powered({ ...on, rigOn: false })).toBe(false);
-    expect(gen2Powered({ ...on, remoteMains: false })).toBe(false);
+  it('carries xenon to the machine only while the recirculator runs', () => {
+    expect(lineFlow(6, true)).toBe(6);
+    expect(lineFlow(6, false)).toBe(0);
   });
 
   it('refills the buffer from the xenon line only at working flow', () => {
@@ -38,61 +32,47 @@ describe('gen2 wiring', () => {
     expect(state.supply).toBe(FULL_BOTTLE);
   });
 
-  it('draws nothing off, and stays under the 6.5 kW limit at full power', () => {
-    const state = createColumnPrep();
-    expect(gen2PowerKw(state, false)).toBe(0);
-    state.temperature = FULL_POWER;
-    expect(gen2PowerKw(state, true)).toBeLessThan(6.5);
-    state.temperature = MAXIMUM;
-    expect(gen2PowerKw(state, true)).toBeGreaterThan(5);
+  it('permits the drive only in a purged, pressurised, recirculating vessel', () => {
+    const state = readyVessel();
+    expect(atmospherePermit(state, true)).toBe(true);
+    expect(atmospherePermit(state, false)).toBe(false);
+    expect(atmospherePermit({ ...state, clamped: false }, true)).toBe(false);
+    expect(atmospherePermit({ ...state, air: 0.5 }, true)).toBe(false);
+    expect(atmospherePermit({ ...state, xenon: 0.8 }, true)).toBe(false);
+    expect(atmospherePermit({ ...state, failure: 'burnout' }, true)).toBe(
+      false,
+    );
   });
 
-  it('is active only while the core is hot and whole', () => {
-    const state = createColumnPrep();
-    expect(gen2Activity(state)).toBe(0);
-    state.temperature = FULL_POWER;
-    state.spinRate = 1.4;
-    expect(gen2Activity(state)).toBeCloseTo(1);
-    state.failure = 'burnout';
-    expect(gen2Activity(state)).toBe(0);
+  it('holds the heaters and drive off without the permit', () => {
+    const rig = createRig();
+    rig.controls.mains = true;
+    rig.controls.spindle = 0.5;
+    rig.controls.field = 0;
+    rig.controls.permit = false;
+    for (let i = 0; i < 300; i++) stepRig(rig, 0.1, () => 0.5);
+    expect(rig.heater).toBe(0);
+    expect(rig.spindle).toBe(0);
+    rig.controls.permit = true;
+    for (let i = 0; i < 300; i++) stepRig(rig, 0.1, () => 0.5);
+    expect(rig.heater).toBeGreaterThan(0.9);
+    expect(rig.spindle).toBeGreaterThan(0.4);
   });
 
-  it('raises STÖRUNG on a failure and DRUCK on a starved core', () => {
+  it('warns of a core warming in air before it burns', () => {
     const state = createColumnPrep();
-    expect(gen2Alarms(state)).toEqual({ pressure: false, fault: false });
-    state.temperature = 1500;
-    expect(gen2Alarms(state).pressure).toBe(true);
-    state.failure = 'flux-inductance';
-    expect(gen2Alarms(state).fault).toBe(true);
+    state.temperature = 600;
+    expect(isExposed(state)).toBe(true);
+    expect(isExposed(readyVessel())).toBe(false);
   });
 
-  it('reads an open chamber as all air, and every channel within 0 to 1', () => {
-    const state = createColumnPrep();
-    const readings = gen2BoardReadings(state, true, 0.25);
-    expect(readings.instability).toBe(1);
-    for (const value of Object.values(readings)) {
-      expect(value).toBeGreaterThanOrEqual(0);
-      expect(value).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it('lights the board from the column once it is installed', () => {
-    const prep = createColumnPrep();
-    prep.outletOpen = true;
-    prep.failure = 'burnout';
-    const inputs = {
-      rig: createRig(),
-      controls: createRackControls(),
-      telltales: createSafetyTelltales(),
-      gen2: { prep, powered: true },
-    };
-    const board = createBoard();
-    stepBoard(board, inputs, 0.1);
-    const tiles = boardView(board, inputs).tiles.slice(0, 6);
-    // NETZ and PUMPE lit; STÖRUNG flashing on (the flasher starts lit).
-    expect(tiles[0]).toBe(true);
-    expect(tiles[1]).toBe(true);
-    expect(tiles[2]).toBe(false);
-    expect(tiles[5]).toBe(true);
+  it('heats the core from the drive: heaters to a glow, activity beyond', () => {
+    const rig = createRig();
+    expect(driveTemperature(rig)).toBe(293);
+    rig.heater = 1;
+    expect(driveTemperature(rig)).toBeGreaterThan(800);
+    rig.spindle = 1;
+    rig.field = 1;
+    expect(driveTemperature(rig)).toBeGreaterThan(3200);
   });
 });

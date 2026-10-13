@@ -21,15 +21,30 @@ describe('continuous printer log', () => {
     expect(log.phase).toBeLessThan(1);
   });
 
-  it('prints queued actions, then keeps feeding slowly while idle', () => {
+  it('prints queued actions, then stops feeding and making line cues while idle', () => {
     const log = createPrinterLog();
     log.append('08:23 TEST');
     expect(log.printing).toBe(true);
     expect(log.step(1)).toBe(true);
+    expect(log.linesStarted).toBe(1);
     expect(log.printing).toBe(false);
     const afterPrint = log.phase;
     expect(log.step(1)).toBe(false);
-    expect(log.phase).toBeGreaterThan(afterPrint);
+    expect(log.phase).toBe(afterPrint);
+    expect(log.linesStarted).toBe(0);
     expect(log.rows).toEqual(['08:23 TEST']);
   });
+});
+
+it('starts one sound cue per wrapped printed line, not per frame', () => {
+  const log = createPrinterLog(10);
+  log.append('abcdefghij klmnopqrst');
+  log.step(0.01);
+  expect(log.linesStarted).toBe(1);
+  log.step(0.01);
+  expect(log.linesStarted).toBe(0);
+  log.step(0.15);
+  expect(log.linesStarted).toBe(1);
+  log.step(1);
+  expect(log.linesStarted).toBe(0);
 });

@@ -152,6 +152,16 @@ export const heat = (state: ColumnPrepState) =>
     Math.min(1, (state.temperature - ACTIVATION) / (FULL_POWER - ACTIVATION)),
   );
 
+/**
+ * A core warming towards activation in a chamber that would burn it: the
+ * head is not sealed, or the chamber still holds air. The warning comes
+ * before the burnout, from 500 K.
+ */
+export const isExposed = (state: ColumnPrepState) =>
+  state.failure === null &&
+  state.temperature > 500 &&
+  (!isSealed(state) || airShare(state) > AIR_LIMIT);
+
 /** An active core short of working pressure. */
 export const isStarved = (state: ColumnPrepState) =>
   isActive(state) && state.xenon < WORKING_PRESSURE;

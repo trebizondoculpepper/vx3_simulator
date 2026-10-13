@@ -54,18 +54,17 @@ import {
   AMBIENT,
   FULL_BOTTLE,
   FULL_POWER,
-  MAXIMUM,
   acknowledge,
   chamberPressure,
   createColumnPrep,
   driveLift,
   PURGE_COMPLETE_VOLTS,
   REGULATOR,
+  isExposed,
   isSealed,
   isStarved,
   lambdaVolts,
   oxygenPercent,
-  setActivation,
   setClamped,
   stepColumnPrep,
   stepLift,
@@ -125,6 +124,11 @@ export interface FerrocoreColumnRig {
   clickables: RigClickable[];
   /** Whether the concept is shown running; the mains button switches it. */
   readonly running: boolean;
+  readonly powerSelections: {
+    isolator: boolean;
+    mains: boolean;
+    cabinet: boolean;
+  };
   /**
    * The rig's supply isolator and the plate it is mounted on (on the grey
    * cabinet). An installation may move the isolator elsewhere, such as onto
@@ -151,9 +155,39 @@ export interface FerrocoreColumnRig {
   dispose(): void;
 }
 
+/** A dial the drive owns: read and set as a share, 0 to 1. */
+export interface DriveDial {
+  get(): number;
+  set(value: number): void;
+}
+
+/**
+ * How an installation's ferrocore drive is worked from the column's
+ * panels. Without it (as in the developer room) those controls move and do
+ * nothing else.
+ */
+export interface ColumnDriveHookup {
+  /** DREHZAHL, FELD, TRIMM and UNTERSETZUNG: the drive's dials. */
+  dials: Record<'spindle' | 'field' | 'trim' | 'ratio', DriveDial>;
+  /** The valve heater switches HT and LT under HV FIL. */
+  heaters: { get(id: 'ht' | 'lt'): boolean; flip(id: 'ht' | 'lt'): void };
+  /** ZÜND: bring both heater switches in at once. */
+  ignite(): void;
+  /** SCHWEBUNG, the key-locked insulation band selector: 0, 0.5 or 1. */
+  band: DriveDial;
+  /** AUS and STRAHL STOP: trip the drive's breaker. */
+  trip(source: string): void;
+  /** XE-REGLER − and +: step the plant's xenon regulator. */
+  regulator(direction: number): void;
+}
+
 export interface FerrocoreColumnRigOptions {
   /** Called with a line of text whenever something happens to the column. */
   log?: (text: string) => void;
+  /** Called with everything that happens to the column's vessel. */
+  onEvent?: (event: ColumnPrepEvent) => void;
+  /** The ferrocore drive the column's panels work, if it has one. */
+  drive?: ColumnDriveHookup;
 }
 
 /** The log line for something that happened to the column. */
@@ -296,6 +330,9 @@ export function createFerrocoreColumnRig(
     power: null,
   };
   const log = options.log ?? (() => {});
+  const hookup = options.drive;
+  // The olive cabinet's own NETZ rocker is in the rig's supply too.
+  let cabinetMains = true;
   let motion = 1;
   /** A slow wander between 0 and 1, different for every seed. */
   const wander = (seconds: number, seed: number, speed = 0.3) =>
@@ -311,6 +348,19 @@ export function createFerrocoreColumnRig(
   ) => {
     clickables.push({ object, name, use });
     updates.push(update);
+  };
+
+  /** Rename the control just fitted to `parent` under `was`, by its role. */
+  const named = (parent: Object3D, was: string, name: string) => {
+    for (let i = clickables.length - 1; i >= 0; i--) {
+      const c = clickables[i];
+      let o: Object3D | null = c.object;
+      while (o && o !== parent) o = o.parent;
+      if (o && c.name === was) {
+        c.name = name;
+        return;
+      }
+    }
   };
 
   // ---- Placing parts on a panel -------------------------------------------
@@ -464,36 +514,55 @@ export function createFerrocoreColumnRig(
     style: KnobStyle = 'collet',
     scale = false,
     ink = '#f1ecdc',
+    /** A dial of the drive this knob works, and its name; else decorative. */
+    dial?: DriveDial,
+    name = 'knob',
   ) => {
     // Pointer selectors click between six positions; the rest turn freely.
-    const steps = style === 'pointer' ? 5 : 10;
-    let value =
-      Math.round((0.5 + Math.sin(x * 53 + y * 29) * 0.35) * steps) / steps;
+    const steps = style === 'pointer' ? 5 : dial ? 20 : 10;
+    let value = dial
+      ? dial.get()
+      : Math.round((0.5 + Math.sin(x * 53 + y * 29) * 0.35) * steps) / steps;
     const made = createKnob(kit, { radius, style, scale, ink, value });
     place(parent, made.group, x, y);
     worked(
       made.group,
-      'knob',
+      name,
       (direction = 1) => {
-        value = stepKnob(value, direction, steps);
+        value = stepKnob(dial ? dial.get() : value, direction, steps);
+        dial?.set(value);
         made.set(value);
       },
-      made.update,
+      (delta) => {
+        if (dial) made.set(dial.get());
+        made.update(delta);
+      },
     );
     return made;
   };
-  const toggle = (parent: Object3D, x: number, y: number, up = true) => {
-    const made = createToggle(kit, up);
+  const toggle = (
+    parent: Object3D,
+    x: number,
+    y: number,
+    up = true,
+    /** A switch of the drive this toggle works, and its name. */
+    bound?: { get(): boolean; flip(): void; name: string },
+  ) => {
+    const made = createToggle(kit, bound ? bound.get() : up);
     place(parent, made.group, x, y);
     let state = up;
     worked(
       made.group,
-      'toggle',
+      bound?.name ?? 'toggle',
       () => {
-        state = !state;
-        made.set(state);
+        if (bound) bound.flip();
+        else state = !state;
+        made.set(bound ? bound.get() : state);
       },
-      made.update,
+      (delta) => {
+        if (bound) made.set(bound.get());
+        made.update(delta);
+      },
     );
     return made;
   };
@@ -916,12 +985,29 @@ export function createFerrocoreColumnRig(
     const b = panel(left, 18, 4, '#e2ddcc', half, half / 2);
     label(b.group, 'XE-REGLER', -0.06, 0.06, { height: 0.004, ink: '#9a2a22' });
     knob(b.group, 0.04, 0.016, 0.017, 'instrument', true, INK);
-    for (let i = 0; i < 3; i++)
-      key(b.group, ['−', '+', 'SET'][i], -0.08 + i * 0.024, -0.03, {
-        width: 0.018,
-        height: 0.012,
-        colour: i === 2 ? '#e5a640' : '#d8d6cc',
-      });
+    for (let i = 0; i < 3; i++) {
+      const made = key(
+        b.group,
+        ['−', '+', 'SET'][i],
+        -0.08 + i * 0.024,
+        -0.03,
+        {
+          width: 0.018,
+          height: 0.012,
+          colour: i === 2 ? '#e5a640' : '#d8d6cc',
+        },
+      );
+      // − and + step the plant's xenon regulator from here.
+      if (hookup && i < 2) {
+        const entry = clickables.find((c) => c.object === made.cap)!;
+        const press = entry.use;
+        entry.name = `XE-REGLER ${i === 0 ? '−' : '+'} key`;
+        entry.use = (direction) => {
+          press(direction);
+          hookup.regulator(i === 0 ? -1 : 1);
+        };
+      }
+    }
     lamp(b.group, '#ff4a2e', -0.08, 0.025, 0.8);
     label(b.group, 'STÖRUNG', -0.08, 0.008, { height: 0.0022, ink: INK });
     label(b.group, '85 SLPM', 0.04, -0.062, { height: 0.0026, ink: '#9a2a22' });
@@ -959,10 +1045,16 @@ export function createFerrocoreColumnRig(
   {
     // 2U: cream panel with the beam stop.
     const p = panel(left, 25, 2, CREAM);
-    button(p.group, 'STOP', 'red', -0.02, -0.002, {
-      latching: false,
-      size: 0.024,
-    });
+    button(
+      p.group,
+      'STOP',
+      'red',
+      -0.02,
+      -0.002,
+      { latching: false, size: 0.024 },
+      () => hookup?.trip('STRAHL STOP'),
+    );
+    named(p.group, 'STOP button', 'STRAHL STOP button');
     label(p.group, 'STRAHL', -0.065, -0.002, { height: 0.0028, ink: INK });
     for (let i = 0; i < 2; i++) {
       knob(p.group, 0.1 + i * 0.05, 0.0, 0.0075);
@@ -1022,7 +1114,7 @@ export function createFerrocoreColumnRig(
     vents(p.group, 0.17, 0, 0.07, 7);
     selectedMains = () => mains.lit;
     ticks.push(() => {
-      running = mains.lit && supply.on;
+      running = mains.lit && supply.on && cabinetMains;
     });
   }
 
@@ -1103,10 +1195,16 @@ export function createFerrocoreColumnRig(
       height: 0.0026,
       ink: '#e7a24b',
     });
-    button(p.group, 'AUS', 'red', -0.225, -0.006, {
-      size: 0.022,
-      latching: false,
-    });
+    button(
+      p.group,
+      'AUS',
+      'red',
+      -0.225,
+      -0.006,
+      { size: 0.022, latching: false },
+      () => hookup?.trip(`VERDAMPFER ${n} AUS`),
+    );
+    named(p.group, 'AUS button', `VERDAMPFER ${n} AUS button`);
     box(p.group, 0.06, 0.028, 0.0008, '#141416', -0.16, -0.006, -0.0001);
     seg(
       p.group,
@@ -1178,19 +1276,49 @@ export function createFerrocoreColumnRig(
     const p = panel(right, 11, 4, LIGHT_GREY);
     divider(p.group, -0.09, p.h);
     divider(p.group, 0.075, p.h);
+    // The drive's three dials: spindle speed, Helmholtz-Blatz field and
+    // Blatz trim. The heater switches and ZÜND under HV FIL.
+    const dials = ['spindle', 'field', 'trim'] as const;
     for (let i = 0; i < 3; i++) {
       const x = -0.225 + i * 0.065;
-      knob(p.group, x, 0.022 - (i % 2) * 0.03, 0.008, 'skirted', true, INK);
-      label(p.group, ['FOKUS', 'ABL. X', 'ABL. Y'][i], x, -0.058, {
+      knob(
+        p.group,
+        x,
+        0.022 - (i % 2) * 0.03,
+        0.008,
+        'skirted',
+        true,
+        INK,
+        hookup?.dials[dials[i]],
+        `${['DREHZAHL', 'FELD', 'TRIMM'][i]} knob`,
+      );
+      label(p.group, ['DREHZAHL', 'FELD', 'TRIMM'][i], x, -0.058, {
         height: 0.0022,
         ink: INK,
       });
     }
-    for (let i = 0; i < 2; i++)
-      toggle(p.group, -0.05 + i * 0.03, 0.035, i === 0);
+    (['ht', 'lt'] as const).forEach((id, i) =>
+      toggle(
+        p.group,
+        -0.05 + i * 0.03,
+        0.035,
+        i === 0,
+        hookup && {
+          get: () => hookup.heaters.get(id),
+          flip: () => hookup.heaters.flip(id),
+          name: `${id.toUpperCase()} heater switch`,
+        },
+      ),
+    );
     label(p.group, 'HV FIL', -0.035, 0.058, { height: 0.0022, ink: INK });
-    lamp(p.group, '#ffb43a', -0.035, -0.005, 1.6);
-    button(p.group, 'ZÜND', 'amber', -0.035, -0.045, { latching: false });
+    const heaterLamp = lamp(p.group, '#ffb43a', -0.035, -0.005, 1.6);
+    if (hookup)
+      ticks.push(() =>
+        heaterLamp.set(hookup.heaters.get('ht') || hookup.heaters.get('lt')),
+      );
+    button(p.group, 'ZÜND', 'amber', -0.035, -0.045, { latching: false }, () =>
+      hookup?.ignite(),
+    );
     gauge(
       p.group,
       0.165,
@@ -1268,12 +1396,16 @@ export function createFerrocoreColumnRig(
       ink: INK,
     });
     place(p.group, selector.group, 0.03, 0.002);
-    worked(selector.key, 'selector key', selector.toggleLock, selector.update);
+    worked(selector.key, 'SCHWEBUNG key', selector.toggleLock, selector.update);
     clickables.push({
       object: selector.handle,
-      name: 'key-locked selector',
-      use: (direction?: number) => selector.turn(direction),
+      name: 'SCHWEBUNG band selector',
+      use: (direction?: number) => {
+        selector.turn(direction);
+        hookup?.band.set(selector.position / 2);
+      },
     });
+    hookup?.band.set(selector.position / 2);
     label(p.group, 'SCHWEBUNG', 0.03, 0.046, { height: 0.0024, ink: INK });
     toggle(p.group, 0.11, 0.03);
     lamp(p.group, '#ff4a2e', 0.11, -0.025, 0.45);
@@ -1412,7 +1544,9 @@ export function createFerrocoreColumnRig(
         const blink = motion === 0 || Math.sin(seconds * 6) > 0;
         sealedLamp.set(isSealed(prep));
         starvedLamp.set(isStarved(prep) && blink);
-        faultLamp.set(prep.failure !== null && blink);
+        // STÖRUNG also flashes while a core warms in a chamber that would
+        // burn it, before it does.
+        faultLamp.set((prep.failure !== null || isExposed(prep)) && blink);
       });
       label(p.group, 'DICHT  DRUCK  STÖRUNG', 0.16, -0.05, {
         height: 0.0022,
@@ -1433,62 +1567,25 @@ export function createFerrocoreColumnRig(
       );
     }
     {
-      // 3U: the core, under the column station. AKTIVIERUNG sets the
-      // core's activation temperature in 19 detents of about 195 K, which
-      // the core then follows; HELLIGKEIT sets its brightness. The readout
-      // shows the set point; the core's own temperature is on the readouts
-      // at the top of the cabinet.
+      // 3U: the core, under the column station: its temperature, and the
+      // drive's UNTERSETZUNG (ratio). The core is not set from here: the
+      // drive heats it (see gen2-wiring.ts).
       const c = panel(right, 32, 3, '#aeada3');
       label(c.group, 'KERN', -0.22, 0.045, { height: 0.0028, ink: INK });
-      const span = MAXIMUM - AMBIENT;
-      const setShare = () => (prep.setpoint - AMBIENT) / span;
-      const activation = createKnob(kit, {
-        radius: 0.016,
-        style: 'skirted',
-        scale: true,
-        ink: INK,
-        value: setShare(),
-      });
-      place(c.group, activation.group, -0.15, 0.004);
-      worked(
-        activation.group,
-        'activation temperature knob',
-        (direction = 1) =>
-          setActivation(
-            prep,
-            AMBIENT + stepKnob(setShare(), direction, 19) * span,
-          ),
-        (delta) => {
-          activation.set(setShare());
-          activation.update(delta);
-        },
+      seg(c.group, 4, -0.13, 0.01, () => String(Math.round(prep.temperature)));
+      label(c.group, 'IST K', -0.13, -0.014, { height: 0.0022, ink: INK });
+      knob(
+        c.group,
+        0.02,
+        0.004,
+        0.012,
+        'skirted',
+        true,
+        INK,
+        hookup?.dials.ratio,
+        'UNTERSETZUNG knob',
       );
-      label(c.group, 'AKTIVIERUNG', -0.15, -0.04, {
-        height: 0.0022,
-        ink: INK,
-      });
-      seg(c.group, 4, -0.06, 0.012, () => String(Math.round(prep.setpoint)));
-      label(c.group, 'SOLL K', -0.06, -0.012, { height: 0.0022, ink: INK });
-      const brightness = createKnob(kit, {
-        radius: 0.012,
-        style: 'skirted',
-        scale: true,
-        ink: INK,
-        value: prep.brightness,
-      });
-      place(c.group, brightness.group, 0.05, 0.004);
-      worked(
-        brightness.group,
-        'brightness knob',
-        (direction = 1) => {
-          prep.brightness = stepKnob(prep.brightness, direction, 10);
-        },
-        (delta) => {
-          brightness.set(prep.brightness);
-          brightness.update(delta);
-        },
-      );
-      label(c.group, 'HELLIGKEIT', 0.05, -0.035, {
+      label(c.group, 'UNTERSETZUNG', 0.02, -0.035, {
         height: 0.0022,
         ink: INK,
       });
@@ -1501,18 +1598,17 @@ export function createFerrocoreColumnRig(
     handles(p.group, p.w, p.h);
     const rocker = createRocker(kit, true);
     place(p.group, rocker.group, -0.17, 0.0);
-    let mainsOn = true;
     worked(
       rocker.group,
-      'rocker',
+      'cabinet supply rocker',
       () => {
-        mainsOn = !mainsOn;
-        rocker.set(mainsOn);
+        cabinetMains = !cabinetMains;
+        rocker.set(cabinetMains);
       },
       rocker.update,
     );
     label(p.group, 'NETZ', -0.17, 0.026, { height: 0.0026, ink: INK });
-    meter(p.group, 'V', 0.0, 0.01, 0.07, () => (mainsOn ? 0.55 : 0));
+    meter(p.group, 'V', 0.0, 0.01, 0.07, () => (cabinetMains ? 0.55 : 0));
     knob(p.group, 0.14, 0.02, 0.008);
     // A paper tag on a string, hung from the knob.
     const tag = label(p.group, 'DEFEKT?\n12.3.91', 0.155, -0.03, {
@@ -2568,6 +2664,7 @@ export function createFerrocoreColumnRig(
       : stepColumnPrep(prep, delta, { powered: drive.power ?? running });
     for (const event of events) {
       log(describe(event));
+      options.onEvent?.(event);
       if (event.kind === 'lowered') sealPuff.burst();
     }
     sealPuff.update(delta, reducedMotion);
@@ -2683,6 +2780,51 @@ export function createFerrocoreColumnRig(
     return problems;
   };
 
+  // Every control has a unique name for the operator's log. The ones that
+  // work the column or its drive are named for their role; the rest are
+  // spares, named for their panel and numbered where they would repeat.
+  const working = new Set([
+    'HEBEN button',
+    'SENKEN button',
+    'SPANNEN button',
+    'XE EIN button',
+    'QUITT button',
+    'outlet valve',
+    'supply isolator',
+    'NETZ button',
+    'cabinet supply rocker',
+    'DREHZAHL knob',
+    'FELD knob',
+    'TRIMM knob',
+    'UNTERSETZUNG knob',
+    'HT heater switch',
+    'LT heater switch',
+    'ZÜND button',
+    'SCHWEBUNG band selector',
+    'SCHWEBUNG key',
+    'STRAHL STOP button',
+    'XE-REGLER − key',
+    'XE-REGLER + key',
+    ...[1, 2, 3, 4].map((n) => `VERDAMPFER ${n} AUS button`),
+  ]);
+  const panelOf = (object: Object3D) => {
+    for (let o = object.parent; o; o = o.parent)
+      if (o.userData.parts) return o.name;
+    return 'column';
+  };
+  const spares = clickables.filter((c) => !working.has(c.name));
+  for (const c of spares) c.name = `spare ${c.name}, ${panelOf(c.object)}`;
+  const seen = new Map<string, number>();
+  const repeats = new Map<string, number>();
+  for (const c of clickables)
+    repeats.set(c.name, (repeats.get(c.name) ?? 0) + 1);
+  for (const c of clickables) {
+    if ((repeats.get(c.name) ?? 0) < 2) continue;
+    const n = (seen.get(c.name) ?? 0) + 1;
+    seen.set(c.name, n);
+    c.name = `${c.name} #${n}`;
+  }
+
   return {
     group,
     clickables,
@@ -2698,7 +2840,14 @@ export function createFerrocoreColumnRig(
       return { switch: supply.group, plate: isolatorPlate };
     },
     get running() {
-      return selectedMains() && supply.on;
+      return selectedMains() && supply.on && cabinetMains;
+    },
+    get powerSelections() {
+      return {
+        isolator: supply.on,
+        mains: selectedMains(),
+        cabinet: cabinetMains,
+      };
     },
     prep,
     drive,

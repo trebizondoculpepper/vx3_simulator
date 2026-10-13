@@ -224,7 +224,7 @@ export function createCassettePlayer(worldUnitsPerMetre: number) {
       lastSeconds = seconds;
       if (transport !== 'stop' && !reducedMotion)
         for (const reel of reels)
-          reel.rotation.z -= delta * (transport === 'play' ? 3 : 12);
+          reel.rotation.z -= delta * (transport === 'play' ? 3 : 15);
     },
     dispose() {
       group.traverse((object) => {

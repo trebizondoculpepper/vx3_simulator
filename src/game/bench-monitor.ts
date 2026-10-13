@@ -10,6 +10,11 @@ export interface BenchInputs {
   /** The computer and lights have a separate supply from the apparatus. */
   plantPowered?: boolean;
   rack?: RackControls;
+  /**
+   * The drive's atmosphere permit from the column's vessel: false while it
+   * is not sealed, purged, pressurised and recirculating.
+   */
+  permit?: boolean;
 }
 
 export type ScreenLine = [text: string, ink: string];
@@ -58,8 +63,10 @@ export function benchWarnings(inputs: BenchInputs): string[] {
   if (!plantPowered)
     return ['STROMVERSORGUNG AUS', 'HAUPTSCHALTER EINSCHALTEN'];
   if (!rig.controls.mains)
-    return ['MASCHINE AUSGESCHALTET', 'NETZSCHALTER AM RACK EINSCHALTEN'];
+    return ['MASCHINE AUSGESCHALTET', 'NETZ AM OSTPULT SCHLIESSEN'];
   const warnings: string[] = [];
+  if (inputs.permit === false)
+    warnings.push('HEIZUNG GESPERRT', 'KESSEL SPUELEN UND FUELLEN');
   if (spindleTooHigh(inputs))
     warnings.push('SPINDELDREHZAHL ZU HOCH', 'DREHZAHL AM ANTRIEB SENKEN');
   if (!xenonReady(xenonFlowSlpm))
@@ -141,6 +148,7 @@ export function benchPage(inputs: BenchInputs): BbcPageId {
   const { rig, rack, xenonFlowSlpm } = inputs;
   if (inputs.plantPowered === false) return 'master-off';
   if (!rig.controls.mains) return 'rack-off';
+  if (inputs.permit === false) return 'vessel';
   if (spindleTooHigh(inputs)) return 'speed-high';
   if (!xenonReady(xenonFlowSlpm)) return 'xenon-low';
   if (rig.spindle > 0.1 && rig.heater > 0.5) return 'cores-turning';

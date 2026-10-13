@@ -1,51 +1,43 @@
 import {
-  AMBIENT,
   FULL_BOTTLE,
-  FULL_SPIN,
-  MAXIMUM,
-  REGULATOR,
-  airShare,
-  chamberPressure,
-  heat,
+  PURGE_COMPLETE_VOLTS,
+  WORKING_PRESSURE,
   isSealed,
-  isStarved,
+  lambdaVolts,
+  oxygenPercent,
 } from './column-prep';
 import type { ColumnPrepState } from './column-prep';
 import { xenonReady } from './xenon-supply';
 
 /**
- * How the second-generation VX3, the ferrocore column, is wired into the
- * lab: its supply comes through the plant room, its xenon from the plant
- * room's cylinder bank, its remote switching from the east board, and its
- * readings out to the board, the wall meter, the crystal and the room.
- * Pure functions, no DOM or Three.js.
+ * How the second-generation VX3 is wired into the lab. Its ferrocore drive
+ * is the drive model (`rig.ts`), worked from the column's panels and the
+ * east board, and it heats the core (`driveTemperature` in cold-start.ts);
+ * the containment vessel is the column model (`column-prep.ts`). This file
+ * holds what joins them to the plant room and the alarms. Pure functions,
+ * no DOM or Three.js.
  */
 
-/** What feeds and switches the column, from the rest of the lab. */
-export interface Gen2Supply {
-  /** The plant room's HAUPTSCHALTER is closed. */
-  plantPowered: boolean;
-  /** The rig's own NETZ button and side isolator are both on. */
-  rigOn: boolean;
-  /** The east board's NETZ contactor is closed (and NOT-AUS not hit). */
-  remoteMains: boolean;
-}
-
-/** The column has power only when every switch in its supply is closed. */
-export const gen2Powered = (supply: Gen2Supply) =>
-  supply.plantPowered && supply.rigOn && supply.remoteMains;
+/**
+ * The xenon that reaches the machine, SLPM. The cylinder bank's regulator
+ * sets the flow, but the recirculator is the pump that carries it round
+ * the loop to the column: with the recirculator stopped, nothing arrives.
+ */
+export const lineFlow = (
+  regulatorSlpm: number,
+  recirculatorWorking: boolean,
+) => (recirculatorWorking ? regulatorSlpm : 0);
 
 /**
- * Bar of chamber gas the plant room's xenon line puts back into the
- * column's buffer each second, per SLPM of flow.
+ * Bar of chamber gas the line puts back into the column's buffer each
+ * second, per SLPM of flow.
  */
 export const LINE_REFILL_PER_SLPM = 0.15;
 
 /**
- * The plant room's xenon line feeds the column's buffer (what the model
- * calls its bottle). With the cage's regulator giving at least the minimum
- * flow the buffer refills, faster with more flow; with the line shut it
- * only drains, and an open outlet on a hot core will starve it.
+ * The xenon line feeds the column's buffer (what the model calls its
+ * bottle). At working flow it refills, faster with more flow; with the
+ * line dry it only drains, and an open outlet on a hot core will starve it.
  */
 export function feedFromLine(
   state: ColumnPrepState,
@@ -59,60 +51,19 @@ export function feedFromLine(
   );
 }
 
-/** The column's spin as a share of full power's, 0 to 1. */
-export const spinShare = (state: ColumnPrepState) =>
-  Math.min(1, state.spinRate / FULL_SPIN);
-
 /**
- * What the column draws, kW: its controls and pump while powered, and its
- * core heater, which draws more the hotter the core is held. At full
- * power it sits just under the supply's 6.5 kW limit.
+ * The drive's atmosphere permit. The valve heaters and the ferrocore only
+ * run in a purged xenon atmosphere: the vessel sealed, its oxygen gone (the
+ * lambda probe reading purge complete), the xenon at working pressure, and
+ * the recirculator running. Without it the drive is held off whatever its
+ * switches say.
  */
-export function gen2PowerKw(state: ColumnPrepState, powered: boolean) {
-  if (!powered) return 0;
-  const held = (state.temperature - AMBIENT) / (MAXIMUM - AMBIENT);
-  return 0.45 + Math.max(0, held) * 5.6 + (state.outletOpen ? 0.3 : 0);
-}
-
-/**
- * How active the ferrocore is, 0 to 1, for the room's effects and the
- * time-dilation crystal: it wakes as the core heats past activation and is
- * strongest spinning at full power.
- */
-export const gen2Activity = (state: ColumnPrepState) =>
-  state.failure ? 0 : Math.min(1, heat(state) * 0.55 + spinShare(state) * 0.45);
-
-/** The column's alarm conditions, for the board's DRUCK and STÖRUNG windows. */
-export const gen2Alarms = (state: ColumnPrepState) => ({
-  pressure: isStarved(state) || chamberPressure(state) > REGULATOR + 0.2,
-  fault: state.failure !== null,
-});
-
-/**
- * The board's eight channels, read from the column. The 1986 retrofit's
- * channel names are kept and given the column's nearest quantities:
- * HEIZUNG the core's temperature, SPINDEL its spin, FELD how far it is
- * between activation and full power, TRIMM how close the core is to its
- * set point, INSTAB the air left in a sealed chamber, DEHNUNG how much of
- * the buffer is spent, DELTA the xenon against the regulator's pressure,
- * LAST the load.
- */
-export function gen2BoardReadings(
+export const atmospherePermit = (
   state: ColumnPrepState,
-  powered: boolean,
-  /** The load as a share of the board's full scale, 0 to 1. */
-  load: number,
-) {
-  return {
-    heater: (state.temperature - AMBIENT) / (MAXIMUM - AMBIENT),
-    spindle: spinShare(state),
-    field: heat(state),
-    'trim match': powered
-      ? Math.max(0, 1 - Math.abs(state.setpoint - state.temperature) / 800)
-      : 0,
-    instability: isSealed(state) ? airShare(state) : 1,
-    strain: 1 - state.supply / FULL_BOTTLE,
-    delta: state.xenon / REGULATOR,
-    load: Math.min(1, load),
-  };
-}
+  recirculatorWorking: boolean,
+) =>
+  state.failure === null &&
+  isSealed(state) &&
+  lambdaVolts(oxygenPercent(state)) >= PURGE_COMPLETE_VOLTS &&
+  state.xenon >= WORKING_PRESSURE &&
+  recirculatorWorking;

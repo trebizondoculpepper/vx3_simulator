@@ -226,13 +226,8 @@ export function createPlantRoom(options: {
   group.add(lightingPlate);
   const lightSwitch = createLightSwitch(m);
   lightingPlate.add(lightSwitch.group);
+  // A room fitting, not part of a machine: the scene marks it a fixture.
   const lightSwitchParts = lightSwitch.parts;
-  for (const part of lightSwitchParts)
-    designate(part, {
-      machine: 'Plant room',
-      name: 'LICHT switch',
-      role: 'input',
-    });
   let lightsOn = false;
   const door = new Group();
   // Hinge at the room face of the wall so the open leaf clears the jamb.

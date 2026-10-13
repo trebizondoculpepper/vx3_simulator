@@ -16,6 +16,11 @@ export interface RigControls {
   grounded?: boolean;
   /** Ion-insulation check band (BAND), 0 (A) to 1 (Ω). */
   band?: number;
+  /**
+   * An interlock's permit to run, true unless something withholds it.
+   * Without it the valve heaters, spindle and field all run down.
+   */
+  permit?: boolean;
 }
 
 /** RATIO's factory setting, at which the trim point is where it always was. */
@@ -123,14 +128,15 @@ export function stepRig(
   const wasLocked = state.field > 0.2 && state.instability < 0.1;
   const wasWarning = state.instability >= WARNING_LEVEL;
 
+  const running = controls.mains && controls.permit !== false;
   state.heater = approach(
     state.heater,
-    controls.mains ? 1 : 0,
+    running ? 1 : 0,
     delta / HEATER_SECONDS,
   );
   // The spindle will not turn until the valves are warm enough to drive it.
   const spindleTarget =
-    controls.mains && state.heater > 0.5
+    running && state.heater > 0.5
       ? Math.min(controls.spindle, controls.governor ?? 1)
       : 0;
   state.spindle = approach(
@@ -141,7 +147,7 @@ export function stepRig(
   );
   // The Helmholtz-Blatz field needs a turning spindle to sustain itself.
   const fieldTarget =
-    controls.mains && state.spindle > 0.2
+    running && state.spindle > 0.2
       ? Math.min(controls.field, controls.plasmaExcitation ?? 1)
       : 0;
   state.field = approach(state.field, fieldTarget, delta / FIELD_SECONDS);

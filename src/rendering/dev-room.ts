@@ -631,9 +631,17 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     metre: 1,
     floorY: 0,
     // Where the orbit camera used to start, facing the concept rig.
-    start: passages.arrival(
-      new URLSearchParams(location.search).get('from'),
-    ) ?? { x: 0.3, z: 2.9, yaw: Math.atan2(-0.3, 2.9), pitch: -0.27 },
+    start:
+      new URLSearchParams(location.search).get('view') === 'controls'
+        ? {
+            x: -2.3 + Math.sin(0.6) * 1.8,
+            z: 0.6 + Math.cos(0.6) * 1.8,
+            yaw: -0.6,
+            pitch: -0.1,
+          }
+        : (passages.arrival(
+            new URLSearchParams(location.search).get('from'),
+          ) ?? { x: 0.3, z: 2.9, yaw: Math.atan2(-0.3, 2.9), pitch: -0.27 }),
     solids: () => [...solids, ...passages.solids()],
     use: useAt,
     aimed: () => Boolean(usableAt(0, 0)),
@@ -692,6 +700,15 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       if (resumeAudio) void audio?.resume();
     },
     enter(previous: string | null) {
+      if (new URLSearchParams(location.search).get('view') === 'controls') {
+        walk.place(
+          -2.3 + Math.sin(0.6) * 1.8,
+          0.6 + Math.cos(0.6) * 1.8,
+          -0.6,
+          -0.1,
+        );
+        return;
+      }
       const pose = passages.arrival(previous);
       if (pose) {
         walk.place(pose.x, pose.z, pose.yaw, pose.pitch);

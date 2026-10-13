@@ -3,13 +3,24 @@ import type { RigState } from './rig';
 import type { RackControls, ToggleId } from './rack-controls';
 import type { SafetyTelltales } from './safety-telltales';
 import { xenonReady } from './xenon-supply';
+import {
+  FULL_BOTTLE,
+  PURGE_COMPLETE_VOLTS,
+  WORKING_PRESSURE,
+  isExposed,
+  isSealed,
+  isStarved,
+  lambdaVolts,
+  oxygenPercent,
+} from './column-prep';
 import type { ColumnPrepState } from './column-prep';
-import { gen2Alarms, gen2BoardReadings } from './gen2-wiring';
+import { REDLINES } from './redlines';
 
 /**
  * The east wall's 1974 process board, rewired in 1986 as a remote station
- * for the VX3: every handle works the rack, and every lamp, needle and
- * readout repeats what the rack is doing.
+ * for the VX3: its handles work the ferrocore drive, its grid, meters and
+ * readouts repeat the drive, and the row of eighteen alarm windows across
+ * its top is where the whole installation's warnings are shown.
  */
 
 export type BoardAction =
@@ -51,15 +62,40 @@ export const boardHandles: readonly BoardHandle[] = [
   { label: 'XTAL C', action: { kind: 'toggle', id: 'xtalC' } },
 ];
 
-/** Annunciator tiles, repeated across the top of each bay. */
-export const annunciatorLabels = [
-  'NETZ',
-  'PUMPE',
-  'FLUSS',
-  'DRUCK',
-  'RESERVE',
-  'STÖRUNG',
-] as const;
+/** Which bay of the board, and what each warning window is. */
+export interface Annunciator {
+  label: string;
+  /** Red for faults and danger; amber for conditions to put right. */
+  colour: 'red' | 'amber';
+}
+
+/**
+ * The eighteen alarm windows across the top of the board, six to a bay.
+ * KREISLAUF: supply and drive. KANALÜBERSICHT: the column's vessel.
+ * MESSWERTE: the xenon plant, strain and the room.
+ */
+export const annunciators: readonly Annunciator[] = [
+  { label: 'NETZ AUS', colour: 'amber' },
+  { label: 'HEIZ. GESP.', colour: 'amber' },
+  { label: 'SPINDEL ROT', colour: 'red' },
+  { label: 'FELD ROT', colour: 'red' },
+  { label: 'LAST', colour: 'red' },
+  { label: 'STÖRUNG', colour: 'red' },
+  { label: 'KOPF OFFEN', colour: 'amber' },
+  { label: 'O2 KESSEL', colour: 'amber' },
+  { label: 'XE DRUCK', colour: 'amber' },
+  { label: 'XE VORRAT', colour: 'amber' },
+  { label: 'KERN LUFT', colour: 'red' },
+  { label: 'KERN DEFEKT', colour: 'red' },
+  { label: 'XE FLUSS', colour: 'amber' },
+  { label: 'UMWÄLZUNG', colour: 'amber' },
+  { label: 'DEHNUNG', colour: 'amber' },
+  { label: 'INSTAB', colour: 'red' },
+  { label: 'RAUCH', colour: 'red' },
+  { label: 'BRAND', colour: 'red' },
+];
+/** The drive's STÖRUNG window, which an incident latches. */
+export const DRIVE_FAULT = 5;
 
 /** The eight channels of the FERNANZEIGE grid, one per row, as bargraphs. */
 export const gridChannels = [
@@ -82,10 +118,10 @@ export const BOARD_FULL_LOAD_KW = 8;
  * alarm that clears before anyone acknowledges it keeps flashing.
  */
 export type AlarmPhase = 'normal' | 'unacknowledged' | 'acknowledged';
-type AlarmId = 'pressure' | 'fault';
 
 export interface BoardState {
-  alarms: Record<AlarmId, AlarmPhase>;
+  /** One phase per alarm window, in `annunciators` order. */
+  alarms: AlarmPhase[];
   /** Seconds left on the lamp test. */
   lampTest: number;
   /** Seconds each momentary handle stays turned after a press. */
@@ -96,7 +132,7 @@ export interface BoardState {
 
 export function createBoard(): BoardState {
   return {
-    alarms: { pressure: 'normal', fault: 'normal' },
+    alarms: annunciators.map((): AlarmPhase => 'normal'),
     lampTest: 0,
     turned: boardHandles.map(() => 0),
     clock: 0,
@@ -107,26 +143,53 @@ export interface BoardInputs {
   rig: RigState;
   controls: RackControls;
   telltales: SafetyTelltales;
+  /** The xenon reaching the machine, SLPM. */
   xenonFlowSlpm?: number;
   plantPowered?: boolean;
   recirculatorWorking?: boolean;
-  /**
-   * The second-generation VX3, once it is installed: the board then reads
-   * its column instead of the first rig (see gen2-wiring.ts).
-   */
-  gen2?: { prep: ColumnPrepState; powered: boolean };
+  /** The column's vessel, once the second-generation VX3 is installed. */
+  gen2?: { prep: ColumnPrepState };
+  /** The drive's atmosphere permit: purged, pressurised, recirculating. */
+  permit?: boolean;
+  /** The machine is smoking, and the fire alarm is sounding. */
+  smoking?: boolean;
+  burning?: boolean;
 }
 
-const alarmConditions = ({
-  rig,
-  gen2,
-}: BoardInputs): Record<AlarmId, boolean> =>
-  gen2
-    ? gen2Alarms(gen2.prep)
-    : {
-        pressure: rig.strain > 0.5,
-        fault: rig.instability > WARNING_LEVEL,
-      };
+/** What each alarm window is warning of, now. */
+export function warningConditions(inputs: BoardInputs): boolean[] {
+  const { rig, telltales, gen2 } = inputs;
+  const mains = rig.controls.mains;
+  const prep = gen2?.prep;
+  const sealed = prep ? isSealed(prep) : true;
+  const purged = prep
+    ? lambdaVolts(oxygenPercent(prep)) >= PURGE_COMPLETE_VOLTS
+    : true;
+  const flow = inputs.xenonFlowSlpm;
+  return [
+    inputs.plantPowered === false,
+    mains && inputs.permit === false,
+    rig.spindle > REDLINES.spindle.limit,
+    rig.field > REDLINES.field.limit,
+    telltales.powerKw > REDLINES.load.limit,
+    mains && rig.instability > WARNING_LEVEL,
+    Boolean(prep) && mains && !sealed,
+    Boolean(prep) && mains && sealed && !purged,
+    Boolean(prep) &&
+      mains &&
+      sealed &&
+      (prep!.xenon < WORKING_PRESSURE || isStarved(prep!)),
+    Boolean(prep) && prep!.supply < FULL_BOTTLE * 0.25,
+    Boolean(prep) && isExposed(prep!),
+    Boolean(prep) && prep!.failure !== null,
+    mains && flow !== undefined && !xenonReady(flow),
+    mains && inputs.recirculatorWorking === false,
+    rig.strain > 0.5,
+    rig.instability > WARNING_LEVEL,
+    Boolean(inputs.smoking),
+    Boolean(inputs.burning),
+  ];
+}
 
 export function stepBoard(
   board: BoardState,
@@ -136,30 +199,29 @@ export function stepBoard(
   board.clock += seconds;
   board.lampTest = Math.max(0, board.lampTest - seconds);
   board.turned = board.turned.map((left) => Math.max(0, left - seconds));
-  const active = alarmConditions(inputs);
-  for (const id of ['pressure', 'fault'] as const) {
-    if (active[id] && board.alarms[id] === 'normal')
-      board.alarms[id] = 'unacknowledged';
-    if (!active[id] && board.alarms[id] === 'acknowledged')
-      board.alarms[id] = 'normal';
-  }
+  warningConditions(inputs).forEach((active, i) => {
+    if (active && board.alarms[i] === 'normal')
+      board.alarms[i] = 'unacknowledged';
+    if (!active && board.alarms[i] === 'acknowledged')
+      board.alarms[i] = 'normal';
+  });
 }
 
 /** QUITT: acknowledge every flashing alarm. Returns whether any were. */
 export function acknowledge(board: BoardState, inputs: BoardInputs) {
-  const active = alarmConditions(inputs);
+  const active = warningConditions(inputs);
   let any = false;
-  for (const id of ['pressure', 'fault'] as const)
-    if (board.alarms[id] === 'unacknowledged') {
-      board.alarms[id] = active[id] ? 'acknowledged' : 'normal';
-      any = true;
-    }
+  board.alarms.forEach((phase, i) => {
+    if (phase !== 'unacknowledged') return;
+    board.alarms[i] = active[i] ? 'acknowledged' : 'normal';
+    any = true;
+  });
   return any;
 }
 
-/** An incident latches STÖRUNG whatever the instability is now. */
+/** An incident latches the drive's STÖRUNG whatever the drive does now. */
 export function latchFault(board: BoardState) {
-  board.alarms.fault = 'unacknowledged';
+  board.alarms[DRIVE_FAULT] = 'unacknowledged';
 }
 
 export function startLampTest(board: BoardState) {
@@ -188,10 +250,7 @@ export function boardReadings({
   rig,
   controls,
   telltales,
-  gen2,
 }: BoardInputs): Record<(typeof gridChannels)[number], number> {
-  const load = Math.min(1, telltales.powerKw / BOARD_FULL_LOAD_KW);
-  if (gen2) return gen2BoardReadings(gen2.prep, gen2.powered, load);
   return {
     heater: rig.heater,
     spindle: rig.spindle,
@@ -202,12 +261,12 @@ export function boardReadings({
     instability: rig.instability,
     strain: rig.strain,
     delta: deltaScore(rig) / YALGETH_LIMIT,
-    load,
+    load: Math.min(1, telltales.powerKw / BOARD_FULL_LOAD_KW),
   };
 }
 
 export interface BoardView {
-  /** Annunciator tiles, six per bay, bay by bay. */
+  /** The eighteen alarm windows, in `annunciators` order. */
   tiles: boolean[];
   /** The 8 × 8 grid, row by row: each row is a bargraph of its channel. */
   grid: boolean[];
@@ -218,39 +277,20 @@ export interface BoardView {
 }
 
 export function boardView(board: BoardState, inputs: BoardInputs): BoardView {
-  const { rig, controls } = inputs;
+  const { rig } = inputs;
   const test = board.lampTest > 0;
   const flashOn = board.clock % 0.8 < 0.4;
   const alarmLit = (phase: AlarmPhase) =>
     phase === 'acknowledged' || (phase === 'unacknowledged' && flashOn);
-  const { gen2 } = inputs;
-  // NETZ, PUMPE, FLUSS, DRUCK, RESERVE, STÖRUNG. On the column: supply,
-  // the outlet open to the pump, the inlet open to the xenon line.
-  const tileStates: boolean[] = gen2
-    ? [
-        gen2.powered,
-        gen2.prep.outletOpen,
-        gen2.prep.inletOpen,
-        alarmLit(board.alarms.pressure),
-        false,
-        alarmLit(board.alarms.fault),
-      ]
-    : [
-        rig.controls.mains,
-        rig.controls.mains && rig.spindle > 0.15,
-        rig.controls.mains && rig.field > 0.1,
-        alarmLit(board.alarms.pressure),
-        rig.controls.mains && !controls.toggles.hb,
-        alarmLit(board.alarms.fault),
-      ];
+  const tiles = board.alarms.map(alarmLit);
   const readings = boardReadings(inputs);
   const grid = gridChannels.flatMap((channel) =>
     Array.from({ length: 8 }, (_, column) => readings[channel] > column / 8),
   );
-  const anyAlarm =
-    alarmLit(board.alarms.pressure) || alarmLit(board.alarms.fault);
+  // Under each bay: BEREIT (drive on), EIN (a switch of that bay on), and
+  // STÖRUNG (any of that bay's alarm windows lit).
   const status = [0, 1, 2].flatMap((bay) => [
-    gen2 ? gen2.powered : rig.controls.mains,
+    rig.controls.mains,
     boardHandles
       .slice(bay * 6, bay * 6 + 6)
       .some(
@@ -258,21 +298,10 @@ export function boardView(board: BoardState, inputs: BoardInputs): BoardView {
           handle.action.kind === 'toggle' &&
           handleTurned(board, bay * 6 + i, inputs),
       ),
-    anyAlarm,
+    tiles.slice(bay * 6, bay * 6 + 6).some(Boolean),
   ]);
-  const tiles = test
-    ? Array(18).fill(true)
-    : [0, 1, 2].flatMap(() => tileStates);
-  if (inputs.xenonFlowSlpm !== undefined)
-    tiles[2] = test || (!xenonReady(inputs.xenonFlowSlpm) && flashOn);
-  if (
-    inputs.plantPowered !== undefined &&
-    inputs.recirculatorWorking !== undefined
-  )
-    tiles[4] =
-      test || (inputs.plantPowered && !inputs.recirculatorWorking && flashOn);
   return {
-    tiles,
+    tiles: test ? tiles.map(() => true) : tiles,
     grid: test ? Array(64).fill(true) : grid,
     status: test ? Array(9).fill(true) : status,
     handles: boardHandles.map((_, i) => handleTurned(board, i, inputs)),

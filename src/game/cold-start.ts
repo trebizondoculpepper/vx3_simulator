@@ -72,6 +72,18 @@ const HEATER_KELVIN = 1300;
 const ACTIVITY_KELVIN = 2700;
 const FLOW_LAG_SECONDS = 1;
 
+/**
+ * The core's activation temperature as the drive sets it: the warm valve
+ * heaters bring it to a glow, the cores' activity to full power. The core
+ * itself follows with its thermal lag.
+ */
+export const driveTemperature = (rig: RigState) =>
+  AMBIENT +
+  rig.heater * HEATER_KELVIN +
+  ferrocoreActivity(rig) * ACTIVITY_KELVIN;
+/** The core's brightness as the drive sets it, from its field. */
+export const driveBrightness = (rig: RigState) => 0.4 + 0.6 * rig.field;
+
 export interface ColdStartState {
   rig: RigState;
   vessel: ColumnPrepState;
@@ -202,13 +214,8 @@ export function stepColdStart(
 
   // The core's temperature is the model's, not the operator's: the warm
   // valve heaters bring it to a glow, the cores' activity to full power.
-  setActivation(
-    state.vessel,
-    AMBIENT +
-      state.rig.heater * HEATER_KELVIN +
-      activity(state) * ACTIVITY_KELVIN,
-  );
-  state.vessel.brightness = 0.4 + 0.6 * state.rig.field;
+  setActivation(state.vessel, driveTemperature(state.rig));
+  state.vessel.brightness = driveBrightness(state.rig);
   for (const event of stepColumnPrep(state.vessel, dt, {
     powered: state.rig.controls.mains,
   })) {

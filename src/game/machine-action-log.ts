@@ -2,7 +2,7 @@
 export function createMachineActionLog(
   snapshot: () => string,
   print: (line: string) => void,
-  fallback: (label: string) => void,
+  fallback: (label: string, before: string, after: string) => void,
 ) {
   let lines: string[] | null = null;
   return {
@@ -21,8 +21,9 @@ export function createMachineActionLog(
         action();
       } finally {
         try {
-          if (before !== snapshot()) {
-            if (!lines.length) fallback(label);
+          const after = snapshot();
+          if (before !== after) {
+            if (!lines.length) fallback(label, before, after);
             for (const line of lines) print(line);
           }
         } finally {

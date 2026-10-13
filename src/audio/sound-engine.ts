@@ -1,3 +1,5 @@
+import tapeManifest from '../../public/music/manifest.json';
+import { createTapeMusic } from './tape-music';
 import type { RackControls } from '../game/rack-controls';
 import type { RigState } from '../game/rig';
 import { writeSoundParameters } from './sound-parameters';
@@ -5,7 +7,13 @@ import type { SoundParameters } from './sound-parameters';
 import { createSpatialMix } from './spatial-mix';
 import type { Emitter, SpatialMix, SpatialOptions } from './spatial-mix';
 import type { ZZFXSound } from 'zzfx';
-import { createPrinterSound } from './printer-sound';
+import { createRecordedEffects, isRecordedCue } from './recorded-effects';
+import type { RecordedCue } from './recorded-effects';
+import { createCoreVoice } from './core-voice';
+import { coreVoiceParameters } from './core-voice-parameters';
+import { createRigSounds } from './rig-sounds';
+import { chamberPressure, isSealed } from '../game/column-prep';
+import type { ColumnPrepState } from '../game/column-prep';
 
 export type SoundCue =
   | 'toggle-up'
@@ -13,6 +21,7 @@ export type SoundCue =
   | 'knob'
   | 'selector'
   | 'button'
+  | 'rocker'
   | 'fire-call'
   | 'breaker-on'
   | 'breaker-off'
@@ -26,9 +35,14 @@ export type SoundCue =
   | 'pencil'
   | 'purge'
   | 'drip'
-  | 'printer';
+  | 'printer'
+  | 'door-open'
+  | 'door-close';
 
-type SoundBank = Record<SoundCue, Pick<ZZFXSound, 'play'>>;
+type SoundBank = Record<
+  Exclude<SoundCue, RecordedCue>,
+  Pick<ZZFXSound, 'play'>
+>;
 
 /** Places in the rack that sounds come from, positioned by the scene. */
 export type SoundSource =
@@ -43,7 +57,8 @@ export type SoundSource =
   | 'cassette'
   | 'sink'
   | 'sprinkler'
-  | 'rectifier';
+  | 'rectifier'
+  | 'recirculator';
 
 export type CassetteButton = 'play' | 'stop' | 'fast-forward';
 
@@ -57,7 +72,14 @@ const cassetteAssetUrls: Record<CassetteButton, URL> = {
 };
 
 type Channel =
-  'hum' | 'heater' | 'spindle' | 'field' | 'strain' | 'rectifier' | 'sprinkler';
+  | 'hum'
+  | 'heater'
+  | 'spindle'
+  | 'field'
+  | 'strain'
+  | 'rectifier'
+  | 'sprinkler'
+  | 'recirculator';
 
 const channelSources: Record<Channel, SoundSource> = {
   hum: 'supply',
@@ -67,6 +89,7 @@ const channelSources: Record<Channel, SoundSource> = {
   strain: 'monitor',
   rectifier: 'rectifier',
   sprinkler: 'sprinkler',
+  recirculator: 'recirculator',
 };
 
 // Cues from the apparatus itself. Control clicks and the logbook are at
@@ -96,6 +119,7 @@ interface AudioGraph {
   strain: GainNode;
   rectifier: GainNode;
   sprinkler: GainNode;
+  recirculator: GainNode;
   panners: Record<Channel, StereoPannerNode>;
   spindleTone: OscillatorNode;
   rotorPulse: OscillatorNode;
@@ -105,6 +129,11 @@ interface AudioGraph {
   strainTone: OscillatorNode;
   sources: Array<OscillatorNode | AudioBufferSourceNode>;
   sounds: SoundBank;
+  recordings: ReturnType<typeof createRecordedEffects>;
+  columnVoice: ReturnType<typeof createCoreVoice>;
+  columnMechanics: ReturnType<typeof createRigSounds>;
+  columnGain: GainNode;
+  columnPan: StereoPannerNode;
   setOneShotVolume: (volume: number) => void;
 }
 
@@ -151,6 +180,7 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
   const strain = gain(0.15, 'strain');
   const rectifier = gain(0, 'rectifier');
   const sprinkler = gain(0, 'sprinkler');
+  const recirculator = gain(0, 'recirculator');
   const sources: Array<OscillatorNode | AudioBufferSourceNode> = [];
   const oscillator = (
     type: OscillatorType,
@@ -168,6 +198,8 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
     sources.push(node);
     return node;
   };
+  oscillator('sine', 72, recirculator, 0.6);
+  oscillator('sine', 144, recirculator, 0.12);
   oscillator('sine', 50, hum, 1);
   oscillator('sine', 100, hum, 0.28);
   oscillator('sine', 150, hum, 0.1);
@@ -204,6 +236,10 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
   const heaterFilter = context.createBiquadFilter();
   heaterFilter.type = 'highpass';
   heaterFilter.frequency.value = 1400;
+  const fanFilter = context.createBiquadFilter();
+  fanFilter.type = 'lowpass';
+  fanFilter.frequency.value = 750;
+  noise.connect(fanFilter).connect(recirculator);
   noise.connect(roomFilter).connect(room);
   noise.connect(heaterFilter).connect(heater);
   const bearingFilter = context.createBiquadFilter();
@@ -240,41 +276,17 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
 
   // ZzFX parameter order: volume, variation, Hz, attack, sustain, release, shape, curve, slide, ...
   const sounds: SoundBank = {
-    printer: createPrinterSound(library),
     drip: new library.ZZFXSound([
       0.045, 0.015, 1250, 0, 0.025, 0.11, 0, 1.5, -650, 0, 0, 0, 0, 0.15,
     ]),
-    // Bat-handle switch snaps, with a slightly heavier downward return.
-    'toggle-up': new library.ZZFXSound([
-      0.34, 0.04, 550, 0, 0.014, 0.025, 4, 1.2, -220,
-    ]),
-    'toggle-down': new library.ZZFXSound([
-      0.38, 0.04, 390, 0, 0.018, 0.03, 4, 1.3, -180,
-    ]),
-    // Fine detent and larger rotary ratchet.
-    knob: new library.ZZFXSound([
-      0.22, 0.03, 750, 0, 0.008, 0.018, 4, 1.1, -340,
-    ]),
-    selector: new library.ZZFXSound([
-      0.35, 0.04, 300, 0, 0.03, 0.055, 4, 1.4, -120,
-    ]),
-    // Rubber mushroom button and low-pressure purge valve.
-    button: new library.ZZFXSound([
-      0.25, 0.04, 190, 0, 0.025, 0.07, 3, 1.3, -95,
-    ]),
+    // Mechanical buttons use a recorded press; purge remains procedural.
     'fire-call': new library.ZZFXSound([
       0.46, 0.025, 370, 0, 0.018, 0.11, 4, 1.2, -260, 0, 0, 0, 0.045,
     ]),
     purge: new library.ZZFXSound([
       0.16, 0.06, 480, 0.02, 0.17, 0.14, 4, 1, -180, 0, 0, 0, 0.72,
     ]),
-    // Spring-loaded mains breaker and relay chatter.
-    'breaker-on': new library.ZZFXSound([
-      0.54, 0.03, 170, 0, 0.04, 0.08, 4, 1.4, -85,
-    ]),
-    'breaker-off': new library.ZZFXSound([
-      0.48, 0.03, 130, 0, 0.05, 0.11, 4, 1.3, -65,
-    ]),
+    // Relay chatter remains a machine sound.
     relay: new library.ZZFXSound([
       0.22, 0.05, 310, 0, 0.045, 0.08, 4, 1, -230, 0, 0, 0, 0.035,
     ]),
@@ -303,6 +315,15 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
       0.08, 0.06, 600, 0, 0.035, 0.065, 4, 1, -250, 0, 0, 0, 0, 0.7,
     ]),
   };
+  const recordings = createRecordedEffects(context, master);
+  const columnVoice = createCoreVoice(context);
+  const columnMechanics = createRigSounds(context);
+  const columnGain = context.createGain();
+  const columnPan = context.createStereoPanner();
+  columnGain.gain.value = 0;
+  columnVoice.output.connect(columnGain);
+  columnMechanics.output.connect(columnGain);
+  columnGain.connect(columnPan).connect(master);
   return {
     context,
     master,
@@ -314,6 +335,7 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
     strain,
     rectifier,
     sprinkler,
+    recirculator,
     panners,
     spindleTone,
     rotorPulse,
@@ -323,6 +345,11 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
     strainTone,
     sources,
     sounds,
+    recordings,
+    columnVoice,
+    columnMechanics,
+    columnGain,
+    columnPan,
     setOneShotVolume: (volume) => {
       library.ZZFX.volume = volume;
     },
@@ -330,6 +357,8 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
 }
 
 export function createSoundEngine() {
+  let tapeMusic: ReturnType<typeof createTapeMusic> | null = null;
+  let tapeRequest = 0;
   let bootBuffer: Promise<AudioBuffer> | null = null;
   let bootSource: AudioBufferSourceNode | null = null;
   let bootRequest = 0;
@@ -339,6 +368,7 @@ export function createSoundEngine() {
   let cassetteRequest = 0;
   let plantPowered = false;
   let sprinklersActive = false;
+  let recirculatorWorking = false;
   let graph: AudioGraph | null = null;
   let loading: Promise<void> | null = null;
   let disposed = false;
@@ -370,6 +400,14 @@ export function createSoundEngine() {
     if (!graph || muted || !visible || graph.context.state !== 'running')
       return;
     const source = at ?? cueSources[cue];
+    if (isRecordedCue(cue)) {
+      void graph.recordings.play(
+        cue,
+        distanceGain(source),
+        source && spatial ? spatial.pan(source) : 0,
+      );
+      return;
+    }
     if (spatial && source) {
       const gain = distanceGain(source);
       if (gain > 0) graph.sounds[cue].play(gain, 1, 1, spatial.pan(source));
@@ -383,7 +421,14 @@ export function createSoundEngine() {
     if (disposed || !visible) return Promise.resolve();
     if (loading) return loading;
     loading = (async () => {
-      if (!graph) graph = createGraph(await import('zzfx'));
+      if (!graph) {
+        graph = createGraph(await import('zzfx'));
+        void graph.recordings
+          .preload()
+          .catch((error) =>
+            console.warn('Sound recordings could not preload.', error),
+          );
+      }
       setMix(volume, muted);
       if (graph.context.state === 'suspended') await graph.context.resume();
       while (pending.length) playNow(...pending.shift()!);
@@ -489,16 +534,87 @@ export function createSoundEngine() {
       console.warn('Cassette transport sound could not play.', error);
     }
   };
+  let columnMoving = false;
+  let columnClamped: boolean | undefined;
+  let columnFailure: ColumnPrepState['failure'] | undefined;
+  const updateColumn = (state: ColumnPrepState) => {
+    if (!graph || !visible || graph.context.state !== 'running') return;
+    const moving = !state.clamped && state.lift !== state.liftTarget;
+    if (columnMoving && !moving) graph.columnMechanics.play('ram-stop');
+    if (columnClamped !== undefined && state.clamped !== columnClamped)
+      graph.columnMechanics.play('clamp');
+    columnMoving = moving;
+    columnClamped = state.clamped;
+    graph.columnMechanics.update({
+      rams: moving ? (state.liftTarget > state.lift ? 1 : -1) : 0,
+      venting:
+        isSealed(state) && state.outletOpen
+          ? Math.min(1, chamberPressure(state))
+          : 0,
+    });
+    if (columnFailure !== undefined && state.failure !== columnFailure) {
+      if (state.failure === 'flux-inductance') graph.columnVoice.collapse();
+      else if (state.failure === 'burnout') graph.columnVoice.burnout();
+      else graph.columnVoice.reset();
+    }
+    columnFailure = state.failure;
+    graph.columnVoice.update(
+      coreVoiceParameters({
+        kelvin: state.temperature,
+        brightness: state.brightness,
+        spinRate: state.spinRate,
+        sealed: state.lift < 0.03,
+        failed: state.failure !== null,
+      }),
+      state.spinAngle,
+    );
+    const now = graph.context.currentTime;
+    graph.columnGain.gain.setTargetAtTime(
+      0.3 * distanceGain('spindle'),
+      now,
+      0.05,
+    );
+    graph.columnPan.pan.setTargetAtTime(
+      spatial?.pan('spindle') ?? 0,
+      now,
+      0.05,
+    );
+  };
+  const setTapeTransport = async (mode: CassetteButton) => {
+    const ownRequest = ++tapeRequest;
+    if (mode === 'stop') {
+      tapeMusic?.press('stop');
+      return;
+    }
+    await unlock();
+    if (!graph || disposed || ownRequest !== tapeRequest) return;
+    tapeMusic ??= createTapeMusic(
+      graph.context,
+      graph.master,
+      tapeManifest.tracks,
+      () => ({
+        gain: distanceGain('cassette'),
+        pan: spatial?.pan('cassette') ?? 0,
+      }),
+    );
+    tapeMusic.press(mode);
+  };
   const update = (
     state: RigState,
     controls: RackControls,
     reducedMotion: boolean,
   ) => {
     if (!graph || !visible) return;
+    tapeMusic?.update();
     const { context } = graph;
     writeSoundParameters(state, controls, parameters);
     const now = context.currentTime;
     ramp(graph.room.gain, parameters.roomGain, now);
+    ramp(
+      graph.recirculator.gain,
+      recirculatorWorking ? 0.06 * distanceGain('recirculator') : 0,
+      now,
+    );
     ramp(
       graph.rectifier.gain,
       plantPowered ? 0.22 * distanceGain('rectifier') : 0,
@@ -594,6 +710,8 @@ export function createSoundEngine() {
   };
   const dispose = () => {
     disposed = true;
+    tapeRequest++;
+    tapeMusic?.dispose();
     bootRequest++;
     bootSource?.stop();
     cassetteRequest++;
@@ -601,6 +719,9 @@ export function createSoundEngine() {
     pending.length = 0;
     if (!graph) return;
     graph.master.gain.value = 0;
+    graph.recordings.dispose();
+    graph.columnVoice.dispose();
+    graph.columnMechanics.dispose();
     for (const source of graph.sources) source.stop();
     graph.master.disconnect();
   };
@@ -608,14 +729,19 @@ export function createSoundEngine() {
     setPlantPower(on: boolean) {
       plantPowered = on;
     },
+    setRecirculator(on: boolean) {
+      recirculatorWorking = on;
+    },
     setSprinklers(on: boolean) {
       sprinklersActive = on;
     },
     unlock,
     playComputerBoot,
     playCassetteButton,
+    setTapeTransport,
     play,
     update,
+    updateColumn,
     setMix,
     setSources,
     setTransmission,

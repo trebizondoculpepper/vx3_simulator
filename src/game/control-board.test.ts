@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DRIVE_FAULT,
   acknowledge,
+  annunciators,
   boardHandles,
   boardView,
   createBoard,
@@ -12,6 +14,7 @@ import {
 import { createRackControls, toggleIds } from './rack-controls';
 import { createRig } from './rig';
 import { createSafetyTelltales } from './safety-telltales';
+import { createColumnPrep } from './column-prep';
 
 function inputs() {
   return {
@@ -21,7 +24,8 @@ function inputs() {
   };
 }
 
-const faultTiles = (tiles: boolean[]) => [tiles[5], tiles[11], tiles[17]];
+const INSTAB = annunciators.findIndex((window) => window.label === 'INSTAB');
+const faultTiles = (tiles: boolean[]) => [tiles[DRIVE_FAULT], tiles[INSTAB]];
 
 describe('board handles', () => {
   it('repeat every primary rack switch exactly once, plus the mains', () => {
@@ -75,7 +79,7 @@ describe('alarm windows', () => {
     state.rig.controls.mains = true;
     state.rig.instability = 0.9;
     stepBoard(board, state, 0.1);
-    expect(board.alarms.fault).toBe('unacknowledged');
+    expect(board.alarms[DRIVE_FAULT]).toBe('unacknowledged');
     const frames = [0, 1, 2, 3].map(() => {
       stepBoard(board, state, 0.2);
       return faultTiles(boardView(board, state).tiles)[0];
@@ -86,21 +90,13 @@ describe('alarm windows', () => {
     expect(acknowledge(board, state)).toBe(true);
     for (let i = 0; i < 4; i++) {
       stepBoard(board, state, 0.2);
-      expect(faultTiles(boardView(board, state).tiles)).toEqual([
-        true,
-        true,
-        true,
-      ]);
+      expect(faultTiles(boardView(board, state).tiles)).toEqual([true, true]);
     }
 
     state.rig.instability = 0;
     stepBoard(board, state, 0.1);
-    expect(board.alarms.fault).toBe('normal');
-    expect(faultTiles(boardView(board, state).tiles)).toEqual([
-      false,
-      false,
-      false,
-    ]);
+    expect(board.alarms[DRIVE_FAULT]).toBe('normal');
+    expect(faultTiles(boardView(board, state).tiles)).toEqual([false, false]);
   });
 
   it('keep flashing after an incident until someone acknowledges', () => {
@@ -108,9 +104,9 @@ describe('alarm windows', () => {
     const state = inputs();
     latchFault(board);
     stepBoard(board, state, 1);
-    expect(board.alarms.fault).toBe('unacknowledged');
+    expect(board.alarms[DRIVE_FAULT]).toBe('unacknowledged');
     acknowledge(board, state);
-    expect(board.alarms.fault).toBe('normal');
+    expect(board.alarms[DRIVE_FAULT]).toBe('normal');
     expect(acknowledge(board, state)).toBe(false);
   });
 });
@@ -138,34 +134,51 @@ describe('board lamps', () => {
     expect(grid.slice(16, 24).filter(Boolean)).toHaveLength(0);
   });
 
-  it('report mains and running plant on the annunciators', () => {
-    const board = createBoard();
-    const state = inputs();
-    expect(boardView(board, state).tiles.slice(0, 6)).toEqual(
-      Array(6).fill(false),
-    );
-    state.rig.controls.mains = true;
-    state.rig.spindle = 0.6;
-    const tiles = boardView(board, state).tiles.slice(0, 6);
-    expect(tiles[0]).toBe(true);
-    expect(tiles[1]).toBe(true);
-    expect(tiles[2]).toBe(false);
+  it('give every alarm window its own warning', () => {
+    expect(annunciators).toHaveLength(18);
+    expect(new Set(annunciators.map((window) => window.label)).size).toBe(18);
   });
 
-  it('warns on the western bay when plant power is on but xenon recirculation has stopped', () => {
+  it('show why the drive is held off once NETZ is on', () => {
     const board = createBoard();
+    const prep = createColumnPrep();
     const state = {
       ...inputs(),
-      plantPowered: false,
+      plantPowered: true,
       recirculatorWorking: false,
+      xenonFlowSlpm: 0,
+      gen2: { prep },
+      permit: false,
     };
-    expect(boardView(board, state).tiles[4]).toBe(false);
+    const lit = () => {
+      stepBoard(board, state, 0.1);
+      acknowledge(board, state);
+      return annunciators
+        .filter((_, i) => boardView(board, state).tiles[i])
+        .map((window) => window.label);
+    };
+    expect(lit()).toEqual([]);
+    state.rig.controls.mains = true;
+    expect(lit()).toEqual([
+      'HEIZ. GESP.',
+      'KOPF OFFEN',
+      'XE FLUSS',
+      'UMWÄLZUNG',
+    ]);
+    prep.lift = 0;
+    prep.clamped = true;
+    expect(lit()).toContain('O2 KESSEL');
+    expect(lit()).not.toContain('KOPF OFFEN');
+  });
+
+  it('warn that the plant master is off, whatever else is happening', () => {
+    const board = createBoard();
+    const state = { ...inputs(), plantPowered: false };
+    stepBoard(board, state, 0.1);
+    acknowledge(board, state);
+    expect(boardView(board, state).tiles[0]).toBe(true);
     state.plantPowered = true;
-    expect(boardView(board, state).tiles[4]).toBe(true);
-    stepBoard(board, state, 0.5);
-    expect(boardView(board, state).tiles[4]).toBe(false);
-    state.recirculatorWorking = true;
-    stepBoard(board, state, 0.5);
-    expect(boardView(board, state).tiles[4]).toBe(false);
+    stepBoard(board, state, 0.1);
+    expect(boardView(board, state).tiles[0]).toBe(false);
   });
 });

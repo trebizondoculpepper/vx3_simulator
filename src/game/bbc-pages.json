@@ -21,11 +21,25 @@
     ["MASCHINE AUSGESCHALTET", "#f4e04a"],
     ["", ""],
     ["DIE VERSORGUNG IST FREIGEGEBEN.", "#f2f2ee"],
-    ["AM RACK: NETZ / BREAKER SCHLIESSEN.", "#f2f2ee"],
+    ["AM OSTPULT: NETZ SCHLIESSEN.", "#f2f2ee"],
     ["DANACH DIE VENTILE AUFHEIZEN LASSEN.", "#f2f2ee"],
     ["DIE FERROKERNE BRAUCHEN DEN ANTRIEB.", "#f2f2ee"],
     ["------------------------------------", "#f2f2ee"],
     ["", ""]
+  ],
+  "vessel": [
+    ["VX3  BETRIEBSDIAGNOSE  1.4", "#f4e04a"],
+    ["UNIVERSITAET LEIPZIG  -02.17", "#5fe0e8"],
+    ["------------------------------------", "#f2f2ee"],
+    ["", ""],
+    ["HEIZUNG GESPERRT", "#f4e04a"],
+    ["", ""],
+    ["DER KESSEL IST NICHT BEREIT:", "#f2f2ee"],
+    ["KOPF SENKEN UND SPANNEN.", "#f2f2ee"],
+    ["SPUELEN (XE EIN + AUSLASS) BIS O2=0.", "#f2f2ee"],
+    ["AUSLASS ZU: XENON AUF 1,2 BAR.", "#f2f2ee"],
+    ["UMWAELZPUMPE EINSCHALTEN.", "#f2f2ee"],
+    ["------------------------------------", "#f2f2ee"]
   ],
   "xenon-low": [
     ["VX3  BETRIEBSDIAGNOSE  1.4", "#f4e04a"],
