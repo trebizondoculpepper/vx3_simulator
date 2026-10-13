@@ -1,6 +1,7 @@
 import { createVariantPicker } from '../game/sound-variants';
 
 const assets = {
+  key: [new URL('./assets/key-thock.wav', import.meta.url)],
   button: [new URL('./assets/button-press.wav', import.meta.url)],
   'toggle-up': [new URL('./assets/switch-click.wav', import.meta.url)],
   'toggle-down': [new URL('./assets/switch-click.wav', import.meta.url)],
@@ -18,6 +19,7 @@ const assets = {
 export type RecordedCue = keyof typeof assets;
 export const isRecordedCue = (cue: string): cue is RecordedCue => cue in assets;
 const levels: Record<RecordedCue, number> = {
+  key: 0.09,
   button: 0.07,
   'toggle-up': 0.07,
   'toggle-down': 0.07,

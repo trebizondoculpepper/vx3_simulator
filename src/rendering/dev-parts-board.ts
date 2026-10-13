@@ -88,6 +88,7 @@ export function createPartsBoard(kit: PanelKit) {
       latching: i % 2 === 0,
       lit: i % 2 === 0,
     });
+    made.cap.name = `${colour.toUpperCase()} illuminated button`;
     at(made.group, -0.19 + i * 0.026, 0.104);
     uses.set(made.cap, made.press);
     updates.push(made.update);
@@ -103,6 +104,7 @@ export function createPartsBoard(kit: PanelKit) {
         lit: true,
       },
     );
+    made.cap.name = `${GERMAN_COUNT[i]} LED-window button`;
     at(made.group, 0.0 + i * 0.026, 0.104);
     uses.set(made.cap, made.press);
     updates.push(made.update);
@@ -136,6 +138,7 @@ export function createPartsBoard(kit: PanelKit) {
     let value = 0.3;
     const made = createKnob(kit, { ...options, value });
     const x = -0.18 + i * 0.045;
+    made.group.name = `${name} knob`;
     at(made.group, x, 0.045);
     uses.set(made.group, (direction = 1) => {
       value = stepKnob(value, direction);
@@ -146,24 +149,28 @@ export function createPartsBoard(kit: PanelKit) {
   });
   let up = true;
   const toggle = createToggle(kit, up);
+  toggle.group.name = 'TOGGLE';
   at(toggle.group, 0.02, 0.045);
   uses.set(toggle.group, () => toggle.set((up = !up)));
   updates.push(toggle.update);
   caption('TOGGLE', 0.02, 0.016);
   let mains = true;
   const rocker = createRocker(kit, mains);
+  rocker.group.name = 'ROCKER';
   at(rocker.group, 0.065, 0.045);
   uses.set(rocker.group, () => rocker.set((mains = !mains)));
   updates.push(rocker.update);
   caption('ROCKER', 0.065, 0.016);
   let turned = false;
   const lock = createKeySwitch(kit, turned);
+  lock.group.name = 'KEY SWITCH';
   at(lock.group, 0.11, 0.045);
   uses.set(lock.group, () => lock.set((turned = !turned)));
   updates.push(lock.update);
   caption('KEY SWITCH', 0.11, 0.016);
   let position = 0;
   const slide = createSlideSwitch(kit, 3, position);
+  slide.group.name = 'SLIDE';
   at(slide.group, 0.15, 0.045);
   uses.set(slide.group, () => slide.set((position = (position + 1) % 3)));
   updates.push(slide.update);

@@ -164,6 +164,39 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     ...passages.uses,
   ]);
 
+  const controlNames = new Map(
+    rig.clickables.map((control) => [control.object, control.name]),
+  );
+  const controlLog = document.createElement('ol');
+  controlLog.setAttribute('aria-label', 'Controls used');
+  controlLog.setAttribute('role', 'log');
+  controlLog.setAttribute('aria-live', 'polite');
+  Object.assign(controlLog.style, {
+    position: 'absolute',
+    left: '12px',
+    top: '116px',
+    margin: '0',
+    padding: '8px 12px',
+    listStyle: 'none',
+    pointerEvents: 'none',
+    maxWidth: 'min(460px, calc(100% - 48px))',
+    background: 'rgba(14,12,9,0.78)',
+    color: '#e9e1c8',
+    font: '13px/1.45 "Courier New", monospace',
+  });
+  controlLog.hidden = true;
+  canvas.parentElement?.append(controlLog);
+  const reportControl = (name: string, type: string) => {
+    const line = `${name} — ${type}`;
+    const item = document.createElement('li');
+    item.textContent = line;
+    controlLog.prepend(item);
+    while (controlLog.children.length > 8)
+      controlLog.lastElementChild!.remove();
+    controlLog.hidden = false;
+    console.info(`dev room: ${line}`);
+  };
+
   // On-screen notes.
   const notes = document.createElement('div');
   notes.className = 'dev-room-notes';
@@ -603,13 +636,51 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   const useAt = (x: number, y: number) => {
     const found = usableAt(x, y);
     if (!found) return;
-    console.debug('dev room: worked', found.object.name || found.object.type);
+
     // The part's sound, judged before the click changes it.
     const kind = soundOf(found.mesh);
+    const typeNames: Partial<Record<ControlSound, string>> = {
+      button: 'push-button',
+      key: 'keycap',
+      toggle: 'toggle switch',
+      rocker: 'rocker switch',
+      'key-switch': 'key switch',
+      knob: 'rotary knob',
+      selector: 'rotary selector',
+      locked: 'locked rotary selector',
+      slide: 'slide switch',
+      handwheel: 'handwheel',
+      isolator: 'power isolator',
+    };
+    let name = controlNames.get(found.object) ?? found.object.name;
+    for (
+      let parent = found.object.parent;
+      !name && parent;
+      parent = parent.parent
+    )
+      name = parent.name;
+    reportControl(
+      name || 'Unnamed control',
+      kind ? (typeNames[kind] ?? kind) : 'door handle',
+    );
     // Knobs and selectors turn by the side clicked, as everywhere in the game.
     found.use(knobDirection(found.object, found.point, camera));
     if (kind) sounds?.play(kind);
   };
+
+  model.addEventListener('click', (event) => {
+    const target = event.target;
+    if (target instanceof HTMLButtonElement)
+      reportControl(
+        target.textContent?.trim() || 'Model command',
+        'push-button',
+      );
+  });
+  model.addEventListener('input', (event) => {
+    const target = event.target;
+    if (target instanceof HTMLInputElement)
+      reportControl(target.dataset.control || 'Model setting', 'slider');
+  });
 
   // Walk the room as in the lab. The walls, the open front and the three
   // exhibits are solid.
@@ -675,6 +746,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     walk.dispose();
     passages.dispose();
     notes.remove();
+    controlLog.remove();
     model.remove();
     voice?.dispose();
     sounds?.dispose();

@@ -134,6 +134,7 @@ export function createModelDriveBoard(
     const made = createToggle(kit, state());
     made.group.scale.setScalar(1.6);
     at(made.group, x, 0.075);
+    made.group.name = name;
     uses.set(made.group, flip);
     updates.push(made.update);
     follow.push(() => made.set(state()));
@@ -174,6 +175,7 @@ export function createModelDriveBoard(
       value: read(),
     });
     at(made.group, x, 0.018);
+    made.group.name = name;
     uses.set(made.group, (direction = 1) => {
       write(stepKnob(Math.min(1, Math.max(0, read())), direction, KNOB_STEPS));
     });
@@ -233,6 +235,7 @@ export function createModelDriveBoard(
       size: 0.02,
     });
     at(made.group, x, -0.1);
+    made.cap.name = name;
     uses.set(made.cap, () => {
       made.press();
       press();

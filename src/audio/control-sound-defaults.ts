@@ -4,7 +4,7 @@ import type { RecordedCue } from './recorded-effects';
 /** Shared by the lab and development control test; fixtures may override it. */
 const recordings: Partial<Record<ControlSound, RecordedCue>> = {
   button: 'button',
-  key: 'button',
+  key: 'key',
   toggle: 'toggle-up',
   rocker: 'rocker',
   slide: 'toggle-up',

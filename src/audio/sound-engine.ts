@@ -21,6 +21,7 @@ export type SoundCue =
   | 'knob'
   | 'selector'
   | 'button'
+  | 'key'
   | 'rocker'
   | 'fire-call'
   | 'breaker-on'

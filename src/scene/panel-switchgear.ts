@@ -826,14 +826,14 @@ export function createPowerIsolator(
     group,
     new BoxGeometry(0.096, 0.096, 0.005),
     yellow,
-    0.004,
+    0,
     plateY,
     face + 0.0025,
   );
-  printed('I', 0.004, plateY + 0.042, '#1b1b1c', 24, 0, face + 0.0054);
-  printed('O', 0.004 - 0.042, plateY, '#1b1b1c', 24, 0, face + 0.0054);
-  const ring = peg(group, yellow, 0.037, 0.012, face + 0.005, 28, 0.039);
-  ring.position.x = 0.004;
+  printed('I', 0, plateY + 0.043, '#1b1b1c', 20, 0, face + 0.0054);
+  printed('O', -0.043, plateY, '#1b1b1c', 20, 0, face + 0.0054);
+  const ring = peg(group, yellow, 0.033, 0.012, face + 0.005, 28, 0.035);
+  ring.position.x = 0;
   ring.position.y = plateY;
   // The state window, in the body above the plate where the handle never
   // covers it, redrawn when it changes.
@@ -866,7 +866,7 @@ export function createPowerIsolator(
   handle.name = 'isolator handle';
   group.name = 'power isolator';
   group.userData.sound = 'isolator';
-  handle.position.set(0.004, plateY, face + 0.017);
+  handle.position.set(0, plateY, face + 0.017);
   group.add(handle);
   peg(handle, red, 0.028, 0.006, 0, 24, 0.029);
   peg(handle, kitPaint(kit, '#b8231a'), 0.022, 0.002, 0.006, 20);
