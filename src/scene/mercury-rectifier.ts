@@ -1,3 +1,4 @@
+import { mercuryArcLight } from '../game/mercury-arc-light';
 import { designate } from '../game/machine-parts';
 import {
   BoxGeometry,
@@ -125,14 +126,20 @@ export function createMercuryRectifier(m: number) {
         role: 'indicator',
       });
   });
+  let lightLevel = 0;
   return {
     group,
+    get lightLevel() {
+      return lightLevel;
+    },
     update(on: boolean, seconds: number, reducedMotion: boolean) {
-      const pulse = reducedMotion ? 1 : 1 + Math.sin(seconds * 3) * 0.025;
+      const pulse = mercuryArcLight(on, seconds, reducedMotion);
+      lightLevel = pulse;
       glow.color.set(on ? '#d8fbff' : '#182a30');
+      if (on) glow.color.multiplyScalar(pulse);
       glass.emissiveIntensity = on ? 2.5 * pulse : 0.02;
       light.intensity = on ? 190 * pulse : 0;
-      core.scale.x = on ? pulse : 1;
+      core.scale.x = 1;
     },
     dispose() {
       group.traverse((o) => {

@@ -205,4 +205,16 @@ describe('column cold start', () => {
     expect(stepLift(state, LIFT_SECONDS)).toEqual([]);
     expect(state.lift).toBe(0);
   });
+
+  it('holds the head where it is while the rams have no supply', () => {
+    const state = createColumnPrep();
+    driveLift(state, 0);
+    stepColumnPrep(state, LIFT_SECONDS / 2, {
+      powered: false,
+      ramsPowered: false,
+    });
+    expect(state.lift).toBe(1);
+    stepColumnPrep(state, LIFT_SECONDS / 2, { powered: false });
+    expect(state.lift).toBeCloseTo(0.5);
+  });
 });

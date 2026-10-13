@@ -1,3 +1,5 @@
+import { prepareStageThree } from '../game/stage-three-cheat';
+import { createPrintedImageTexture } from '../scene/printed-image';
 import { defaultControlRecording } from '../audio/control-sound-defaults';
 import type { ControlSound } from '../audio/rig-sounds';
 import { describeMachineChange } from '../game/machine-change';
@@ -17,15 +19,13 @@ import {
   Group,
   MeshBasicMaterial,
   Mesh,
-  NearestFilter,
   OctahedronGeometry,
   PerspectiveCamera,
   PlaneGeometry,
   PointLight,
+  Quaternion,
   Raycaster,
   Scene,
-  SRGBColorSpace,
-  TextureLoader,
   TubeGeometry,
   Vector2,
   Vector3,
@@ -424,8 +424,10 @@ export function startScene(canvas: HTMLCanvasElement) {
   let recirculatorLastSeconds = performance.now() / 1000;
   dynamic.push(() => {
     const seconds = performance.now() / 1000;
+    // The recirculator's pump runs on the mains; the rectifier only feeds
+    // the direct-current equipment.
     recirculator.update(
-      plantRoom.powered,
+      true,
       Math.min(0.1, seconds - recirculatorLastSeconds),
       reducedMotion.matches,
     );
@@ -722,7 +724,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   eastControlPanel.group.rotation.y = -Math.PI / 2;
   lab.add(eastControlPanel.group);
 
-  // The second-generation VX3, the ferrocore column, stands in the bay the
+  // The VX3's ferrocore column and its two cabinets stand in the bay the
   // first rig left, its back to the north wall, beside the computer desk.
   // It is built in metres. Its supply comes through the plant room's
   // master and the east board's NETZ contactor, its xenon from the plant
@@ -740,6 +742,12 @@ export function startScene(canvas: HTMLCanvasElement) {
     },
   });
   const gen2 = createFerrocoreColumnRig({
+    // The column's supply switches (the isolator on the west wall, its NETZ
+    // button and the cabinet rocker) all start switched off.
+    switchedOn: false,
+    // The column's equipment is fed from the plant room's mercury arc
+    // rectifier; the east board and the ceiling lights are on the mains.
+    supplied: () => plantRoom.powered,
     log: (text) => write(text),
     onEvent: (event) => {
       if (event.kind !== 'catastrophe') return;
@@ -868,7 +876,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   for (const control of gen2.clickables)
     control.object.traverse((part) => {
       if (!(part instanceof Mesh)) return;
-      input(part, 'VX3 gen2', control.name, (hit) => {
+      // The log names the machine and the unit the control is on.
+      input(part, `VX3 ${control.unit}`, control.name, (hit) => {
         control.use(
           knobDirection(control.object, hit.point, perspectiveCamera),
         );
@@ -1033,7 +1042,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     fixture(part, 'Light switch', () => {
       if (fire.ruinCause) return;
       const on = labRoom.lights.toggle();
-      audio.play(on ? 'toggle-up' : 'toggle-down');
+      // A light switch clicks: a light plastic tick, not a toggle's snap.
+      audio.play('key');
       write(
         on ? 'Lights on. The tubes take their time about it.' : 'Lights off.',
       );
@@ -1044,7 +1054,10 @@ export function startScene(canvas: HTMLCanvasElement) {
     lamp.intensity = 2.1 * level;
     rim.intensity = 0.7 * level;
     ps1Uniforms.roomLight.value = 0.03 + 0.97 * labRoom.lights.level;
-    ps1Uniforms.plantLight.value = 0.03 + 0.97 * plantRoom.lightLevel;
+    ps1Uniforms.plantLight.value = Math.max(
+      0.03 + 0.97 * plantRoom.lightLevel,
+      rectifier.lightLevel * 0.85,
+    );
     plantDoorLight.value = inCorridor() ? 1 : ps1Uniforms.plantLight.value;
     for (const item of lamps)
       item.emissive.copy(item.color).multiply(item.color);
@@ -1162,7 +1175,6 @@ export function startScene(canvas: HTMLCanvasElement) {
     [0.34, -0.16],
   ])
     disc(pinBoard, 0.04, '#c34b39', x, y, 0.14);
-  const posterLoader = new TextureLoader();
   for (const [index, name] of [
     'volt-xoccula',
     'neumann-dynamik',
@@ -1178,9 +1190,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     frame.scale.setScalar(worldUnitsPerMetre);
     lab.add(frame);
     cube(frame, 0.46, 0.67, 0.012, '#4b3e31', 0, 0, 0);
-    const poster = posterLoader.load(`/posters/${name}.png`);
-    poster.colorSpace = SRGBColorSpace;
-    poster.magFilter = NearestFilter;
+    const poster = createPrintedImageTexture(`/posters/${name}.webp`);
     textures.push(poster);
     const printedFace = new Mesh(
       new PlaneGeometry(0.42, 0.63),
@@ -1558,16 +1568,33 @@ export function startScene(canvas: HTMLCanvasElement) {
   const benchComputer = createBenchComputer();
   let benchLastSeconds = performance.now() / 1000;
   let benchDescription = '';
-  input(bbc.resetTarget, 'Bench computer', 'Computer restart', () => {
-    benchComputer.reset();
+  // The BBC starts switched off; its power switch turns the Cub on and off
+  // with it. Switched on, it boots and loads the diagnostic disk.
+  let benchOn = false;
+  cub.power(false);
+  input(bbc.resetTarget, 'Bench computer', 'Power switch', () => {
+    benchOn = !benchOn;
+    cub.power(benchOn);
     benchLastSeconds = performance.now() / 1000;
     cub.update(benchLastSeconds, [], false);
+    if (!benchOn) {
+      write('BBC Micro: ausgeschaltet.');
+      return;
+    }
+    benchComputer.reset();
     void audio.playComputerBoot();
-    write('BBC Micro: Neustart. Betriebsdiagnose wird geladen.');
+    write('BBC Micro: eingeschaltet. Betriebsdiagnose wird geladen.');
   });
   withinReach.add(bbc.resetTarget);
   dynamic.push(() => {
     const seconds = performance.now() / 1000;
+    if (!benchOn) {
+      // Off: a dark tube, and the disk drive's lamp out.
+      benchLastSeconds = seconds;
+      cub.update(seconds, [], false);
+      diskDrive.update(0, reducedMotion.matches);
+      return;
+    }
     benchComputer.step(Math.min(0.1, seconds - benchLastSeconds));
     benchLastSeconds = seconds;
     const screen = benchScreen(
@@ -1678,6 +1705,9 @@ export function startScene(canvas: HTMLCanvasElement) {
       entryParts.has(mesh) ||
       new Vector3().setFromMatrixPosition(mesh.matrixWorld).z >
         plantRoom.bounds.maxZ - 0.01,
+    // The walls and fittings as well, so the room is as dark as its switch
+    // leaves it, not lit by the lab's lights through the door.
+    true,
   );
   // Plant-room light does not borrow the lab's fill while viewed through its door.
   perspectiveCamera.layers.enable(1);
@@ -1733,7 +1763,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     withinReach.add(part);
     fixture(part, 'Plant-room light switch', () => {
       const on = plantRoom.toggleLights();
-      audio.play(on ? 'toggle-up' : 'toggle-down');
+      // A light switch clicks: a light plastic tick, not a toggle's snap.
+      audio.play('key');
       write(on ? 'Technikraum: Licht an.' : 'Technikraum: Licht aus.');
     });
   }
@@ -1792,21 +1823,57 @@ export function startScene(canvas: HTMLCanvasElement) {
     room.maxZ + wallThickness + 0.035,
   );
   lab.add(cheats.group);
-  fixture(cheats.xenonButton, 'Cheat: xenon on', () => {
+  const enableXenon = () => {
+    if (!plantRoom.powered) plantRoom.togglePower();
+    if (!recirculator.enabled) recirculator.toggle();
     plantRoom.openGate();
     if (xenon.setting < 0.5) xenon.setRegulator(0.5);
+  };
+  const enableLights = () => {
+    if (!labRoom.lights.on) labRoom.lights.toggle();
+    if (!plantRoom.lightsOn) plantRoom.toggleLights();
+  };
+  fixture(cheats.xenonButton, 'Cheat: xenon on', () => {
+    enableXenon();
     audio.play('selector');
-    write('Cheat: xenon cage open, regulator set for 5 SLPM.');
+    write(
+      'Cheat: plant supply on, recirculator switched on, xenon cage open; regulator at least 5 SLPM.',
+    );
   });
   fixture(cheats.rectifierButton, 'Cheat: mercury arc rectifier on', () => {
     if (!plantRoom.powered) plantRoom.togglePower();
     audio.play('breaker-on', 'rectifier');
     write('Cheat: plant master supply on. Mercury arc struck.');
   });
+  fixture(cheats.stageThreeButton, 'Cheat: Stage 3 complete', () => {
+    enableLights();
+    enableXenon();
+    for (const [name, selected] of [
+      ['supply isolator', gen2.powerSelections.isolator],
+      ['NETZ button', gen2.powerSelections.mains],
+      ['cabinet supply rocker', gen2.powerSelections.cabinet],
+    ] as const) {
+      if (!selected)
+        gen2.clickables.find((control) => control.name === name)!.use();
+    }
+    Object.assign(settings, createRackControls());
+    settings.mains = false;
+    Object.assign(rig, createRig());
+    applyRack(settings, rig.controls);
+    prepareStageThree(gen2.prep);
+    audio.play('button');
+  });
+  fixture(cheats.lightsButton, 'Cheat: lights on', () => {
+    enableLights();
+    audio.play('rocker');
+  });
   dynamic.push(() =>
     cheats.update({
-      xenon: xenonReady(xenon.flowSlpm),
+      xenon: xenonReady(lineFlow(xenon.flowSlpm, recirculator.working)),
       rectifier: plantRoom.powered,
+      stageThree:
+        gen2.running && atmospherePermit(gen2.prep, recirculator.working),
+      lights: labRoom.lights.on && plantRoom.lightsOn,
     }),
   );
 
@@ -1861,7 +1928,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   });
   scene.updateMatrixWorld(true);
   // Each sound comes from what makes it. The machine's sources (supply,
-  // valves, spindle, field, monitors, service) are on the second-generation
+  // valves, spindle, field, monitors, service) are on the
   // VX3 now: its grey cabinet, the column and its olive cabinet. Many cues
   // default to them (relay, breakers, warnings, sparks, purge), so without
   // them those would be silent.
@@ -1986,9 +2053,9 @@ export function startScene(canvas: HTMLCanvasElement) {
   canvas.parentElement?.append(overlay);
   const manualPages = [
     {
-      title: 'OPERATING GUIDE / VX3 GEN. 2 COLD START',
+      title: 'OPERATING GUIDE / VX3 COLD START',
       content:
-        'TECHNIKRAUM\n1  HAUPTSCHALTER closed. KREISLAUF on.\n2  Xenon cage open; regulator 2 SLPM or more.\nCOLUMN AND WEST WALL\n3  Isolator ON, NETZ button lit, rocker up.\nEAST BOARD\n4  NETZ on. Heaters stay interlocked until\n   the vessel is ready: read the alarm row.\nVESSEL (SÄULE)\n5  SENKEN; wait for UNTEN. SPANNEN.\n6  XE EIN, outlet open: purge to O2 = 0.\n7  Outlet shut: KAMMERDRUCK over 1.2 bar.\nDRIVE\n8  Heaters warm by themselves; core glows.\n9  DREHZAHL, FELD up; TRIMM for a steady\n   field. Core to full power.\n\nNEVER heat an open or unpurged chamber.\nQUITT or RÜCKS. fits a fresh core.',
+        'TECHNIKRAUM\n1  HAUPTSCHALTER closed. KREISLAUF on.\n2  Xenon cage open; regulator 2 SLPM or more.\nSUPPLY (each cabinet: power in its base)\n3  Isolator on the west wall ON.\n4  A11 NETZ button. B13 rocker on.\nVESSEL (B11 SÄULE)\n5  SENKEN; wait for UNTEN. SPANNEN.\n6  XE EIN, beam-tube outlet open:\n   purge to O2 = 0. Outlet shut:\n   KAMMERDRUCK over 1.2 bar.\nEAST BOARD\n7  NETZ on. Heaters warm; core glows.\n   If not, read the alarm row.\nDRIVE (B6 ANTRIEB)\n8  DREHZAHL, FELD up; TRIMM to SOLL.\n   Core to full power.\n\nNEVER heat an open or unpurged chamber.\nQUITT (B11) or RÜCKS. fits a fresh core.',
     },
     {
       title: 'INSTRUCTION MANUAL / CORE HANDLING',
@@ -2106,7 +2173,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       tab.setAttribute('aria-label', `Open logbook, ${unseen} new entries`);
     }
   };
-  write('Lab opened. Second-generation VX3 cold. For educational use only.');
+  write('Lab opened. VX3 cold. For educational use only.');
   overlay.querySelector('#close-log')!.addEventListener('click', () => {
     audio.play('paper');
     logOpen = false;
@@ -2169,6 +2236,9 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   canvas.addEventListener('wheel', wheel, { passive: false });
   const raycaster = new Raycaster();
+  // The plant room is drawn on layer 1 for its own lighting; the pointer
+  // must see it too, or none of its controls can be worked.
+  raycaster.layers.enable(1);
   const pointer = new Vector2();
   let orbitYaw = 0;
   let orbitPitch = 0;
@@ -2200,6 +2270,12 @@ export function startScene(canvas: HTMLCanvasElement) {
   // Named viewpoints: shareable inspection links (?view=rack) and the
   // teleport board's destinations.
   const viewpoints: Record<string, () => void> = {
+    cheats: () => {
+      walker.x = cheats.group.position.x - 0.1575 * metre;
+      walker.z = cheats.group.position.z + 1.4 * metre;
+      orbitYaw = 0;
+      orbitPitch = Math.atan2(1.334375 - 1.8034, 1.4);
+    },
     'safety-notices': () => {
       walker.x = room.minX + 1.4 * metre;
       walker.z = pinBoard.position.z;
@@ -2374,7 +2450,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   if (import.meta.env.DEV) {
     // Every control on the column needs its own name for the log.
-    const names = gen2.clickables.map((c) => c.name);
+    const names = gen2.clickables.map((c) => `${c.unit}: ${c.name}`);
     const repeated = names.filter((n, i) => names.indexOf(n) !== i);
     if (repeated.length)
       console.error(
@@ -2403,7 +2479,7 @@ export function startScene(canvas: HTMLCanvasElement) {
           orbitPitch = pitch;
         },
         toolRack: () => toolRack.group.getWorldPosition(new Vector3()),
-        /** The second-generation VX3 and the xenon bank that feeds it. */
+        /** The VX3 (the column and its cabinets) and its xenon bank. */
         gen2,
         xenon,
         recirculator,
@@ -2419,7 +2495,40 @@ export function startScene(canvas: HTMLCanvasElement) {
          * Work a control by the name the log gives it ("machine: control"),
          * or a room fitting by its name, as a click on it would.
          */
-        press(name: string) {
+        press(name: string, direction = 1) {
+          let found: Object3D | undefined;
+          scene.traverse((object) => {
+            if (found || !actions.has(object.id)) return;
+            const part = designationOf(object);
+            const label = part
+              ? `${part.machine}: ${part.name}`
+              : fixtureOf(object);
+            if (label === name) found = object;
+          });
+          if (!found) return false;
+          // Click on the right half (direction 1) or left half (-1) as seen
+          // from the camera, so knobs turn the intended way.
+          const at = found
+            .getWorldPosition(new Vector3())
+            .add(
+              new Vector3(
+                direction * 0.05 * worldUnitsPerMetre,
+                0,
+                0,
+              ).applyQuaternion(perspectiveCamera.quaternion),
+            );
+          actions.get(found.id)?.({
+            object: found,
+            point: at,
+            distance: 1,
+          } as Intersection);
+          return true;
+        },
+        /**
+         * Stand `metres` in front of a control (by its log name or a fixture
+         * name), looking straight at it, for screenshots.
+         */
+        standAt(name: string, metres = 1.2, crouch = false) {
           let found: Object3D | undefined;
           scene.traverse((object) => {
             if (found || !actions.has(object.id)) return;
@@ -2431,12 +2540,74 @@ export function startScene(canvas: HTMLCanvasElement) {
           });
           if (!found) return false;
           const at = found.getWorldPosition(new Vector3());
-          actions.get(found.id)?.({
-            object: found,
-            point: at,
-            distance: 1,
-          } as Intersection);
+          const out = new Vector3(0, 0, 1)
+            .applyQuaternion(found.getWorldQuaternion(new Quaternion()))
+            .setY(0)
+            .normalize();
+          walker.x = at.x + out.x * metres * worldUnitsPerMetre;
+          walker.z = at.z + out.z * metres * worldUnitsPerMetre;
+          walker.crouched = crouch;
+          walker.lowCrouched = false;
+          walker.crouch = crouch ? 1 : 0;
+          cameraZoom = 1;
+          const eye = eyeY - (crouch ? 0.65 * worldUnitsPerMetre : 0);
+          orbitYaw = Math.atan2(-out.x, out.z);
+          orbitPitch = Math.atan2(at.y - eye, metres * worldUnitsPerMetre);
           return true;
+        },
+        /** Where a control is, by its log name, in world units. */
+        where(name: string) {
+          let at: Vector3 | undefined;
+          scene.traverse((object) => {
+            const part = designationOf(object);
+            const label = part
+              ? `${part.machine}: ${part.name}`
+              : fixtureOf(object);
+            if (!at && label === name && actions.has(object.id))
+              at = object.getWorldPosition(new Vector3());
+          });
+          return at;
+        },
+        /** The world bounds of every registered mesh of a control. */
+        bounds(name: string) {
+          const out: string[] = [];
+          scene.traverse((object) => {
+            const part = designationOf(object);
+            const label = part
+              ? `${part.machine}: ${part.name}`
+              : fixtureOf(object);
+            if (label !== name || !(object instanceof Mesh)) return;
+            const b = new Box3().setFromObject(object);
+            out.push(
+              `${b.min.toArray().map((v) => v.toFixed(2))} → ${b.max.toArray().map((v) => v.toFixed(2))} ${object.visible} ${interactive.includes(object)}`,
+            );
+          });
+          return out;
+        },
+        /** Everything the crosshair's ray passes through, nearest first. */
+        ray() {
+          pointer.set(0, 0);
+          raycaster.setFromCamera(pointer, perspectiveCamera);
+          return raycaster
+            .intersectObjects(scene.children, true)
+            .slice(0, 6)
+            .map((hit) => ({
+              d: +hit.distance.toFixed(2),
+              clickable: actions.has(hit.object.id),
+              name:
+                designationOf(hit.object)?.name ??
+                fixtureOf(hit.object) ??
+                hit.object.parent?.name ??
+                '',
+              visible: hit.object.visible,
+            }));
+        },
+        /** What the crosshair would work now, by its log name. */
+        aimedAt() {
+          const hit = target();
+          if (!hit) return null;
+          const part = designationOf(hit.object);
+          return part ? `${part.machine}: ${part.name}` : fixtureOf(hit.object);
         },
         /** The newest operator's log lines, newest first. */
         log: () =>

@@ -146,6 +146,8 @@ export function createCheatBoard(worldUnitsPerMetre: number) {
   const board = createTestingBoard(worldUnitsPerMetre, [
     'XENON ON',
     'MERCURY ARC\nRECTIFIER ON',
+    'STAGE 3 COMPLETE',
+    'LIGHTS ON',
   ]);
   board.group.name = 'CheatBoard';
   return {
@@ -154,10 +156,19 @@ export function createCheatBoard(worldUnitsPerMetre: number) {
     xenonButton: board.buttons[0],
     /** Closes the plant-room master supply, striking the rectifier. */
     rectifierButton: board.buttons[1],
+    stageThreeButton: board.buttons[2],
+    lightsButton: board.buttons[3],
     /** Light each row's lamp when its state is already set. */
-    update(state: { xenon: boolean; rectifier: boolean }) {
+    update(state: {
+      xenon: boolean;
+      rectifier: boolean;
+      stageThree: boolean;
+      lights: boolean;
+    }) {
       board.show(0, state.xenon);
       board.show(1, state.rectifier);
+      board.show(2, state.stageThree);
+      board.show(3, state.lights);
     },
     dispose: board.dispose,
   };

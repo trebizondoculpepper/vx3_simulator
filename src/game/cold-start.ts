@@ -8,9 +8,9 @@
  *   the core's temperature;
  * - the xenon supply (the catalogue's `xenon-*` components run by
  *   `rig-model.ts`): the regulator and its delivery pressure;
- * - the plant: the mercury arc rectifier that powers the plant room, and
- *   the xenon recirculator, which works when the plant has power and its
- *   KREISLAUF switch is on;
+ * - the plant: the mercury arc rectifier, which feeds the direct-current
+ *   equipment, and the xenon recirculator, whose pump runs on the mains
+ *   and works whenever its KREISLAUF switch is on;
  * - the ferrocore drive (`rig.ts`): mains, valve heaters, phase spindle,
  *   Helmholtz-Blatz field and trim;
  * - the anomalies (`ferrocore-anomaly.ts`) that follow from running cores.
@@ -159,9 +159,9 @@ export const oxygenSensorVolts = (state: ColdStartState) =>
 
 export const plantPowered = (state: ColdStartState) => state.rectifier;
 
-/** The recirculator is running: plant power and its switch. */
+/** The recirculator is running: its pump is on the mains, so its switch. */
 export const recirculatorWorking = (state: ColdStartState) =>
-  plantPowered(state) && state.recirculatorSwitch;
+  state.recirculatorSwitch;
 
 /** Gas is going round the loop: running, sealed, purge shut, xenon in it. */
 export const recirculating = (state: ColdStartState) =>

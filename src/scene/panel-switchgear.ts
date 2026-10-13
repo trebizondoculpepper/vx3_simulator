@@ -742,7 +742,7 @@ export interface PowerIsolator {
  */
 export function createPowerIsolator(
   kit: PanelKit,
-  { on = false, rating = '4P  32A', maker = 'LABEL' } = {},
+  { on = false, rating = '4P  32A', maker = 'NEUMANN' } = {},
 ): PowerIsolator {
   const group = new Group();
   const w = 0.115;

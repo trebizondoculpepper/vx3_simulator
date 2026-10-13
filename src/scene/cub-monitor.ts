@@ -6,7 +6,12 @@ import {
   Mesh,
   PlaneGeometry,
 } from 'three';
-import type { BufferGeometry, Material, Texture } from 'three';
+import type {
+  BufferGeometry,
+  Material,
+  MeshBasicMaterial,
+  Texture,
+} from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { bbcPageIds } from '../game/bench-monitor';
 import type { BbcPageId, ScreenLine } from '../game/bench-monitor';
@@ -213,10 +218,18 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
   );
   lamp.rotation.x = Math.PI / 2;
 
+  const lampColour = (lamp.material as MeshBasicMaterial).color;
   return {
     group,
     /** The picture on the tube, for looking straight at it. */
     screen: face,
+    /**
+     * Switch the monitor on or off with the computer: off, its red power
+     * lamp is dark and the tube shows nothing.
+     */
+    power(on: boolean) {
+      lampColour.set(on ? '#ff2a1e' : '#3a1512');
+    },
     /** Redraw the text if it has changed, and blink the cursor about once a second. */
     update(
       seconds: number,

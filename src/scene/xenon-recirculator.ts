@@ -184,8 +184,9 @@ export function createXenonRecirculator(m: number) {
       enabled = !enabled;
       return enabled;
     },
-    update(plantPowered: boolean, delta: number, reducedMotion: boolean) {
-      working = plantPowered && enabled;
+    /** `supplied` is its mains feed; it runs when that is live and it is on. */
+    update(supplied: boolean, delta: number, reducedMotion: boolean) {
+      working = supplied && enabled;
       switchLever.rotation.x = enabled ? -0.5 : 0.5;
       lamp.material = working ? lampOn : lampOff;
       if (working && !reducedMotion) rotor.rotation.z -= delta * 8;

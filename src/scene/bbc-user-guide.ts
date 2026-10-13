@@ -1,12 +1,5 @@
-import {
-  BoxGeometry,
-  Group,
-  Mesh,
-  NearestFilter,
-  SRGBColorSpace,
-  TextureLoader,
-  TorusGeometry,
-} from 'three';
+import { createPrintedImageTexture } from './printed-image';
+import { BoxGeometry, Group, Mesh, TorusGeometry } from 'three';
 import type { Material } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 
@@ -43,11 +36,10 @@ export function createBbcUserGuide(worldUnitsPerMetre: number) {
   for (let i = 0; i < 5; i++)
     box(0.18, 0.0006, 0.001, pageLine, 0, 0.011 + i * 0.007, 0.1305);
 
-  const coverImage = new TextureLoader().load(
-    '/reference/bbc-micro-user-guide-cover.png',
+  const coverImage = createPrintedImageTexture(
+    '/reference/bbc-micro-user-guide-cover.webp',
+    1599 / 1127,
   );
-  coverImage.colorSpace = SRGBColorSpace;
-  coverImage.magFilter = NearestFilter;
   const printedCover = createPs1Material({ map: coverImage }, true);
   materials.push(printedCover);
   // The print is the box's top face, so it cannot fight a second cover surface.

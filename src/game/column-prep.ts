@@ -54,6 +54,11 @@ export interface ColumnPrepState {
 export interface ColumnPrepInputs {
   /** Whether the rig has mains power. */
   powered: boolean;
+  /**
+   * Whether the rams' pump has a supply; without it the head stays where
+   * it is. Assumed when left out.
+   */
+  ramsPowered?: boolean;
 }
 
 export type ColumnPrepEvent =
@@ -232,7 +237,7 @@ export function stepColumnPrep(
   const events: ColumnPrepEvent[] = [];
   const wasStage = coreStage(state);
 
-  events.push(...stepLift(state, dt));
+  if (inputs.ramsPowered !== false) events.push(...stepLift(state, dt));
 
   if (!isSealed(state)) {
     // Open to the room: the chamber fills with air and the xenon escapes.

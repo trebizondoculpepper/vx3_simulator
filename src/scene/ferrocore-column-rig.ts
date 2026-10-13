@@ -31,7 +31,6 @@ import {
   disposeKit,
   kitGlow,
   kitPaint,
-  GERMAN_COUNT,
 } from './eighties-controls';
 import type { CapColour, EightiesButtonOptions } from './eighties-controls';
 import {
@@ -95,8 +94,7 @@ import {
  * `eighties-controls.ts`, `panel-switchgear.ts` or `panel-instruments.ts`,
  * laid out after the reference. Every control moves when clicked; the
  * head, clamp, valve, supply and NETZ controls work the column's model,
- * and the rest are not wired yet. Printed labels are placeholders for now; the
- * text passed to `label` records what each one is meant to say.
+ * and the rest retain their period panel legends for future wiring.
  */
 
 const U = 0.04445;
@@ -117,6 +115,11 @@ export interface RigClickable {
   name: string;
   /** Work it. Knobs and selectors take the click side: -1 left, 1 right. */
   use(direction?: number): void;
+  /**
+   * The unit it is on, as its number and name ("B11 SÄULE"), or where it is
+   * if not in a cabinet; set once the rig is built.
+   */
+  unit?: string;
 }
 
 export interface FerrocoreColumnRig {
@@ -188,6 +191,17 @@ export interface FerrocoreColumnRigOptions {
   onEvent?: (event: ColumnPrepEvent) => void;
   /** The ferrocore drive the column's panels work, if it has one. */
   drive?: ColumnDriveHookup;
+  /**
+   * Whether the column's own supply switches (its isolator, its NETZ button
+   * and the olive cabinet's rocker) start on; they do unless told otherwise.
+   */
+  switchedOn?: boolean;
+  /**
+   * Whether the installation's equipment supply is live (in the lab, the
+   * plant room's rectifier). Without it the column is dead, whatever its
+   * own switches say; left out, it always is.
+   */
+  supplied?: () => boolean;
 }
 
 /** The log line for something that happened to the column. */
@@ -207,6 +221,45 @@ function describe(event: ColumnPrepEvent): string {
         : 'Column: flux inductance catastrophe. The bottle ran dry through the open outlet.';
   }
 }
+
+/**
+ * Every unit in the two cabinets, by its position: the grey cabinet is A
+ * and the olive cabinet B, numbered from the top. Each carries its number on
+ * the cabinet's upright beside it; units without a title of their own get
+ * their name on the panel. Keys are rack name, top unit and half.
+ */
+const UNITS: Record<
+  string,
+  { id: string; name: string; title?: boolean; tag?: string }
+> = {
+  'grey rack@0': { id: 'A1', name: 'KANÄLE' },
+  'grey rack@2': { id: 'A2', name: 'FC-STEUERUNG' },
+  'grey rack@6': { id: 'A3', name: 'ENDSTUFE' },
+  'grey rack@13': { id: 'A4', name: 'SPULEN', title: true },
+  'grey rack@15': { id: 'A5', name: 'HV KATODE' },
+  'grey rack@18L': { id: 'A6', name: 'VARISTOR', tag: 'A6/7' },
+  'grey rack@18R': { id: 'A7', name: 'XE-REGLER' },
+  'grey rack@22': { id: 'A8', name: 'STRAHLSTROM' },
+  'grey rack@25': { id: 'A9', name: 'STRAHL' },
+  'grey rack@34': { id: 'A10', name: 'TIEGELHEIZUNG' },
+  'grey rack@37': { id: 'A11', name: 'VERSORGUNG' },
+  'olive cabinet@0': { id: 'B1', name: 'KENNUNG' },
+  'olive cabinet@1': { id: 'B2', name: 'MESSWERTE', title: true },
+  'olive cabinet@3': { id: 'B3', name: 'VERDAMPFER 1' },
+  'olive cabinet@6': { id: 'B4', name: 'VERDAMPFER 2' },
+  'olive cabinet@9': { id: 'B5', name: 'ANZEIGE', title: true },
+  'olive cabinet@11': { id: 'B6', name: 'ANTRIEB', title: true },
+  'olive cabinet@15': { id: 'B7', name: 'KAPAZITÄT' },
+  'olive cabinet@19': { id: 'B8', name: 'OFFSET', title: true },
+  'olive cabinet@21': { id: 'B9', name: 'SCHWEBUNG' },
+  'olive cabinet@25': { id: 'B10', name: 'RESERVE', title: true },
+  'olive cabinet@28': { id: 'B11', name: 'SÄULE' },
+  'olive cabinet@32': { id: 'B12', name: 'KERN' },
+  'olive cabinet@35': { id: 'B13', name: 'VERSORGUNG' },
+};
+
+/** The log line for a powered control worked with the column dead. */
+const NO_SUPPLY = 'Column: no supply. Nothing happens.';
 
 /** Fitted panel parts must be at least this far apart, metres. */
 export const PART_CLEARANCE = 0.001;
@@ -322,7 +375,8 @@ export function createFerrocoreColumnRig(
   const ticks: ((seconds: number, on: boolean) => void)[] = [];
   let running = true;
   let selectedMains = () => true;
-  const supply = createPowerIsolator(kit, { on: true });
+  const switchedOn = options.switchedOn ?? true;
+  const supply = createPowerIsolator(kit, { on: switchedOn });
   let isolatorPlate: Object3D = supply.group;
   const prep = createColumnPrep();
   const drive: { hold: boolean; power: boolean | null } = {
@@ -332,7 +386,7 @@ export function createFerrocoreColumnRig(
   const log = options.log ?? (() => {});
   const hookup = options.drive;
   // The olive cabinet's own NETZ rocker is in the rig's supply too.
-  let cabinetMains = true;
+  let cabinetMains = switchedOn;
   let motion = 1;
   /** A slow wander between 0 and 1, different for every seed. */
   const wander = (seconds: number, seed: number, speed = 0.3) =>
@@ -373,13 +427,6 @@ export function createFerrocoreColumnRig(
     fitted(parent, part);
     return part;
   };
-  let labels = 0;
-  /** Placeholder legends, one per line of the intended text. */
-  const placeholder = (intended: string) =>
-    intended
-      .split('\n')
-      .map(() => `LABEL ${String(++labels).padStart(2, '0')}`)
-      .join('\n');
   const label = (
     parent: Object3D,
     intended: string,
@@ -394,7 +441,7 @@ export function createFerrocoreColumnRig(
       bold = true,
     } = {},
   ) => {
-    const mesh = createMicroLabel(kit, placeholder(intended), {
+    const mesh = createMicroLabel(kit, intended, {
       height,
       ink,
       plate,
@@ -402,6 +449,7 @@ export function createFerrocoreColumnRig(
       bold,
     });
     mesh.name = `Label: ${intended}`;
+    mesh.userData.legend = intended;
     mesh.position.set(x, y, 0.0005);
     mesh.rotation.z = tilt;
     parent.add(mesh);
@@ -695,6 +743,8 @@ export function createFerrocoreColumnRig(
     top: number;
     width: number;
     frontZ: number;
+    /** Where unit numbers go: the front of the cabinet's left upright. */
+    upright: { x: number; z: number };
   }
   const panels: { group: Group; w: number; h: number }[] = [];
   /** A front panel `units` high whose top edge is `fromTop` units down the rack. */
@@ -720,6 +770,33 @@ export function createFerrocoreColumnRig(
     const side = offsetX < 0 ? ' left half' : offsetX > 0 ? ' right half' : '';
     p.name = `${rack.name} U${fromTop}–${fromTop + units}${side}`;
     panels.push({ group: p, w: width, h });
+    const unit =
+      UNITS[
+        `${rack.name}@${fromTop}${offsetX < 0 ? 'L' : offsetX > 0 ? 'R' : ''}`
+      ];
+    if (unit) {
+      p.userData.unit = `${unit.id} ${unit.name}`;
+      // Its number on the cabinet's left upright (the left half's only).
+      if (offsetX <= 0) {
+        const tag = createMicroLabel(kit, unit.tag ?? unit.id, {
+          height: unit.tag ? 0.009 : 0.012,
+          plate: '#e8e4d4',
+          ink: '#1d1f22',
+        });
+        tag.position.set(
+          rack.upright.x,
+          rack.top - (fromTop + units / 2) * U,
+          rack.upright.z,
+        );
+        rack.group.add(tag);
+      }
+      if (unit.title)
+        label(p, unit.name, -width / 2 + 0.045, h / 2 - 0.0095, {
+          height: 0.0036,
+          plate: '#2b2d31',
+          ink: '#e8e4d4',
+        });
+    }
     return { group: p, w: width, h };
   };
 
@@ -750,6 +827,7 @@ export function createFerrocoreColumnRig(
     top: 1.95,
     width: 0.483,
     frontZ: 0.33,
+    upright: { x: -0.262, z: 0.3505 },
   };
   left.group.position.set(-0.66, 0, -0.02);
   group.add(left.group);
@@ -791,12 +869,14 @@ export function createFerrocoreColumnRig(
         );
       label(p.group, `KANAL ${i + 1}`, x, 0.031, { height: 0.0022, ink: INK });
       slide(p.group, x - 0.016, -0.006, i % 3 === 0 ? 1 : 0);
-      button(p.group, GERMAN_COUNT[i], 'grey', x + 0.006, -0.006, {
+      button(p.group, 'FREI', 'grey', x + 0.006, -0.006, {
         size: 0.015,
         led: 'green',
         lit: i % 3 !== 1,
       });
       led(p.group, 'red', x + 0.02, 0.016, i === 5 ? 1.1 : 0, i * 0.13);
+      label(p.group, 'H/A', x - 0.016, -0.027, { height: 0.0016, ink: INK });
+      label(p.group, 'STÖR', x + 0.02, 0.027, { height: 0.0014, ink: INK });
     }
   }
   {
@@ -956,6 +1036,7 @@ export function createFerrocoreColumnRig(
     );
     knob(p.group, 0.17, 0.004, 0.012, 'instrument', true);
     label(p.group, 'SPANNUNG', 0.17, -0.032, { height: 0.0022 });
+    label(p.group, 'IST kV', 0.06, -0.025, { height: 0.0022 });
   }
   {
     // 4U: a black display unit and a cream regulator side by side.
@@ -985,6 +1066,7 @@ export function createFerrocoreColumnRig(
     const b = panel(left, 18, 4, '#e2ddcc', half, half / 2);
     label(b.group, 'XE-REGLER', -0.06, 0.06, { height: 0.004, ink: '#9a2a22' });
     knob(b.group, 0.04, 0.016, 0.017, 'instrument', true, INK);
+    named(b.group, 'knob', 'XE-REGLER SOLL knob');
     for (let i = 0; i < 3; i++) {
       const made = key(
         b.group,
@@ -1010,12 +1092,18 @@ export function createFerrocoreColumnRig(
     }
     lamp(b.group, '#ff4a2e', -0.08, 0.025, 0.8);
     label(b.group, 'STÖRUNG', -0.08, 0.008, { height: 0.0022, ink: INK });
-    label(b.group, '85 SLPM', 0.04, -0.062, { height: 0.0026, ink: '#9a2a22' });
+    label(b.group, 'SOLL · SLPM', 0.04, -0.062, {
+      height: 0.0026,
+      ink: '#9a2a22',
+    });
   }
   {
     // 3U: black meter panel: two meters and a block of four selectors.
     const p = panel(left, 22, 3, '#191a1c');
-    label(p.group, 'MODEL FX 320', -0.19, 0.052, { height: 0.0024 });
+    label(p.group, 'MOD. FX 320', -0.19, 0.052, { height: 0.0024 });
+    label(p.group, 'KATODE', -0.13, -0.04, { height: 0.0022 });
+    label(p.group, 'STRAHLSTROM', 0.13, -0.04, { height: 0.0022 });
+    label(p.group, 'BEREICH', 0, 0.046, { height: 0.0022 });
     meter(
       p.group,
       'kV',
@@ -1091,16 +1179,18 @@ export function createFerrocoreColumnRig(
     label(p.group, '°C', 0.138, 0.006, { height: 0.0026 });
     label(p.group, 'TEMP TIEGEL', 0.06, -0.019, { height: 0.0022 });
     led(p.group, 'red', 0.2, 0.02, 0.6);
+    label(p.group, 'ÜBERTEMP.', 0.2, -0.005, { height: 0.0022, ink: INK });
   }
   {
     // 3U: the bottom supply, whose red mains button runs the whole concept.
     const p = panel(left, 37, 3, '#d9d6c9');
     const mains = button(p.group, 'NETZ', 'red', -0.19, 0, {
       size: 0.026,
-      lit: true,
+      lit: switchedOn,
     });
     label(p.group, 'NETZ', -0.19, 0.027, { height: 0.0026, ink: INK });
     knob(p.group, -0.1, 0, 0.016, 'instrument', true, INK);
+    label(p.group, 'ABGLEICH', -0.1, -0.035, { height: 0.0022, ink: INK });
     for (let i = 0; i < 3; i++)
       button(p.group, ['A', 'B', 'C'][i], 'white', 0.0 + i * 0.024, 0.006, {
         size: 0.018,
@@ -1114,7 +1204,11 @@ export function createFerrocoreColumnRig(
     vents(p.group, 0.17, 0, 0.07, 7);
     selectedMains = () => mains.lit;
     ticks.push(() => {
-      running = mains.lit && supply.on && cabinetMains;
+      running =
+        (options.supplied?.() ?? true) &&
+        mains.lit &&
+        supply.on &&
+        cabinetMains;
     });
   }
 
@@ -1125,6 +1219,7 @@ export function createFerrocoreColumnRig(
     top: 2.03,
     width: 0.54,
     frontZ: 0.36,
+    upright: { x: -0.3, z: 0.3805 },
   };
   right.group.position.set(0.69, 0, -0.02);
   group.add(right.group);
@@ -1147,6 +1242,7 @@ export function createFerrocoreColumnRig(
       ink: '#222',
     });
     led(p.group, 'green', 0.23, 0);
+    label(p.group, 'NETZ', 0.2, 0, { height: 0.002, ink: '#f1ecdc' });
   }
   {
     // 2U: three small readouts over a row of channel keys: the core's
@@ -1169,7 +1265,9 @@ export function createFerrocoreColumnRig(
         colour: i === 3 ? '#e5a640' : '#e6e4da',
       });
     label(p.group, 'KANALWAHL', 0.114, -0.016, { height: 0.0022 });
-    label(p.group, 'A B C', -0.12, -0.016, { height: 0.0022 });
+    ['KERN K', 'DRUCK cbar', 'XE %'].forEach((text, i) =>
+      label(p.group, text, -0.19 + i * 0.07, -0.016, { height: 0.0018 }),
+    );
   }
   for (const [n, fromTop] of [
     [1, 3],
@@ -1228,6 +1326,10 @@ export function createFerrocoreColumnRig(
         },
       );
     knob(p.group, 0.01, -0.006, 0.017, 'instrument');
+    label(p.group, 'SOLL', 0.01, -0.041, { height: 0.0022, ink: INK });
+    label(p.group, 'IST °C', -0.16, -0.034, { height: 0.002, ink: INK });
+    label(p.group, 'LEISTUNG W', 0.16, -0.034, { height: 0.002, ink: INK });
+    label(p.group, 'FREIG.', 0.235, -0.034, { height: 0.0018, ink: INK });
     for (let i = 0; i < 3; i++)
       key(p.group, ['◄', '►', 'MEM'][i], 0.055 + i * 0.02, -0.006, {
         width: 0.015,
@@ -1310,7 +1412,7 @@ export function createFerrocoreColumnRig(
         },
       ),
     );
-    label(p.group, 'HV FIL', -0.035, 0.058, { height: 0.0022, ink: INK });
+    label(p.group, 'HT  LT', -0.035, 0.058, { height: 0.0022, ink: INK });
     const heaterLamp = lamp(p.group, '#ffb43a', -0.035, -0.005, 1.6);
     if (hookup)
       ticks.push(() =>
@@ -1327,6 +1429,7 @@ export function createFerrocoreColumnRig(
       'mbar',
       (t) => 0.55 + wander(t, 8, 0.2) * 0.08,
     );
+    label(p.group, 'VORVAKUUM', 0.165, -0.071, { height: 0.0022, ink: INK });
   }
   {
     // 4U: the ferrocore capacity meter.
@@ -1378,7 +1481,14 @@ export function createFerrocoreColumnRig(
   {
     // 4U: the beat-frequency panel.
     const p = panel(right, 21, 4, LIGHT_GREY);
-    for (let i = 0; i < 4; i++)
+    for (let i = 0; i < 4; i++) {
+      label(
+        p.group,
+        ['PHASE', 'FEIN', 'AMPL.', 'SYMM.'][i],
+        -0.19 + (i % 2) * 0.075,
+        0.008 - Math.floor(i / 2) * 0.056,
+        { height: 0.002, ink: INK },
+      );
       knob(
         p.group,
         -0.19 + (i % 2) * 0.075,
@@ -1388,6 +1498,7 @@ export function createFerrocoreColumnRig(
         true,
         INK,
       );
+    }
     // A key-operated selector: the key must be turned before it will move.
     const selector = createKeyLockedKnob(kit, {
       radius: 0.013,
@@ -1409,6 +1520,8 @@ export function createFerrocoreColumnRig(
     label(p.group, 'SCHWEBUNG', 0.03, 0.046, { height: 0.0024, ink: INK });
     toggle(p.group, 0.11, 0.03);
     lamp(p.group, '#ff4a2e', 0.11, -0.025, 0.45);
+    label(p.group, 'FREIG.', 0.11, 0.057, { height: 0.002, ink: INK });
+    label(p.group, 'STÖRUNG', 0.11, -0.048, { height: 0.002, ink: INK });
     label(p.group, 'nur mit Freigabe', 0.2, -0.05, {
       height: 0.004,
       ink: '#1d2a7a',
@@ -1436,6 +1549,7 @@ export function createFerrocoreColumnRig(
         0.03,
         { latching: false, led: 'green' },
         () => {
+          if (!running) return log(NO_SUPPLY);
           if (!driveLift(prep, 1))
             log('Column: the clamps are closed; the head will not rise.');
         },
@@ -1448,17 +1562,20 @@ export function createFerrocoreColumnRig(
         -0.02,
         { latching: false, led: 'amber' },
         () => {
+          if (!running) return log(NO_SUPPLY);
           if (!driveLift(prep, 0)) log('Column: the clamps are closed.');
         },
       );
       const top = led(p.group, 'green', -0.195, 0.03);
       const bottom = led(p.group, 'amber', -0.195, -0.02);
-      ticks.push((seconds) => {
+      ticks.push((seconds, on) => {
         const moving = prep.lift !== prep.liftTarget;
         const blink = motion === 0 || Math.sin(seconds * 9) > 0;
-        top.set(prep.lift === 1 || (moving && prep.liftTarget === 1 && blink));
+        top.set(
+          on && (prep.lift === 1 || (moving && prep.liftTarget === 1 && blink)),
+        );
         bottom.set(
-          prep.lift === 0 || (moving && prep.liftTarget === 0 && blink),
+          on && (prep.lift === 0 || (moving && prep.liftTarget === 0 && blink)),
         );
       });
       label(p.group, 'OBEN UNTEN', -0.21, -0.05, { height: 0.0022, ink: INK });
@@ -1470,6 +1587,7 @@ export function createFerrocoreColumnRig(
         0.005,
         { size: 0.021, led: 'red' },
         () => {
+          if (!running) return log(NO_SUPPLY);
           if (!setClamped(prep, !prep.clamped))
             log('Column: the clamps only close on a head that is fully down.');
         },
@@ -1482,15 +1600,17 @@ export function createFerrocoreColumnRig(
         0.005,
         { size: 0.021, led: 'blue' },
         () => {
+          // The inlet is a solenoid valve: it needs the supply to move.
+          if (!running) return log(NO_SUPPLY);
           prep.inletOpen = !prep.inletOpen;
         },
       );
       const outletLed = led(p.group, 'amber', -0.105, -0.035);
       label(p.group, 'AUSLASS', -0.105, -0.05, { height: 0.0022, ink: INK });
-      ticks.push(() => {
-        clamp.lit = prep.clamped;
-        inlet.lit = prep.inletOpen;
-        outletLed.set(prep.outletOpen);
+      ticks.push((_, on) => {
+        clamp.lit = on && prep.clamped;
+        inlet.lit = on && prep.inletOpen;
+        outletLed.set(on && prep.outletOpen);
       });
       // The chamber's own gauge: mechanical, so it reads with the power off.
       const chamberGauge = createRoundGauge(kit, {
@@ -1516,15 +1636,19 @@ export function createFerrocoreColumnRig(
         band: { from: PURGE_COMPLETE_VOLTS, to: 1, colour: '#3f9a4a' },
       });
       place(p.group, lambda.group, 0.075, 0.022);
-      ticks.push(() => lambda.set(lambdaVolts(oxygenPercent(prep))));
+      ticks.push((_, on) =>
+        lambda.set(on ? lambdaVolts(oxygenPercent(prep)) : 0),
+      );
       updates.push(lambda.update);
       label(p.group, 'LAMBDA-SONDE', 0.075, 0.056, {
         height: 0.0022,
         ink: INK,
       });
       const purged = lamp(p.group, '#7dff74', 0.075, -0.03);
-      ticks.push(() =>
-        purged.set(lambdaVolts(oxygenPercent(prep)) >= PURGE_COMPLETE_VOLTS),
+      ticks.push((_, on) =>
+        purged.set(
+          on && lambdaVolts(oxygenPercent(prep)) >= PURGE_COMPLETE_VOLTS,
+        ),
       );
       label(p.group, 'O2 = 0', 0.075, -0.047, { height: 0.0022, ink: INK });
       box(p.group, 0.075, 0.034, 0.0008, '#141416', 0.15, 0.035, -0.0001);
@@ -1540,13 +1664,15 @@ export function createFerrocoreColumnRig(
       const sealedLamp = lamp(p.group, '#7dff74', 0.12, -0.03);
       const starvedLamp = lamp(p.group, '#ffb43a', 0.16, -0.03);
       const faultLamp = lamp(p.group, '#ff4a2e', 0.2, -0.03);
-      ticks.push((seconds) => {
+      ticks.push((seconds, on) => {
         const blink = motion === 0 || Math.sin(seconds * 6) > 0;
-        sealedLamp.set(isSealed(prep));
-        starvedLamp.set(isStarved(prep) && blink);
+        sealedLamp.set(on && isSealed(prep));
+        starvedLamp.set(on && isStarved(prep) && blink);
         // STÖRUNG also flashes while a core warms in a chamber that would
         // burn it, before it does.
-        faultLamp.set((prep.failure !== null || isExposed(prep)) && blink);
+        faultLamp.set(
+          on && (prep.failure !== null || isExposed(prep)) && blink,
+        );
       });
       label(p.group, 'DICHT  DRUCK  STÖRUNG', 0.16, -0.05, {
         height: 0.0022,
@@ -1596,7 +1722,7 @@ export function createFerrocoreColumnRig(
     // 4U: the cabinet's own supply: a mains rocker, a meter and a tag.
     const p = panel(right, 35, 4, '#cfcfc3');
     handles(p.group, p.w, p.h);
-    const rocker = createRocker(kit, true);
+    const rocker = createRocker(kit, switchedOn);
     place(p.group, rocker.group, -0.17, 0.0);
     worked(
       rocker.group,
@@ -1609,6 +1735,8 @@ export function createFerrocoreColumnRig(
     );
     label(p.group, 'NETZ', -0.17, 0.026, { height: 0.0026, ink: INK });
     meter(p.group, 'V', 0.0, 0.01, 0.07, () => (cabinetMains ? 0.55 : 0));
+    label(p.group, 'NETZSPANNUNG', 0, -0.036, { height: 0.0022, ink: INK });
+    label(p.group, 'ABGLEICH', 0.14, 0.044, { height: 0.0022, ink: INK });
     knob(p.group, 0.14, 0.02, 0.008);
     // A paper tag on a string, hung from the knob.
     const tag = label(p.group, 'DEFEKT?\n12.3.91', 0.155, -0.03, {
@@ -2217,7 +2345,7 @@ export function createFerrocoreColumnRig(
   // ---- Equipment tags -----------------------------------------------------
   /**
    * An engraved tag on a valve, port or sensor. Unlike the panels'
-   * placeholder legends these carry their real wording: a plate with the
+   * panel legends these carry their warning wording: a plate with the
    * text cut through to a contrasting core, facing +z.
    */
   const tag = (
@@ -2658,10 +2786,16 @@ export function createFerrocoreColumnRig(
   // ---- Running state -------------------------------------------------------
   const update = (seconds: number, delta: number, reducedMotion: boolean) => {
     motion = reducedMotion ? 0 : 1;
-    // Held, the model's physics stop but the rams still run.
+    // Held, the model's physics stop but the rams still run, as long as
+    // the column has its supply.
     const events = drive.hold
-      ? stepLift(prep, delta)
-      : stepColumnPrep(prep, delta, { powered: drive.power ?? running });
+      ? running
+        ? stepLift(prep, delta)
+        : []
+      : stepColumnPrep(prep, delta, {
+          powered: drive.power ?? running,
+          ramsPowered: running,
+        });
     for (const event of events) {
       log(describe(event));
       options.onEvent?.(event);
@@ -2809,19 +2943,57 @@ export function createFerrocoreColumnRig(
   ]);
   const panelOf = (object: Object3D) => {
     for (let o = object.parent; o; o = o.parent)
-      if (o.userData.parts) return o.name;
-    return 'column';
+      if (o.userData.parts)
+        return (o.userData.unit as string | undefined) ?? o.name;
+    return undefined;
   };
+  // Every control knows its unit, for the log and the runbook.
+  for (const c of clickables)
+    c.unit =
+      panelOf(c.object) ??
+      (c.name === 'outlet valve'
+        ? 'STRAHLROHR'
+        : c.name === 'supply isolator'
+          ? 'HAUPTTRENNER'
+          : 'SÄULE');
   const spares = clickables.filter((c) => !working.has(c.name));
-  for (const c of spares) c.name = `spare ${c.name}, ${panelOf(c.object)}`;
+  for (const c of spares) {
+    // Unwired controls keep a real panel purpose; the log also records that
+    // they are spare inputs. Use the printed legend nearest their own column.
+    if (['knob', 'toggle', 'slide switch', 'key switch'].includes(c.name)) {
+      let part = c.object;
+      while (part.parent && !part.parent.userData.parts) part = part.parent;
+      const legends = (part.parent?.children ?? [])
+        .filter((o) => typeof o.userData.legend === 'string')
+        .filter(
+          (o) =>
+            !/^(?:[0-9°µ]|K$|NETZ$|INV\.|MODEL|MOD\.|NEUMANN|GORSKIY|nur mit)/.test(
+              String(o.userData.legend),
+            ),
+        )
+        .map((o) => ({
+          text: String(o.userData.legend).replace(/\n/g, ' '),
+          distance:
+            4 * (o.position.x - part.position.x) ** 2 +
+            (o.position.y - part.position.y) ** 2,
+        }))
+        .sort((a, b) => a.distance - b.distance);
+      if (legends[0] && legends[0].distance < 0.075 ** 2)
+        c.name = `${legends[0].text} ${c.name}`;
+    }
+    c.name = `spare ${c.name}`;
+  }
+  // Names are unique within their unit; repeats there are numbered.
   const seen = new Map<string, number>();
   const repeats = new Map<string, number>();
+  const unitKey = (c: RigClickable) => `${c.unit}|${c.name}`;
   for (const c of clickables)
-    repeats.set(c.name, (repeats.get(c.name) ?? 0) + 1);
+    repeats.set(unitKey(c), (repeats.get(unitKey(c)) ?? 0) + 1);
   for (const c of clickables) {
-    if ((repeats.get(c.name) ?? 0) < 2) continue;
-    const n = (seen.get(c.name) ?? 0) + 1;
-    seen.set(c.name, n);
+    const k = unitKey(c);
+    if ((repeats.get(k) ?? 0) < 2) continue;
+    const n = (seen.get(k) ?? 0) + 1;
+    seen.set(k, n);
     c.name = `${c.name} #${n}`;
   }
 

@@ -109,8 +109,28 @@ export function createPlantRoom(options: {
     floorY + height / 2,
     minZ - wallThickness / 2,
   );
-  for (const x of [minX - wallThickness / 2, maxX + wallThickness / 2])
-    box(wallThickness, height, depth, '#626f68', x, floorY + height / 2, midZ);
+  box(
+    wallThickness,
+    height,
+    depth,
+    '#626f68',
+    minX - wallThickness / 2,
+    floorY + height / 2,
+    midZ,
+  );
+  // The east wall is the lab's west wall, which the lab builds. This room's
+  // face of it is a skin standing a centimetre proud, so the two never draw
+  // in the same plane (they are lit differently and would flicker).
+  const skin = 0.5 * wallThickness;
+  box(
+    skin,
+    height,
+    depth,
+    '#626f68',
+    maxX - 0.01 * m + skin / 2,
+    floorY + height / 2,
+    midZ,
+  );
   // Match the laboratory's high exposed ceiling: a slab, deep joists and
   // suspended twin-tube fittings, with overhead cables below the roof.
   const ceilingY = floorY + height;
@@ -793,6 +813,9 @@ export function createPlantRoom(options: {
     /** How much of the room's own lighting is on, 0 (dark) to 1. */
     get lightLevel() {
       return lightLevel;
+    },
+    get lightsOn() {
+      return lightsOn;
     },
     toggleLights() {
       lightsOn = !lightsOn;

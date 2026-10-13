@@ -168,7 +168,36 @@ export function createRigSounds(context: BaseAudioContext) {
   hissLevel.gain.value = 0;
   hissSource.connect(hissBand).connect(hissLevel).connect(output);
 
-  for (const source of [pump, whine, hissSource]) source.start();
+  // Lowering is not pumped: the head sinks under its own weight as oil
+  // bleeds back through the lowering valve. A soft, low rush of oil, a thin
+  // whistle at the valve's restrictor, and a slow groan from the frame.
+  const bleedSource = context.createBufferSource();
+  bleedSource.buffer = noise;
+  bleedSource.loop = true;
+  const bleedTone = context.createBiquadFilter();
+  bleedTone.type = 'lowpass';
+  bleedTone.frequency.value = 520;
+  bleedTone.Q.value = 0.9;
+  const bleedLevel = context.createGain();
+  bleedLevel.gain.value = 0;
+  bleedSource.connect(bleedTone).connect(bleedLevel).connect(output);
+  const restrictor = context.createBiquadFilter();
+  restrictor.type = 'bandpass';
+  restrictor.frequency.value = 1750;
+  restrictor.Q.value = 18;
+  const restrictorLevel = context.createGain();
+  restrictorLevel.gain.value = 0;
+  bleedSource.connect(restrictor).connect(restrictorLevel).connect(output);
+  const groan = context.createOscillator();
+  groan.type = 'triangle';
+  groan.frequency.value = 46;
+  const groanLevel = context.createGain();
+  groanLevel.gain.value = 0;
+  groan.connect(groanLevel).connect(output);
+  let lastRams: -1 | 0 | 1 = 0;
+
+  for (const source of [pump, whine, hissSource, bleedSource, groan])
+    source.start();
 
   return {
     output: output as AudioNode,
@@ -194,16 +223,31 @@ export function createRigSounds(context: BaseAudioContext) {
      */
     update({ rams, venting }: { rams: -1 | 0 | 1; venting: number }) {
       const t = context.currentTime;
-      pumpLevel.gain.setTargetAtTime(rams ? 0.18 : 0, t, 0.08);
-      // The pump labours lifting and eases lowering.
-      pump.frequency.setTargetAtTime(rams > 0 ? 104 : 92, t, 0.2);
-      whine.frequency.setTargetAtTime(rams > 0 ? 680 : 560, t, 0.3);
+      // The pump runs only to lift; lowering bleeds the oil back instead.
+      pumpLevel.gain.setTargetAtTime(rams > 0 ? 0.18 : 0, t, 0.08);
+      pump.frequency.setTargetAtTime(104, t, 0.2);
+      whine.frequency.setTargetAtTime(680, t, 0.3);
+      const sinking = rams < 0;
+      bleedLevel.gain.setTargetAtTime(
+        sinking ? 0.32 : 0,
+        t,
+        sinking ? 0.25 : 0.12,
+      );
+      restrictorLevel.gain.setTargetAtTime(sinking ? 0.05 : 0, t, 0.3);
+      groanLevel.gain.setTargetAtTime(sinking ? 0.05 : 0, t, 0.4);
+      // The groan sags a little as the head settles.
+      groan.frequency.setTargetAtTime(sinking ? 41 : 46, t, 2.5);
+      // The lowering valve clicks open as it starts.
+      if (sinking && lastRams !== -1)
+        burst(controlSounds['key-switch'], t + 0.005);
+      lastRams = rams;
       hissLevel.gain.setTargetAtTime(venting * 0.35, t, 0.12);
       hissBand.frequency.setTargetAtTime(2400 + venting * 1600, t, 0.2);
     },
     dispose() {
       recordings.dispose();
-      for (const source of [pump, whine, hissSource]) source.stop();
+      for (const source of [pump, whine, hissSource, bleedSource, groan])
+        source.stop();
       output.disconnect();
     },
   };

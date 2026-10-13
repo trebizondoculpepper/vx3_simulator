@@ -470,7 +470,7 @@ export function createXenonCylinders(options: XenonBankOptions) {
     name: 'Rotameter float',
     role: 'indicator',
   });
-  const meterLabel = createLabelTexture('Xe FLOW', {
+  const meterLabel = createLabelTexture('Xe FLUSS', {
     ink: '#e3d8b7',
     plate: '#2d2b26',
     size: 9,

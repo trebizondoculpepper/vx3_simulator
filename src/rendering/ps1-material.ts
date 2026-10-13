@@ -227,6 +227,12 @@ export function dimPrintedWith(
   roots: Object3D[],
   room: typeof ps1Uniforms.roomLight,
   outside: (mesh: Mesh) => boolean = () => false,
+  /**
+   * Dim the lit surfaces too. Lights in three.js reach every object the
+   * camera sees, so a room lit separately would otherwise borrow the next
+   * room's light; this keeps the whole room as dark as its own switch.
+   */
+  lit = false,
 ) {
   for (const root of roots) {
     root.updateMatrixWorld(true);
@@ -236,7 +242,10 @@ export function dimPrintedWith(
         ? object.material
         : [object.material];
       for (const material of materials)
-        if (material instanceof MeshBasicMaterial && material.map)
+        if (
+          (material instanceof MeshBasicMaterial && material.map) ||
+          (lit && material instanceof MeshStandardMaterial)
+        )
           material.userData.ps1Room = room;
     });
   }

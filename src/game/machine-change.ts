@@ -33,7 +33,9 @@ export function describeMachineChange(
     return `${name} switched ${power[1] ? 'on' : 'off'}.`;
   }
   const detail = changed
-    .filter(([key]) => key !== 'columnPower')
+    // Alarm windows are the board's consequence of a change, shown there,
+    // not the state of the control that was worked.
+    .filter(([key]) => key !== 'columnPower' && !key.startsWith('alarms'))
     .map(([key, value]) => {
       const name = key.split('.').at(-1)!;
       if (name === 'clamped') return `clamp ${value ? 'closed' : 'opened'}`;
@@ -48,5 +50,5 @@ export function describeMachineChange(
         return `${readable} set to ${Number(value.toFixed(3))}`;
       return `${readable} changed to ${String(value)}`;
     });
-  return `${label} — ${detail.join('; ')}.`;
+  return detail.length ? `${label} — ${detail.join('; ')}.` : `${label}.`;
 }
