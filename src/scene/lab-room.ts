@@ -5,11 +5,13 @@ import {
   Group,
   Mesh,
   PlaneGeometry,
+  MeshStandardMaterial,
   PointLight,
 } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { createCeilingServices } from './ceiling-services';
+import { createLightSwitch } from './light-switch';
 import { createLabelTexture } from './screens';
 
 export interface LabRoomOptions {
@@ -368,6 +370,65 @@ export function createLabRoom(options: LabRoomOptions) {
         doorZ,
       );
   }
+  // A painted steel lining round the opening covers the wall's reveal.
+  const lining: Mesh[] = [];
+  for (const side of [-1, 1])
+    lining.push(
+      box(
+        0.04,
+        doorHeight,
+        wallThickness + 0.02,
+        '#3d4a45',
+        doorX + side * (doorWidth / 2 - 0.02),
+        floorY + doorHeight / 2,
+        wallZ,
+      ),
+    );
+  lining.push(
+    box(
+      doorWidth,
+      0.04,
+      wallThickness + 0.02,
+      '#3d4a45',
+      doorX,
+      floorY + doorHeight - 0.02,
+      wallZ,
+    ),
+  );
+  // On the corridor face the lining turns out as a frame over the 7 cm
+  // margin the corridor's cladding leaves round the opening.
+  const frameZ = maxZ + wallThickness + 0.01;
+  for (const side of [-1, 1])
+    lining.push(
+      box(
+        0.07,
+        doorHeight + 0.14,
+        0.02,
+        '#3d4a45',
+        doorX + side * (doorWidth / 2 + 0.035),
+        floorY + (doorHeight + 0.14) / 2,
+        frameZ,
+      ),
+    );
+  lining.push(
+    box(
+      doorWidth,
+      0.14,
+      0.02,
+      '#3d4a45',
+      doorX,
+      floorY + doorHeight + 0.07,
+      frameZ,
+    ),
+  );
+  // The door and its lining take the corridor's light: the scene's fill
+  // follows the lab's switch, so as the lab darkens they make up the
+  // difference themselves, as the corridor's own surfaces do.
+  const doorwaySurfaces = new Set<MeshStandardMaterial>();
+  for (const part of [...doorParts, ...lining])
+    if (part.material instanceof MeshStandardMaterial)
+      doorwaySurfaces.add(part.material);
+  let doorwayDark = -1;
   // The closed door is solid; the walker's collision asks for this.
   const doorFootprint = {
     minX: doorX - doorWidth / 2,
@@ -420,45 +481,11 @@ export function createLabRoom(options: LabRoomOptions) {
   // side of the wall just west of the door frame.
   const switchX = doorX - doorWidth / 2 - 0.35 * worldUnitsPerMetre;
   const switchY = floorY + 1.25 * worldUnitsPerMetre;
-  const switchParts: Mesh[] = [];
-  const plateSize = 0.14 * worldUnitsPerMetre;
-  switchParts.push(
-    box(
-      plateSize,
-      plateSize * 1.3,
-      0.05,
-      '#2b2723',
-      switchX,
-      switchY,
-      maxZ - 0.025,
-    ),
-  );
-  const rocker = new Group();
-  rocker.position.set(switchX, switchY, maxZ - 0.06);
-  group.add(rocker);
-  const rockerBody = mesh(
-    new BoxGeometry(plateSize * 0.4, plateSize * 0.6, 0.08),
-    '#d8cfb8',
-    0,
-    0,
-    -0.04,
-    rocker,
-  );
-  switchParts.push(rockerBody);
-  // A small amber neon in the plate, lit while the lights are off so the
-  // switch can be found in the dark.
-  const finder = createPs1Material(
-    { color: '#ffb347' },
-    true,
-    true,
-  ) as Material & {
-    color: Color;
-  };
-  materials.push(finder);
-  const finderMesh = new Mesh(new BoxGeometry(0.12, 0.08, 0.02), finder);
-  finderMesh.position.set(switchX, switchY - plateSize * 0.48, maxZ - 0.055);
-  group.add(finderMesh);
-  switchParts.push(finderMesh);
+  const lightSwitch = createLightSwitch(worldUnitsPerMetre);
+  lightSwitch.group.position.set(switchX, switchY, maxZ - 0.06);
+  lightSwitch.group.rotation.y = Math.PI;
+  group.add(lightSwitch.group);
+  const switchParts = lightSwitch.parts;
 
   // Tall ceiling, with exposed beams running front to back.
   const roof = new Group();
@@ -640,7 +667,7 @@ export function createLabRoom(options: LabRoomOptions) {
         pivot,
       );
       const tubes = createPs1Material(
-        { color: TUBE_ON.clone() },
+        { color: TUBE_OFF.clone() },
         true,
         true,
       ) as Material & {
@@ -665,7 +692,7 @@ export function createLabRoom(options: LabRoomOptions) {
           0,
           pivot,
         );
-      const light = new PointLight('#e8f2dc', 26, 0, 2);
+      const light = new PointLight('#e8f2dc', 0, 0, 2);
       light.position.set(0, -drop - 0.35, 0);
       pivot.add(light);
       fixtures.push({
@@ -684,8 +711,8 @@ export function createLabRoom(options: LabRoomOptions) {
   // Each fitting's lamp and the room's fill ease between states, so the
   // tubes blink crisply but the room as a whole brightens in stutters
   // rather than flashing.
-  let lightsOn = true;
-  let level = 1;
+  let lightsOn = false;
+  let level = 0;
   const strike = () => {
     const pattern = [0.1 + random() * 0.7];
     const blinks = 2 + Math.floor(random() * 3);
@@ -695,9 +722,14 @@ export function createLabRoom(options: LabRoomOptions) {
   };
 
   let last: number | undefined;
+  let fireAlarm = false;
   return {
     group,
     roof,
+    sprinklerHeads: services.sprinklerHeads,
+    setFireAlarm(active: boolean) {
+      fireAlarm = active;
+    },
     door: {
       /** Every mesh of both leaves, for clicking. */
       parts: doorParts as readonly Mesh[],
@@ -742,11 +774,14 @@ export function createLabRoom(options: LabRoomOptions) {
         return lightsOn;
       },
     },
-    /** Advance the sway and the occasional flicker. */
-    update(seconds: number, reducedMotion: boolean) {
+    /**
+     * Advance the sway and the occasional flicker. `fromCorridor` says the
+     * viewer is outside, where the door takes the corridor's light.
+     */
+    update(seconds: number, reducedMotion: boolean, fromCorridor = true) {
       const delta = last === undefined ? 0 : Math.min(0.1, seconds - last);
       last = seconds;
-      services.update(seconds);
+      services.update(seconds, fireAlarm);
       // The leaves swing on their hinges, easing to rest against the stops.
       const target = doorOpen ? 1 : 0;
       doorAmount +=
@@ -809,10 +844,18 @@ export function createLabRoom(options: LabRoomOptions) {
       const share = lit / fixtures.length;
       level +=
         (share - level) * Math.min(1, delta * (reducedMotion ? 60 : 2.5));
-      rocker.rotation.x = lightsOn ? -0.35 : 0.35;
-      finder.color.set(lightsOn ? '#3a2c1c' : '#ffb347');
+      const doorwayTarget = fromCorridor ? 1 - level : 0;
+      if (Math.abs(doorwayTarget - doorwayDark) > 0.01) {
+        doorwayDark = doorwayTarget;
+        for (const surface of doorwaySurfaces)
+          surface.emissive
+            .copy(surface.color)
+            .multiplyScalar(0.55 * doorwayDark);
+      }
+      lightSwitch.update(lightsOn);
     },
     dispose() {
+      lightSwitch.dispose();
       services.dispose();
       group.traverse((object) => {
         if (object instanceof Mesh) object.geometry.dispose();

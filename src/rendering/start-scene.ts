@@ -8,6 +8,7 @@ import {
   DirectionalLight,
   Fog,
   Group,
+  MeshBasicMaterial,
   Mesh,
   NearestFilter,
   OctahedronGeometry,
@@ -58,6 +59,14 @@ import {
 } from '../game/rack-controls';
 import type { ToggleId } from '../game/rack-controls';
 import { createRig, deltaScore, idealTrim, stepRig } from '../game/rig';
+import { redlineFraction } from '../game/redlines';
+import { createOverheatState, stepOverheat } from '../game/overheat';
+import {
+  createFireIncident,
+  pressFireCall,
+  resetFirePanel,
+  stepFireIncident,
+} from '../game/fire-incident';
 import {
   acknowledge,
   boardHandles,
@@ -84,9 +93,15 @@ import { createWorldMapTexture } from '../scene/world-map';
 import { createCubMonitor } from '../scene/cub-monitor';
 import { createBbcMicro } from '../scene/bbc-micro';
 import { createBbcDiskDrive } from '../scene/bbc-disk-drive';
+import { createBbcUserGuide } from '../scene/bbc-user-guide';
 import { createAshtray } from '../scene/ashtray';
+import { createSmokeEmitter } from '../scene/smoke-emitter';
+import { createSprinklerSpray } from '../scene/sprinkler-spray';
 import { createXenonCylinders } from '../scene/xenon-cylinders';
+import { createXenonRecirculator } from '../scene/xenon-recirculator';
 import { createCheatBoard } from '../scene/cheat-board';
+import { visibleRooms } from '../game/room-visibility';
+import { tripClues } from '../game/trip-report';
 import { createHotlinePhone } from '../scene/hotline-phone';
 import { createLabRoom } from '../scene/lab-room';
 import { createCorridor } from '../scene/corridor';
@@ -115,7 +130,7 @@ import { slide } from '../game/walk-collision';
 import type { Footprint } from '../game/walk-collision';
 import { createTeleprinter } from '../scene/teleprinter';
 import { createPanelHeader, createPanelLivery } from '../scene/panel-livery';
-import { createPs1Material, ps1Uniforms } from './ps1-material';
+import { createPs1Material, dimPrintedWith, ps1Uniforms } from './ps1-material';
 
 const panelWidth = PANEL_WIDTH;
 const worldUnitsPerMetre = panelWidth / 0.4826;
@@ -157,6 +172,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   let anomaly = anomalyEffects(0, 0, false);
   let anomalyLevel = 0;
   const telltales = createSafetyTelltales();
+  const overheat = createOverheatState();
+  const fire = createFireIncident();
   const settings = createRackControls();
   const audio = createSoundEngine();
   const modules = assembleRack();
@@ -225,6 +242,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     materials.push(mesh.material);
     mesh.position.set(x, y, z);
     parent.add(mesh);
+    return mesh;
   };
   const bind = (object: Object3D, action: (hit: Intersection) => void) => {
     interactive.push(object);
@@ -240,7 +258,9 @@ export function startScene(canvas: HTMLCanvasElement) {
     action: (hit: Intersection) => void,
   ) => {
     designate(object, { machine, name, role: 'input' });
-    bind(object, action);
+    bind(object, (hit) => {
+      if (!fire.ruinCause) action(hit);
+    });
   };
   const indicator = <T extends Object3D>(
     object: T,
@@ -252,7 +272,14 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   const fixture = (object: Object3D, name: string, action: () => void) => {
     markFixture(object, name);
-    bind(object, action);
+    bind(object, () => {
+      if (
+        !fire.ruinCause ||
+        name.includes('door') ||
+        name === 'Xenon cage gate'
+      )
+        action();
+    });
   };
 
   // The cabinet belongs to a room: painted masonry, benches and old test gear.
@@ -270,6 +297,17 @@ export function startScene(canvas: HTMLCanvasElement) {
     worldUnitsPerMetre,
   };
   const wallThickness = 0.3 * worldUnitsPerMetre;
+  // Doors take the corridor's light only while the viewer is out there.
+  const inCorridor = () => walker.z > room.maxZ + wallThickness;
+  // The scene's fill lights stand in for whichever room the viewer is in:
+  // the plant room's tubes in there, the lab's everywhere else. Rooms out
+  // of sight are not drawn, so only one room's lighting is ever on show.
+  const fillLevel = () =>
+    roomAt(roomPlan, walker.x, walker.z) === 'plant'
+      ? plantRoom.lightLevel
+      : labRoom.lights.level;
+  /** Room light for the signs on the plant-room door, set each frame. */
+  const plantDoorLight = { value: 1 };
   const backWallHeight = room.ceilingY - floorY;
   cube(
     lab,
@@ -305,7 +343,11 @@ export function startScene(canvas: HTMLCanvasElement) {
   const labRoom = createLabRoom(room);
   lab.add(labRoom.group);
   dynamic.push(() =>
-    labRoom.update(performance.now() / 1000, reducedMotion.matches),
+    labRoom.update(
+      performance.now() / 1000,
+      reducedMotion.matches,
+      inCorridor(),
+    ),
   );
   // Outside the door: the long basement corridor of the Helmholtz-Bau.
   const plantRoom = createPlantRoom({
@@ -325,6 +367,23 @@ export function startScene(canvas: HTMLCanvasElement) {
   );
   rectifier.group.rotation.y = -Math.PI / 2;
   scene.add(rectifier.group);
+  const recirculator = createXenonRecirculator(worldUnitsPerMetre);
+  recirculator.group.position.set(
+    plantRoom.bounds.minX + 3.0 * worldUnitsPerMetre,
+    floorY,
+    plantRoom.bounds.minZ + 0.4 * worldUnitsPerMetre,
+  );
+  scene.add(recirculator.group);
+  let recirculatorLastSeconds = performance.now() / 1000;
+  dynamic.push(() => {
+    const seconds = performance.now() / 1000;
+    recirculator.update(
+      plantRoom.powered,
+      Math.min(0.1, seconds - recirculatorLastSeconds),
+      reducedMotion.matches,
+    );
+    recirculatorLastSeconds = seconds;
+  });
   const corridor = createCorridor({
     floorY,
     worldUnitsPerMetre,
@@ -337,11 +396,206 @@ export function startScene(canvas: HTMLCanvasElement) {
     plantDoor: plantRoom.doorway,
   });
   scene.add(corridor.group);
+  // Independent fire circuit: a lab call point and a reset on the corridor side.
+  const firePaint = (color: string, level: number) => {
+    const finish = createPs1Material({ color }, true);
+    finish.userData.ps1Room = { value: level };
+    materials.push(finish);
+    return finish;
+  };
+  const fireBox = (
+    parent: Group,
+    w: number,
+    h: number,
+    d: number,
+    color: string,
+    x: number,
+    y: number,
+    z: number,
+    level: number,
+  ) => {
+    const part = new Mesh(new BoxGeometry(w, h, d), firePaint(color, level));
+    part.position.set(x, y, z);
+    parent.add(part);
+    return part;
+  };
+  const firePoint = new Group();
+  firePoint.position.set(
+    labRoom.door.handle.x - labRoom.door.width / 2 - 1.05 * worldUnitsPerMetre,
+    floorY + 1.35 * worldUnitsPerMetre,
+    room.maxZ - 0.18,
+  );
+  firePoint.rotation.y = Math.PI;
+  firePoint.scale.setScalar(worldUnitsPerMetre);
+  lab.add(firePoint);
+  fireBox(firePoint, 0.24, 0.32, 0.09, '#9e1e1b', 0, 0, 0, 0.65);
+  const callArt = createCanvasTexture(256, 320);
+  textures.push(callArt.texture);
+  const callInk = callArt.context;
+  callInk.fillStyle = '#ed3034';
+  callInk.fillRect(0, 0, 256, 320);
+  callInk.fillStyle = '#f5e8e3';
+  callInk.beginPath();
+  callInk.arc(20, 18, 7, 0, Math.PI * 2);
+  callInk.arc(236, 18, 7, 0, Math.PI * 2);
+  callInk.fill();
+  callInk.textAlign = 'center';
+  callInk.fillStyle = '#fff8f4';
+  callInk.font = 'bold 53px Arial, sans-serif';
+  callInk.fillText('FEUER', 128, 76);
+  callInk.fillStyle = '#bc2628';
+  callInk.fillRect(23, 100, 210, 185);
+  callInk.fillStyle = '#f6efea';
+  callInk.fillRect(30, 107, 196, 171);
+  callInk.fillStyle = '#253130';
+  callInk.font = 'bold 22px Arial, sans-serif';
+  callInk.fillText('SCHEIBE', 128, 145);
+  callInk.fillText('EINSCHLAGEN', 128, 172);
+  callInk.font = 'bold 39px Arial, sans-serif';
+  callInk.fillText('➜  ●  ⬅', 128, 223);
+  callInk.font = 'bold 21px Arial, sans-serif';
+  callInk.fillText('HIER DRÜCKEN', 128, 259);
+  callArt.texture.needsUpdate = true;
+  const callFaceMaterial = createPs1Material({ map: callArt.texture }, true);
+  callFaceMaterial.userData.ps1Room = { value: 0.85 };
+  materials.push(callFaceMaterial);
+  const callFace = new Mesh(new PlaneGeometry(0.225, 0.305), callFaceMaterial);
+  callFace.position.z = 0.048;
+  firePoint.add(callFace);
+  input(callFace, 'Fire circuit', 'Handfeuermelder', () => {
+    audio.play('fire-call');
+    if (pressFireCall(fire)) {
+      latchFault(board);
+      audio.play('warning');
+      write('FEUERALARM: Handmelder betätigt. Räumung einleiten.');
+    }
+  });
+
+  const firePanel = new Group();
+  firePanel.position.set(
+    labRoom.door.handle.x - labRoom.door.width / 2 - 0.4 * worldUnitsPerMetre,
+    floorY + 1.35 * worldUnitsPerMetre,
+    room.maxZ + wallThickness + 0.18,
+  );
+  firePanel.scale.setScalar(0.7 * worldUnitsPerMetre);
+  scene.add(firePanel);
+  // Red steel enclosure with a pale inset, recessed annunciator and small
+  // green display, in the style of the owner's RP-2002 reference photograph.
+  fireBox(firePanel, 0.7, 0.72, 0.14, '#61201d', 0.025, 0, -0.055, 0.72);
+  fireBox(firePanel, 0.68, 0.7, 0.04, '#ae3029', 0, 0, 0.03, 0.72);
+  fireBox(firePanel, 0.52, 0.34, 0.018, '#d8d8d0', 0, 0.045, 0.062, 0.8);
+  fireBox(firePanel, 0.31, 0.29, 0.023, '#191d1b', 0, 0.045, 0.079, 0.75);
+  fireBox(firePanel, 0.235, 0.2, 0.01, '#3b403c', 0, 0.04, 0.095, 0.72);
+  const fireScreen = fireBox(
+    firePanel,
+    0.14,
+    0.055,
+    0.007,
+    '#65a76b',
+    0,
+    0.095,
+    0.103,
+    0.9,
+  );
+  for (const x of [-0.055, 0, 0.055])
+    fireBox(firePanel, 0.035, 0.013, 0.006, '#b5b6a9', x, -0.025, 0.105, 0.85);
+  const panelTitle = label(
+    firePanel,
+    'BRANDMELDERZENTRALE',
+    0,
+    0.29,
+    0.058,
+    7,
+    '#f0d6c3',
+    '#ae3029',
+  );
+  panelTitle.scale.setScalar(0.34);
+  panelTitle.material.userData.ps1Room = { value: 0.8 };
+  const panelBrand = label(
+    firePanel,
+    'SYNCLEX · BZ-3',
+    0,
+    -0.09,
+    0.073,
+    7,
+    '#272c28',
+    '#d8d8d0',
+  );
+  panelBrand.scale.setScalar(0.25);
+  panelBrand.material.userData.ps1Room = { value: 0.8 };
+  const panelReset = fireBox(
+    firePanel,
+    0.1,
+    0.07,
+    0.025,
+    '#242723',
+    0,
+    -0.24,
+    0.068,
+    0.72,
+  );
+  const resetLabel = label(
+    firePanel,
+    'RÜCKSTELLEN',
+    0,
+    -0.32,
+    0.059,
+    7,
+    '#f3e6d7',
+    '#ae3029',
+  );
+  resetLabel.scale.setScalar(0.29);
+  resetLabel.material.userData.ps1Room = { value: 0.72 };
+  input(panelReset, 'Fire circuit', 'RÜCKSTELLEN', () => {
+    audio.play('button');
+    write(
+      resetFirePanel(fire, overheat.roomSmoke)
+        ? 'Brandmelderzentrale: zurückgestellt. Sprinkler geschlossen.'
+        : 'Brandmelderzentrale: Rückstellung verweigert; Brand oder Rauch vorhanden.',
+    );
+  });
+  const labBeacon = new PointLight('#ee3020', 0, 12, 2);
+  labBeacon.position.set(0, room.ceilingY - 0.65, room.maxZ - 1.1);
+  lab.add(labBeacon);
+  const hallBeacon = new PointLight('#ee3020', 0, 12, 2);
+  hallBeacon.position.set(
+    firePanel.position.x,
+    firePanel.position.y + 0.5,
+    firePanel.position.z,
+  );
+  scene.add(hallBeacon);
+  const puddleMaterial = new MeshBasicMaterial({
+    color: '#5e97a3',
+    transparent: true,
+    opacity: 0.42,
+    depthWrite: false,
+  });
+  materials.push(puddleMaterial);
+  scene.updateMatrixWorld(true);
+  const sprinklerEffects = labRoom.sprinklerHeads.map((head, index) => {
+    const origin = head.getWorldPosition(new Vector3());
+    const spray = createSprinklerSpray(
+      worldUnitsPerMetre,
+      origin.y - floorY - 0.03 * worldUnitsPerMetre,
+      index,
+    );
+    head.add(spray.group);
+    const puddle = new Mesh(
+      new CircleGeometry(0.72 * worldUnitsPerMetre, 12),
+      puddleMaterial,
+    );
+    puddle.rotation.x = -Math.PI / 2;
+    puddle.position.set(origin.x, floorY + 0.025, origin.z);
+    puddle.scale.setScalar(0.001);
+    puddle.userData.noCollision = true;
+    lab.add(puddle);
+    return { spray, puddle };
+  });
   dynamic.push(() =>
     corridor.update(
       performance.now() / 1000,
       reducedMotion.matches,
-      1 - labRoom.lights.level,
+      1 - fillLevel(),
     ),
   );
   // The everyday tool board hangs on the south wall east of the door,
@@ -432,6 +686,12 @@ export function startScene(canvas: HTMLCanvasElement) {
     get xenonFlowSlpm() {
       return xenon.flowSlpm;
     },
+    get plantPowered() {
+      return plantRoom.powered;
+    },
+    get recirculatorWorking() {
+      return recirculator.working;
+    },
   };
   const fromBoard = 'East board: ';
   for (const [index, parts] of eastControlPanel.handles.entries()) {
@@ -508,6 +768,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   ]);
   for (const part of labRoom.lights.switchParts)
     fixture(part, 'Light switch', () => {
+      if (fire.ruinCause) return;
       const on = labRoom.lights.toggle();
       audio.play(on ? 'toggle-up' : 'toggle-down');
       write(
@@ -521,10 +782,13 @@ export function startScene(canvas: HTMLCanvasElement) {
   scene.add(machineGlow);
   dynamic.push(() => {
     const dark = 1 - labRoom.lights.level;
-    fill.intensity = 1.5 * (0.02 + 0.98 * labRoom.lights.level);
-    lamp.intensity = 2.1 * labRoom.lights.level;
-    rim.intensity = 0.7 * labRoom.lights.level;
+    const level = fillLevel();
+    fill.intensity = 1.5 * (0.02 + 0.98 * level);
+    lamp.intensity = 2.1 * level;
+    rim.intensity = 0.7 * level;
     ps1Uniforms.roomLight.value = 0.03 + 0.97 * labRoom.lights.level;
+    ps1Uniforms.plantLight.value = 0.03 + 0.97 * plantRoom.lightLevel;
+    plantDoorLight.value = inCorridor() ? 1 : ps1Uniforms.plantLight.value;
     machineGlow.intensity = rig.controls.mains
       ? (5 + rig.field * 8) * (0.3 + 0.7 * dark)
       : 0;
@@ -999,6 +1263,21 @@ export function startScene(canvas: HTMLCanvasElement) {
     const y = meterY - 0.06 + Math.cos(angle) * 0.37;
     disc(lab, tick % 2 === 0 ? 0.026 : 0.014, '#4b5044', x, y, -3.235);
   }
+  // The red sector begins at the same 6.5 kW limit used by the heat model.
+  for (let mark = 0; mark <= 9; mark++) {
+    const fraction =
+      redlineFraction('load') + (1 - redlineFraction('load')) * (mark / 9);
+    const angle = -Math.PI * 0.75 + fraction * Math.PI * 1.5;
+    disc(
+      lab,
+      0.018,
+      '#c43a22',
+      wallDisplayX - 0.69 + Math.sin(angle) * 0.41,
+      meterY - 0.06 + Math.cos(angle) * 0.41,
+      -3.23,
+    );
+  }
+  label(lab, 'GRENZE 6,5 kW', wallDisplayX - 0.69, meterY - 0.68, -3.22, 7);
   const loadNeedle = cube(
     lab,
     0.026,
@@ -1114,7 +1393,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   cube(lab, 2.4, 0.1, 0.25, '#a4aaa0', -4.45, totalHeight / 2 + 0.55, -3.45);
   cube(lab, 2.25, 0.055, 0.04, '#e5d6a7', -4.45, totalHeight / 2 + 0.45, -3.3);
 
-  // A workbench with the BBC computer, disk drive and paper records.
+  // A workbench with the BBC computer, disk drive and its user guide.
   const bench = new Group();
   bench.position.set(-7.9, floorY, -0.8);
   bench.scale.set(3.7, 5.7, 4.5);
@@ -1125,9 +1404,6 @@ export function startScene(canvas: HTMLCanvasElement) {
     for (const z of [-0.5, 0.5])
       cube(bench, 0.13, 1.2, 0.13, '#3c453e', x, 0.61, z);
   }
-  for (let i = 0; i < 4; i++)
-    cube(bench, 0.57, 0.025, 0.38, '#e0d4af', -1.06, 1.45 + i * 0.025, 0.36);
-
   // A Microvitec Cub on the bench, kept out of the bench's stretched
   // scale so its proportions stay true.
   const cub = createCubMonitor(worldUnitsPerMetre);
@@ -1151,6 +1427,13 @@ export function startScene(canvas: HTMLCanvasElement) {
     bbc.group.position.z - 0.04 * worldUnitsPerMetre,
   );
   lab.add(diskDrive.group);
+  const userGuide = createBbcUserGuide(worldUnitsPerMetre);
+  userGuide.group.position.set(
+    diskDrive.group.position.x - 0.235 * worldUnitsPerMetre,
+    diskDrive.group.position.y,
+    diskDrive.group.position.z,
+  );
+  lab.add(userGuide.group);
   const diskCable = new Mesh(
     new TubeGeometry(
       new CatmullRomCurve3([
@@ -1224,6 +1507,44 @@ export function startScene(canvas: HTMLCanvasElement) {
   dynamic.push(() =>
     ashtray.update(performance.now() / 1000, reducedMotion.matches),
   );
+  const heatSmoke = {
+    spindle: createSmokeEmitter(),
+    field: createSmokeEmitter(),
+    load: createSmokeEmitter(),
+  };
+  const flames = {} as Record<
+    'spindle' | 'field' | 'load',
+    { flame: Mesh; light: PointLight }
+  >;
+  for (const [channel, x, z] of [
+    ['spindle', -1.1, rack.position.z + 0.35],
+    ['field', 1.05, rack.position.z + 0.35],
+    ['load', sideCabinet.position.x, sideCabinet.position.z + 0.45],
+  ] as const) {
+    const plume = heatSmoke[channel];
+    plume.group.position.set(x, floorY + 1.8 * worldUnitsPerMetre, z);
+    plume.group.scale.setScalar(0.65 * worldUnitsPerMetre);
+    scene.add(plume.group);
+    const flame = new Mesh(
+      new OctahedronGeometry(0.22 * worldUnitsPerMetre, 0),
+      material('#ff7519', true, true),
+    );
+    flame.position.copy(plume.group.position);
+    flame.visible = false;
+    flame.userData.noCollision = true;
+    scene.add(flame);
+    const light = new PointLight('#ff6a17', 0, 4 * worldUnitsPerMetre, 2);
+    light.position.copy(flame.position);
+    scene.add(light);
+    flames[channel] = { flame, light };
+  }
+  const discharge = new PointLight('#78d7ff', 0, 5 * worldUnitsPerMetre, 2);
+  discharge.position.set(
+    0,
+    floorY + 1.6 * worldUnitsPerMetre,
+    rack.position.z + 0.4,
+  );
+  scene.add(discharge);
 
   // Caged plant-room xenon bank; flexible hose terminates at the wall port.
   const xenonFloor = floorY + 0.05;
@@ -1241,6 +1562,19 @@ export function startScene(canvas: HTMLCanvasElement) {
     hoseEnd: new Vector3(plantRoom.port.x, plantRoom.port.y, plantRoom.port.z),
   });
   scene.add(xenon.group);
+  // Signs, labels and dial faces inside the plant room follow its own
+  // switch; those on the corridor side of its wall keep the corridor's.
+  // Signs on the door itself follow whichever side the viewer is on.
+  const entryParts = new Set<Object3D>(plantRoom.entryParts);
+  dimPrintedWith(plantRoom.entryParts, plantDoorLight);
+  dimPrintedWith(
+    [plantRoom.group, rectifier.group, recirculator.group, xenon.group],
+    ps1Uniforms.plantLight,
+    (mesh) =>
+      entryParts.has(mesh) ||
+      new Vector3().setFromMatrixPosition(mesh.matrixWorld).z >
+        plantRoom.bounds.maxZ - 0.01,
+  );
   for (const part of plantRoom.entryParts) {
     withinReach.add(part);
     fixture(part, 'Plant room door', () => {
@@ -1258,7 +1592,27 @@ export function startScene(canvas: HTMLCanvasElement) {
       write(
         on
           ? 'Plant master supply on. Mercury arc struck.'
-          : 'Plant master supply off. Room lights remain on.',
+          : 'Plant master supply off. Room lighting is independent.',
+      );
+    });
+  }
+  for (const part of plantRoom.lightSwitchParts) {
+    withinReach.add(part);
+    fixture(part, 'Plant-room light switch', () => {
+      const on = plantRoom.toggleLights();
+      audio.play(on ? 'toggle-up' : 'toggle-down');
+      write(on ? 'Technikraum: Licht an.' : 'Technikraum: Licht aus.');
+    });
+  }
+  for (const part of recirculator.switchParts) {
+    withinReach.add(part);
+    input(part, 'Xenon recirculator', 'KREISLAUF switch', () => {
+      const enabled = recirculator.toggle();
+      audio.play(enabled ? 'toggle-up' : 'toggle-down', 'rectifier');
+      write(
+        enabled
+          ? 'Xenon return-loop cooler selected. It runs with plant supply.'
+          : 'Xenon return-loop cooler stopped.',
       );
     });
   }
@@ -1498,8 +1852,9 @@ export function startScene(canvas: HTMLCanvasElement) {
     reading: () => number,
     caption: string,
     machine: string,
+    redline: number | null,
   ) => {
-    const dial = createDialTexture();
+    const dial = createDialTexture(redline);
     textures.push(dial);
     const face = new Mesh(
       new PlaneGeometry(0.69, 0.69),
@@ -1799,7 +2154,19 @@ export function startScene(canvas: HTMLCanvasElement) {
               : instrument === 'field'
                 ? () => rig.field
                 : () => rig.instability;
-        addGauge(slot, 0, 0.115, reading, instrument.toUpperCase(), machine);
+        addGauge(
+          slot,
+          0,
+          0.115,
+          reading,
+          instrument.toUpperCase(),
+          machine,
+          instrument === 'spindle'
+            ? redlineFraction('spindle')
+            : instrument === 'field'
+              ? redlineFraction('field')
+              : null,
+        );
       }
     }
     top -= h + 0.045;
@@ -1900,6 +2267,12 @@ export function startScene(canvas: HTMLCanvasElement) {
       z: room.maxZ - 0.395 * worldUnitsPerMetre,
     },
     {
+      id: 'sprinkler',
+      x: 0,
+      y: room.ceilingY - 0.5 * worldUnitsPerMetre,
+      z: (room.minZ + room.maxZ) / 2,
+    },
+    {
       id: 'rectifier',
       x: rectifier.group.position.x,
       y: floorY + worldUnitsPerMetre,
@@ -1908,6 +2281,23 @@ export function startScene(canvas: HTMLCanvasElement) {
   ] satisfies Array<Emitter & { id: SoundSource }>;
   // Shut doors stop sound between the lab, the plant room and the corridor.
   const roomPlan = { lab: room, plant: plantRoom.bounds };
+  // Rooms are culled whole: everything in the lab hangs under `lab`, and
+  // the plant room is these four groups. The lab pieces placed straight in
+  // the scene move under it, keeping their world positions.
+  for (const object of [
+    rack,
+    machineGlow,
+    discharge,
+    ...Object.values(heatSmoke).map((plume) => plume.group),
+    ...Object.values(flames).flatMap(({ flame, light }) => [flame, light]),
+  ])
+    lab.attach(object);
+  const plantGroups = [
+    plantRoom.group,
+    rectifier.group,
+    recirculator.group,
+    xenon.group,
+  ];
   const soundRooms = soundSources.map(
     (source) => [source.id, roomAt(roomPlan, source.x, source.z)] as const,
   );
@@ -1923,6 +2313,30 @@ export function startScene(canvas: HTMLCanvasElement) {
   const overlay = document.createElement('div');
   overlay.className = 'rack-ui';
   overlay.innerHTML = `<div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Movement and zoom"><button type="button" data-pan="left" aria-label="Step left">◀</button><button type="button" data-pan="up" aria-label="Step forward">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Step back">▼</button><button type="button" data-pan="right" aria-label="Step right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook"><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log" hidden>▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: MOVE · ALT+WHEEL: HEIGHT · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
+  const fireStatus = document.createElement('div');
+  fireStatus.style.cssText =
+    'position:absolute;left:50%;top:16%;transform:translateX(-50%);z-index:10;text-align:center;color:#ffd6b1;background:#420b08dd;padding:12px 20px;font:700 22px monospace;letter-spacing:2px;pointer-events:auto';
+  fireStatus.hidden = true;
+  const ruinTitle = document.createElement('div');
+  ruinTitle.textContent = 'VX LAB IS RUINED';
+  const freshRun = document.createElement('button');
+  freshRun.textContent = 'RESET';
+  freshRun.hidden = true;
+  fireStatus.append(ruinTitle, freshRun);
+  overlay.append(fireStatus);
+  freshRun.addEventListener('click', () => {
+    if (!fire.ruinCause || fire.ruinAge < 20) return;
+    Object.assign(fire, createFireIncident());
+    Object.assign(overheat, createOverheatState());
+    Object.assign(telltales, createSafetyTelltales());
+    Object.assign(board, createBoard());
+    Object.assign(settings, createRackControls());
+    resetRig();
+    if (labRoom.lights.on) labRoom.lights.toggle();
+    fireStatus.hidden = true;
+    freshRun.hidden = true;
+    write('Incident cleared. New cold run authorised.');
+  });
   const manualSheet = document.createElement('aside');
   manualSheet.className = 'manual-sheet';
   manualSheet.hidden = true;
@@ -2138,9 +2552,14 @@ export function startScene(canvas: HTMLCanvasElement) {
     walker.z = plantRoom.bank.z + 1.65 * worldUnitsPerMetre;
     orbitYaw = 0;
     orbitPitch = -0.305;
+  } else if (inspectionView === 'recirculator') {
+    walker.x = recirculator.group.position.x;
+    walker.z = recirculator.group.position.z + 1.6 * worldUnitsPerMetre;
+    orbitYaw = 0;
+    orbitPitch = -0.2;
   } else if (inspectionView === 'plant-room') {
     walker.x = plantRoom.doorway.x;
-    walker.z = room.maxZ + 1.8 * worldUnitsPerMetre;
+    walker.z = room.maxZ + 2.25 * worldUnitsPerMetre;
     orbitYaw = 0;
     orbitPitch = -0.05;
   } else if (inspectionView === 'printer') {
@@ -2153,6 +2572,16 @@ export function startScene(canvas: HTMLCanvasElement) {
     walker.z = plantRoom.rectifierPosition.z + 0.75 * worldUnitsPerMetre;
     orbitYaw = Math.PI / 2;
     orbitPitch = -0.28;
+  } else if (inspectionView === 'fire-call') {
+    walker.x = firePoint.position.x;
+    walker.z = firePoint.position.z - 1.55 * worldUnitsPerMetre;
+    orbitYaw = Math.PI;
+    orbitPitch = -0.23;
+  } else if (inspectionView === 'fire-reset') {
+    walker.x = firePanel.position.x;
+    walker.z = firePanel.position.z + 1.55 * worldUnitsPerMetre;
+    orbitYaw = 0;
+    orbitPitch = -0.23;
   }
   const keys = new Set<string>();
   const nudge = { forward: 0, right: 0 };
@@ -2447,10 +2876,16 @@ export function startScene(canvas: HTMLCanvasElement) {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let last = 0;
   let xenonWarned = false;
+  let nextFireCue = 0;
   renderer.setAnimationLoop((time) => {
     const delta = last ? Math.min(0.1, (time - last) / 1000) : 0;
     last = time;
-    plantRoom.update(delta, reducedMotion.matches, telltales.powerKw);
+    plantRoom.update(
+      delta,
+      reducedMotion.matches,
+      telltales.powerKw,
+      inCorridor() ? 1 - labRoom.lights.level : 0,
+    );
     rectifier.update(plantRoom.powered, time / 1000, reducedMotion.matches);
     audio.setPlantPower(plantRoom.powered);
     if (rig.controls.mains && !plantRoom.powered) {
@@ -2492,10 +2927,109 @@ export function startScene(canvas: HTMLCanvasElement) {
         latchFault(board);
         audio.play('incident');
         window.setTimeout(() => audio.play('breaker-off'), 180);
+        // The fault printout first, with clues to what went wrong, then the
+        // operator's own note of what it did to the room.
+        for (const line of tripClues(event.report, {
+          xenonFlowSlpm: xenon.flowSlpm,
+        }))
+          write(line);
         write(event.text);
       }
     }
     stepSafetyTelltales(telltales, rig, settings, delta, xenon.flowSlpm);
+    const startedSmoking = stepOverheat(
+      overheat,
+      {
+        spindle: rig.spindle,
+        field: rig.field,
+        load: telltales.powerKw,
+      },
+      delta,
+    );
+    for (const channel of startedSmoking)
+      write(
+        channel === 'spindle'
+          ? 'Encabulator drive smoking. Smells like a warm toaster. Carrying on.'
+          : channel === 'field'
+            ? 'H-B coil insulation smoking. Field still holds.'
+            : 'Betaform amplifier smoking. The load meter agrees.',
+      );
+    for (const channel of ['spindle', 'field', 'load'] as const)
+      heatSmoke[channel].update(
+        time / 1000,
+        overheat.smoke[channel],
+        reducedMotion.matches,
+      );
+    for (const channel of ['spindle', 'field', 'load'] as const) {
+      const { flame, light } = flames[channel];
+      flame.visible = fire.burning[channel];
+      flame.scale.setScalar(
+        reducedMotion.matches ? 1 : 0.85 + 0.25 * Math.sin(time * 0.019),
+      );
+      light.intensity = fire.burning[channel]
+        ? 9 + 3 * Math.sin(time * 0.013)
+        : 0;
+    }
+    for (const event of stepFireIncident(
+      fire,
+      overheat,
+      rig.controls.mains,
+      delta,
+    )) {
+      if (event === 'alarm') {
+        latchFault(board);
+        audio.play('warning');
+        write('Rauchmelder: FEUERALARM. Labor räumen; Hauptschalter öffnen.');
+      } else if (event === 'water') {
+        audio.play('relay', 'sprinkler');
+        write('Sprinkler geöffnet. Wasser auf dem Laborboden.');
+      } else if (event === 'water-stopped') {
+        audio.play('relay', 'sprinkler');
+        write('Sprinklerzufuhr nach 45 Sekunden automatisch geschlossen.');
+      } else if (event === 'fire') {
+        audio.play('incident');
+        write('Gerätebrand festgestellt. Stromversorgung sofort trennen.');
+      } else if (event === 'ruined-fire' || event === 'ruined-short') {
+        rig.controls.mains = false;
+        settings.mains = false;
+        applyRack(settings, rig.controls);
+        if (labRoom.lights.on) labRoom.lights.toggle();
+        audio.play('incident');
+        write(
+          event === 'ruined-fire'
+            ? 'ABSCHLUSSBERICHT: Labor durch Gerätebrand zerstört.'
+            : 'ABSCHLUSSBERICHT: Wasser auf spannungsführender Anlage. Labor zerstört.',
+        );
+      }
+    }
+    const beaconPulse = fire.alarm && Math.sin(time * 0.006) > 0;
+    labRoom.setFireAlarm(fire.alarm);
+    fireScreen.material.color.set(fire.alarm ? '#df552f' : '#65a76b');
+    labBeacon.intensity = beaconPulse ? 20 : 0;
+    hallBeacon.intensity = beaconPulse ? 14 : 0;
+    discharge.intensity =
+      fire.water &&
+      (rig.controls.mains || fire.ruinCause === 'short') &&
+      Math.sin(time * 0.035) > 0.7
+        ? 30
+        : 0;
+    if (fire.alarm && time >= nextFireCue) {
+      audio.play('warning');
+      if (fire.water && (rig.controls.mains || fire.ruinCause === 'short'))
+        audio.play('spark');
+      nextFireCue = time + 1500;
+    }
+    audio.setSprinklers(fire.water);
+    for (const { spray, puddle } of sprinklerEffects) {
+      spray.update(time / 1000, fire.water, reducedMotion.matches);
+      puddle.scale.setScalar(Math.max(0.001, fire.puddle));
+    }
+    fireStatus.hidden =
+      !fire.ruinCause || (fire.ruinAge >= 8 && fire.ruinAge < 20);
+    if (fire.ruinCause) {
+      ruinTitle.hidden = fire.ruinAge >= 8;
+      freshRun.hidden = fire.ruinAge < 20;
+    }
     // Running ferrocores bend the room: colour, π, space and sparks.
     const activity = ferrocoreActivity(rig);
     anomaly = anomalyEffects(activity, time / 1000, reducedMotion.matches);
@@ -2623,6 +3157,11 @@ export function startScene(canvas: HTMLCanvasElement) {
     viewer.getWorldDirection(facing);
     audio.listen(ear.x, ear.y, ear.z, Math.atan2(facing.x, -facing.z));
     const listenerRoom = roomAt(roomPlan, ear.x, ear.z);
+    // Draw only the rooms that can be seen from here. Collision was taken
+    // from the whole scene on the first frame, before anything was hidden.
+    const shown = visibleRooms(listenerRoom);
+    lab.visible = shown.lab;
+    for (const group of plantGroups) group.visible = shown.plant;
     const doorOpenings = {
       lab: labRoom.door.amount,
       plant: plantRoom.entryAmount,
@@ -2657,7 +3196,10 @@ export function startScene(canvas: HTMLCanvasElement) {
     document.removeEventListener('visibilitychange', visibility);
     audio.dispose();
     ashtray.dispose();
+    for (const plume of Object.values(heatSmoke)) plume.dispose();
+    for (const { spray } of sprinklerEffects) spray.dispose();
     xenon.dispose();
+    recirculator.dispose();
     sparkles.dispose();
     plantRoom.dispose();
     rectifier.dispose();
@@ -2669,6 +3211,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     cub.dispose();
     bbc.dispose();
     diskDrive.dispose();
+    userGuide.dispose();
     workbench.dispose();
     for (const valve of valveModels) valve.dispose();
     eastControlPanel.dispose();

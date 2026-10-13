@@ -36,14 +36,35 @@ export interface RigState {
   instability: number;
   /** Accumulated over-stability stress; an incident fires at 1. */
   strain: number;
+  /** How much of the current strain came from each source, for trip reports. */
+  strainFrom: { field: number; hazard: number };
   incidents: number;
+}
+
+/** The rig's state at the moment the breaker tripped, for the fault printout. */
+export interface TripReport {
+  /** Share of the strain that came from the field off equilibrium, 0 to 1. */
+  fieldShare: number;
+  /** Share that came from hazards elsewhere, such as dry xenon, 0 to 1. */
+  hazardShare: number;
+  /** BLATZ TRIM minus the trim the field wanted; positive means set high. */
+  trimError: number;
+  /** NULL's distance from centre, -0.5 to 0.5. */
+  nullOffset: number;
+  drift: number;
+  grounded: boolean;
+  ratio: number;
+  /** BAND minus field strength; far from zero, strain bleeds slowly. */
+  bandError: number;
+  field: number;
+  spindle: number;
 }
 
 export type RigEvent =
   | { kind: 'warmed' }
   | { kind: 'field-locked' }
   | { kind: 'warning' }
-  | { kind: 'incident'; text: string };
+  | { kind: 'incident'; text: string; report: TripReport };
 
 export const WARNING_LEVEL = 0.55;
 export const YALGETH_LIMIT = 0.88;
@@ -60,6 +81,7 @@ export function createRig(): RigState {
     drift: 0,
     instability: 0,
     strain: 0,
+    strainFrom: { field: 0, hazard: 0 },
     incidents: 0,
   };
 }
@@ -141,15 +163,26 @@ export function stepRig(
     Math.abs((controls.plasmaNull ?? 0.5) - 0.5) * 0.2;
   state.instability = clamp(error * 3.5 * state.field);
 
-  if (state.instability > WARNING_LEVEL)
-    state.strain +=
-      delta * ((state.instability - WARNING_LEVEL) * 1.2 + hazardStrain);
-  else if (hazardStrain > 0) state.strain += delta * hazardStrain;
-  else
+  const fromField =
+    state.instability > WARNING_LEVEL
+      ? delta * (state.instability - WARNING_LEVEL) * 1.2
+      : 0;
+  const fromHazard = delta * hazardStrain;
+  if (fromField > 0 || fromHazard > 0) {
+    state.strain += fromField + fromHazard;
+    state.strainFrom.field += fromField;
+    state.strainFrom.hazard += fromHazard;
+  } else {
+    const before = state.strain;
     state.strain = Math.max(
       0,
       state.strain - delta * 0.15 * insulationBleed(state.field, controls.band),
     );
+    // Strain bleeds away from every source alike.
+    const kept = before > 0 ? state.strain / before : 0;
+    state.strainFrom.field *= kept;
+    state.strainFrom.hazard *= kept;
+  }
 
   if (!wasWarm && state.heater >= 0.95) events.push({ kind: 'warmed' });
   if (!wasLocked && state.field > 0.2 && state.instability < 0.1)
@@ -159,16 +192,38 @@ export function stepRig(
 
   if (state.strain >= 1) {
     state.incidents += 1;
-    events.push({ kind: 'incident', text: pickConsequence(random) });
+    events.push({
+      kind: 'incident',
+      text: pickConsequence(random),
+      report: tripReport(state),
+    });
     // The breaker trips and the field collapses.
     controls.mains = false;
     state.field = 0;
     state.spindle *= 0.5;
     state.strain = 0;
+    state.strainFrom = { field: 0, hazard: 0 };
     state.instability = 0;
     state.drift = 0;
   }
   return events;
+}
+
+function tripReport(state: RigState): TripReport {
+  const { controls, strainFrom } = state;
+  const total = strainFrom.field + strainFrom.hazard;
+  return {
+    fieldShare: total > 0 ? strainFrom.field / total : 0,
+    hazardShare: total > 0 ? strainFrom.hazard / total : 0,
+    trimError: controls.trim - idealTrim(state),
+    nullOffset: (controls.plasmaNull ?? 0.5) - 0.5,
+    drift: state.drift,
+    grounded: controls.grounded ?? false,
+    ratio: controls.ratio ?? RATIO_NEUTRAL,
+    bandError: (controls.band ?? 0.4) - state.field,
+    field: state.field,
+    spindle: state.spindle,
+  };
 }
 
 function approach(value: number, target: number, step: number) {

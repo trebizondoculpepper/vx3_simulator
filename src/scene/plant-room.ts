@@ -4,6 +4,7 @@ import {
   CylinderGeometry,
   Group,
   Mesh,
+  MeshStandardMaterial,
   PlaneGeometry,
   PointLight,
 } from 'three';
@@ -11,6 +12,7 @@ import type { Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { addPlantRoomWiring } from './plant-room-wiring';
 import { createRectifierInstruments } from './rectifier-instruments';
+import { createLightSwitch } from './light-switch';
 import { createCanvasTexture, createLabelTexture } from './screens';
 import {
   createGasCylinderWarningTexture,
@@ -18,6 +20,9 @@ import {
 } from './gas-signs';
 
 /** A small plant room west of the lab, entered directly from the corridor. */
+const TUBE_ON = '#eef6e4';
+const TUBE_OFF = '#3c423c';
+
 export function createPlantRoom(options: {
   floorY: number;
   minX: number;
@@ -154,17 +159,81 @@ export function createPlantRoom(options: {
     floorY + (height + doorHeight) / 2,
     maxZ + wallThickness / 2 - 0.01,
   );
+  // Steel jambs and a head lining round the opening; like the door they
+  // take the corridor's light when seen from outside.
+  const lining: Mesh[] = [];
   for (const x of [midX - doorWidth / 2, midX + doorWidth / 2])
+    lining.push(
+      box(
+        0.06 * m,
+        doorHeight,
+        wallThickness,
+        '#384b40',
+        x,
+        floorY + doorHeight / 2,
+        maxZ + wallThickness / 2,
+      ),
+    );
+  lining.push(
     box(
-      0.06 * m,
-      doorHeight,
+      doorWidth + 0.06 * m,
+      0.03 * m,
       wallThickness,
       '#384b40',
-      x,
-      floorY + doorHeight / 2,
+      midX,
+      floorY + doorHeight - 0.015 * m,
       maxZ + wallThickness / 2,
-    );
+    ),
+  );
   label('TECHNIKRAUM', 1.25 * m, midX, floorY + 2.3 * m, entryZ + 0.05);
+  // Corridor-side reminder fixed to the wall beside, rather than on, the door.
+  const noticeX = midX - doorWidth / 2 - 0.5 * m;
+  const noticeY = floorY + 1.55 * m;
+  const noticeZ = entryZ + 0.055 * m;
+  box(0.52 * m, 0.34 * m, 0.025 * m, '#d4c99f', noticeX, noticeY, noticeZ);
+  box(
+    0.48 * m,
+    0.3 * m,
+    0.006 * m,
+    '#34453b',
+    noticeX,
+    noticeY,
+    noticeZ + 0.017 * m,
+  );
+  label(
+    'BITTE DIESE TÜR',
+    0.44 * m,
+    noticeX,
+    noticeY + 0.095 * m,
+    noticeZ + 0.022 * m,
+  );
+  label('STETS', 0.2 * m, noticeX, noticeY, noticeZ + 0.022 * m);
+  label(
+    'GESCHLOSSEN HALTEN',
+    0.46 * m,
+    noticeX,
+    noticeY - 0.095 * m,
+    noticeZ + 0.022 * m,
+  );
+  // Room lighting has its own rocker just inside the entrance.
+  const lightingPlate = new Group();
+  lightingPlate.position.set(
+    midX + doorWidth / 2 + 0.35 * m,
+    floorY + 1.25 * m,
+    maxZ - 0.045 * m,
+  );
+  lightingPlate.rotation.y = Math.PI;
+  group.add(lightingPlate);
+  const lightSwitch = createLightSwitch(m);
+  lightingPlate.add(lightSwitch.group);
+  const lightSwitchParts = lightSwitch.parts;
+  for (const part of lightSwitchParts)
+    designate(part, {
+      machine: 'Plant room',
+      name: 'LICHT switch',
+      role: 'input',
+    });
+  let lightsOn = false;
   const door = new Group();
   // Hinge at the room face of the wall so the open leaf clears the jamb.
   door.position.set(midX - doorWidth / 2, floorY, maxZ + 0.02 * m);
@@ -337,6 +406,21 @@ export function createPlantRoom(options: {
   door.traverse((o) => {
     if (o instanceof Mesh) entryParts.push(o);
   });
+  // The scene's fill light follows the lab's switch, so the door makes up
+  // the difference itself and keeps the corridor's lighting either way.
+  const entrySurfaces = new Set<MeshStandardMaterial>();
+  // Paints are shared by colour, so the door gets its own copies.
+  for (const part of [...entryParts, ...lining])
+    if (
+      part.material instanceof MeshStandardMaterial &&
+      !part.material.transparent
+    ) {
+      const own = part.material.clone();
+      part.material = own;
+      materials.push(own);
+      entrySurfaces.add(own);
+    }
+  let entryDark = -1;
   let entryOpened = false;
   let entryAmount = 0;
   let arcCountdown = 1.7;
@@ -543,6 +627,11 @@ export function createPlantRoom(options: {
       floorY + 1.2 * m,
       minZ + 0.1 * m,
     );
+  // Two twin-tube fittings. The tubes glow when lit, and each fitting has
+  // its own lamp, as in the lab.
+  const tubeMaterial = createPs1Material({ color: TUBE_OFF }, true, true);
+  materials.push(tubeMaterial);
+  const tubeLights: PointLight[] = [];
   for (const x of [minX + 1.25 * m, maxX - 1.25 * m]) {
     const fitting = new Group();
     fitting.position.set(x, ceilingY, minZ + 3.65 * m);
@@ -550,17 +639,25 @@ export function createPlantRoom(options: {
     for (const dx of [-0.48 * m, 0.48 * m])
       box(0.016 * m, 0.24 * m, 0.016 * m, '#343833', dx, -0.12 * m, 0, fitting);
     box(1.28 * m, 0.08 * m, 0.13 * m, '#b9bcae', 0, -0.27 * m, 0, fitting);
-    for (const dz of [-0.035 * m, 0.035 * m])
-      box(1.2 * m, 0.012 * m, 0.024 * m, '#eef2df', 0, -0.33 * m, dz, fitting);
+    for (const dz of [-0.035 * m, 0.035 * m]) {
+      const tube = new Mesh(
+        new BoxGeometry(1.2 * m, 0.012 * m, 0.024 * m),
+        tubeMaterial,
+      );
+      tube.position.set(0, -0.33 * m, dz);
+      fitting.add(tube);
+    }
+    const lamp = new PointLight('#e8f2dc', 0, 0, 2);
+    lamp.position.set(0, -0.7 * m, 0);
+    fitting.add(lamp);
+    tubeLights.push(lamp);
   }
-  const light = new PointLight('#dbe5c3', 24, 6 * m, 1.3);
-  light.position.set(midX, floorY + 2.35 * m, minZ + 3.65 * m);
-  group.add(light);
+  let lightLevel = 0;
 
   addPlantRoomWiring(group, materials, options);
 
   // Wire cage: access gate swings into the aisle, with no solid transparent wall.
-  const cageX = midX - 0.4 * m;
+  const cageX = midX - 0.82 * m;
   const cageBack = minZ + 0.08 * m;
   const cageFront = minZ + 0.9 * m;
   const cageLeft = cageX - 0.68 * m;
@@ -662,7 +759,7 @@ export function createPlantRoom(options: {
   label(
     '1 CAGE  2 VALVE  3 FLOW  4 MAINS',
     1.4 * m,
-    midX,
+    cageX,
     floorY + 1.95 * m,
     minZ + 0.025,
   );
@@ -697,6 +794,15 @@ export function createPlantRoom(options: {
       return entryOpened;
     },
     powerParts,
+    lightSwitchParts,
+    /** How much of the room's own lighting is on, 0 (dark) to 1. */
+    get lightLevel() {
+      return lightLevel;
+    },
+    toggleLights() {
+      lightsOn = !lightsOn;
+      return lightsOn;
+    },
     get powered() {
       return powered;
     },
@@ -729,7 +835,12 @@ export function createPlantRoom(options: {
     openGate() {
       opened = true;
     },
-    update(delta: number, reducedMotion: boolean, loadKw = 0) {
+    update(delta: number, reducedMotion: boolean, loadKw = 0, labDark = 0) {
+      if (Math.abs(labDark - entryDark) > 0.01) {
+        entryDark = labDark;
+        for (const surface of entrySurfaces)
+          surface.emissive.copy(surface.color).multiplyScalar(0.55 * labDark);
+      }
       instruments.update(powered, loadKw, delta);
       entryAmount +=
         Math.sign((entryOpened ? 1 : 0) - entryAmount) *
@@ -752,6 +863,10 @@ export function createPlantRoom(options: {
       }
       for (const glow of grilleGlows) glow.opacity = arcPulse > 0 ? 0.85 : 0;
       lever.rotation.x = powered ? 0 : 1.05;
+      lightSwitch.update(lightsOn);
+      lightLevel += ((lightsOn ? 1 : 0) - lightLevel) * Math.min(1, delta * 5);
+      for (const lamp of tubeLights) lamp.intensity = 26 * lightLevel;
+      tubeMaterial.color.set(lightsOn ? TUBE_ON : TUBE_OFF);
       const target = opened ? 1 : 0;
       amount +=
         Math.sign(target - amount) *
@@ -761,6 +876,7 @@ export function createPlantRoom(options: {
     dispose() {
       group.remove(instruments.group);
       instruments.dispose();
+      lightSwitch.dispose();
       group.traverse((o) => {
         if (o instanceof Mesh) o.geometry.dispose();
       });

@@ -1,10 +1,11 @@
 import {
+  Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   Vector2,
   Vector3,
 } from 'three';
-import type { MeshStandardMaterialParameters } from 'three';
+import type { MeshStandardMaterialParameters, Object3D } from 'three';
 
 // Quantize projected coordinates, preserving clip-space depth and the original w.
 // Shared uniforms let resizing and reduced motion update every scene material.
@@ -14,6 +15,8 @@ export const ps1Uniforms = {
   snapStrength: { value: 0.35 },
   /** How much of the lab's own lighting is on, from 0 (dark) to 1. */
   roomLight: { value: 1.0 },
+  /** The same for the plant room, which has its own switch. */
+  plantLight: { value: 1.0 },
   /** Red, green and blue multipliers; they breathe near running ferrocores. */
   channels: { value: new Vector3(1, 1, 1) },
   /** How far space is bent near running ferrocores, 0 (flat) to 1. */
@@ -44,8 +47,9 @@ export function createPs1Material(
     shader.uniforms.ps1Resolution = ps1Uniforms.resolution;
     shader.uniforms.ps1SnapPixels = ps1Uniforms.snapPixels;
     shader.uniforms.ps1SnapStrength = ps1Uniforms.snapStrength;
-    shader.uniforms.ps1RoomLight = ps1Uniforms.roomLight;
-    shader.uniforms.ps1Dims = { value: unlit && !glow ? 1 : 0 };
+    const room = material.userData.ps1Room as typeof ps1Uniforms.roomLight;
+    shader.uniforms.ps1RoomLight = room ?? ps1Uniforms.roomLight;
+    shader.uniforms.ps1Dims = { value: room || (unlit && !glow) ? 1 : 0 };
     shader.uniforms.ps1Channels = ps1Uniforms.channels;
     shader.uniforms.ps1Warp = ps1Uniforms.warp;
     shader.uniforms.ps1Time = ps1Uniforms.time;
@@ -93,4 +97,30 @@ export function createPs1Material(
   };
   material.customProgramCacheKey = () => 'ps1-snap-dither-v4';
   return material;
+}
+
+/**
+ * Make every printed surface under `roots` (an unlit material with a
+ * texture: signs, labels, dial faces) dim with `room` instead of the lab,
+ * skipping meshes `outside` says belong to another space. Plain-coloured
+ * glows such as lamps and arcs keep their own light. Call before the first
+ * render, since the choice is made when the shader compiles.
+ */
+export function dimPrintedWith(
+  roots: Object3D[],
+  room: typeof ps1Uniforms.roomLight,
+  outside: (mesh: Mesh) => boolean = () => false,
+) {
+  for (const root of roots) {
+    root.updateMatrixWorld(true);
+    root.traverse((object) => {
+      if (!(object instanceof Mesh) || outside(object)) return;
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+      for (const material of materials)
+        if (material instanceof MeshBasicMaterial && material.map)
+          material.userData.ps1Room = room;
+    });
+  }
 }

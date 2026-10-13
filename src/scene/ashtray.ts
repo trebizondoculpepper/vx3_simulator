@@ -1,18 +1,7 @@
-import {
-  BoxGeometry,
-  Color,
-  CylinderGeometry,
-  Group,
-  Mesh,
-  Sprite,
-  SpriteMaterial,
-} from 'three';
+import { BoxGeometry, Color, CylinderGeometry, Group, Mesh } from 'three';
 import type { Material } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
-import { createCanvasTexture } from './screens';
-
-const PUFFS = 14;
-const SMOKE_HEIGHT = 1.15;
+import { createSmokeEmitter } from './smoke-emitter';
 const emberDim = new Color('#c8340e');
 const emberBright = new Color('#ffa040');
 
@@ -94,28 +83,12 @@ export function createAshtray() {
   const ember = segment(0.008, '#ff5a1a', -0.199, true);
   const emberMaterial = ember.material as Material & { color: Color };
 
-  // Smoke: pixelated soft puffs that rise, widen, sway and fade, then recycle.
-  const puff = createCanvasTexture(16, 16);
-  const gradient = puff.context.createRadialGradient(8, 8, 0, 8, 8, 8);
-  gradient.addColorStop(0, 'rgba(222, 222, 216, 1)');
-  gradient.addColorStop(1, 'rgba(222, 222, 216, 0)');
-  puff.context.fillStyle = gradient;
-  puff.context.fillRect(0, 0, 16, 16);
-  puff.texture.needsUpdate = true;
+  // Smoke uses the same emitter as the cabinet, at cigarette scale.
   const tipX = 0.27 - Math.cos(restAngle) * 0.203;
   const tipZ = 0.09 + Math.sin(restAngle) * 0.203;
-  const puffs = Array.from({ length: PUFFS }, () => {
-    const spriteMaterial = new SpriteMaterial({
-      map: puff.texture,
-      transparent: true,
-      depthWrite: false,
-      opacity: 0,
-    });
-    materials.push(spriteMaterial);
-    const sprite = new Sprite(spriteMaterial);
-    group.add(sprite);
-    return sprite;
-  });
+  const smoke = createSmokeEmitter();
+  smoke.group.position.set(tipX, 0.09, tipZ);
+  group.add(smoke.group);
 
   return {
     group,
@@ -125,25 +98,14 @@ export function createAshtray() {
       const flicker =
         0.5 + 0.3 * Math.sin(time * 2.3) + 0.2 * Math.sin(time * 7.1);
       emberMaterial.color.copy(emberDim).lerp(emberBright, flicker);
-      puffs.forEach((sprite, i) => {
-        const age = (time * 0.16 + i / PUFFS) % 1;
-        const curl = Math.sin(age * 5 + time * 0.6 + i * 0.7) * 0.07 * age;
-        sprite.position.set(
-          tipX + curl + age * 0.06,
-          0.09 + age * SMOKE_HEIGHT,
-          tipZ + Math.cos(age * 4 + time * 0.4) * 0.03 * age,
-        );
-        sprite.scale.setScalar(0.035 + age * 0.26);
-        const fadeIn = Math.min(1, age / 0.08);
-        sprite.material.opacity = fadeIn * (1 - age) * 0.62;
-      });
+      smoke.update(seconds, 1, reducedMotion);
     },
     dispose() {
       group.traverse((object) => {
         if (object instanceof Mesh) object.geometry.dispose();
       });
       for (const item of materials) item.dispose();
-      puff.texture.dispose();
+      smoke.dispose();
     },
   };
 }

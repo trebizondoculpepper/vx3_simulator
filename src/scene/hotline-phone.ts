@@ -83,15 +83,18 @@ export function createHotlinePhone() {
   group.name = 'HotlinePhone';
   const materials: Material[] = [];
   const textures: Texture[] = [];
+  // This phone hangs on the lit corridor face of the lab wall. Its own
+  // material must not follow the laboratory's initially dark light switch.
+  const corridorLight = { value: 0.72 };
   const mesh = (
     geometry: BufferGeometry,
     color: string,
     x: number,
     y: number,
     z: number,
-    unlit = false,
   ) => {
-    const material = createPs1Material({ color }, unlit);
+    const material = createPs1Material({ color }, true);
+    material.userData.ps1Room = corridorLight;
     materials.push(material);
     const result = new Mesh(geometry, material);
     result.position.set(x, y, z);
@@ -163,6 +166,7 @@ export function createHotlinePhone() {
   const sign = createHotlineSign();
   textures.push(sign.texture);
   const signMaterial = createPs1Material({ map: sign.texture }, true);
+  signMaterial.userData.ps1Room = corridorLight;
   materials.push(signMaterial);
   const signMesh = new Mesh(
     new PlaneGeometry(sign.width / 220, sign.height / 220),

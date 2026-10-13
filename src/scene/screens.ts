@@ -33,8 +33,8 @@ export function createLabelTexture(
   return { texture, width, height };
 }
 
-/** Cream meter face with a 270-degree scale and a red zone. */
-export function createDialTexture(redZone = true) {
+/** Cream meter face with an optional operating limit on its 270-degree scale. */
+export function createDialTexture(redline: number | null = null) {
   const size = 64;
   const { context, texture } = createCanvasTexture(size, size);
   const c = size / 2;
@@ -45,11 +45,11 @@ export function createDialTexture(redZone = true) {
   context.arc(c, c, 30, 0, Math.PI * 2);
   context.fill();
   const toCanvas = (degrees: number) => ((degrees - 90) * Math.PI) / 180;
-  if (redZone) {
+  if (redline !== null) {
     context.strokeStyle = '#c43a22';
     context.lineWidth = 3;
     context.beginPath();
-    context.arc(c, c, 24, toCanvas(90), toCanvas(135));
+    context.arc(c, c, 24, toCanvas(-135 + redline * 270), toCanvas(135));
     context.stroke();
   }
   context.strokeStyle = '#2a2a22';

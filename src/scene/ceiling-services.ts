@@ -128,6 +128,7 @@ export function createCeilingServices(run: ServiceRun) {
   const { axis, from, to, ceilingY, worldUnitsPerMetre: m } = run;
   const group = new Group();
   group.name = 'CeilingServices';
+  const sprinklerHeads: Group[] = [];
   const palette = new Map<string, Material>();
   const extras: Material[] = [];
   const textures: Texture[] = [];
@@ -532,6 +533,11 @@ export function createCeilingServices(run: ServiceRun) {
     across: number,
     color: string,
   ) => {
+    const anchor = new Group();
+    if (axis === 'x') anchor.position.set(along, headY - 0.056 * m, across);
+    else anchor.position.set(across, headY - 0.056 * m, along);
+    group.add(anchor);
+    sprinklerHeads.push(anchor);
     const dr = 0.0125 * m;
     place(
       new CylinderGeometry(dr * 2, dr * 2, dr * 4, 6),
@@ -1043,11 +1049,12 @@ export function createCeilingServices(run: ServiceRun) {
 
   return {
     group,
+    sprinklerHeads,
     /** Blink the detector LEDs: a short red wink every six seconds. */
-    update(seconds: number) {
+    update(seconds: number, alarm = false) {
       for (const led of leds)
         led.material.color.copy(
-          (seconds + led.phase) % 6 < 0.15 ? LED_ON : LED_OFF,
+          alarm || (seconds + led.phase) % 6 < 0.15 ? LED_ON : LED_OFF,
         );
     },
     dispose() {

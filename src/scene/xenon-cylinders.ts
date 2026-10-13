@@ -379,7 +379,7 @@ export function createXenonCylinders(options: XenonBankOptions) {
     );
     bezel.rotation.x = Math.PI / 2;
     const face = textured(
-      createDialTexture(side > 0),
+      createDialTexture(),
       0.15,
       0.15,
       gaugeX,

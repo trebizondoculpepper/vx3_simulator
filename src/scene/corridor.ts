@@ -137,6 +137,9 @@ export function createCorridor(options: CorridorOptions) {
     box(w, 0.15, 0.1, SKIRT, x, floorY + 0.075, z + face * 0.05);
   };
   box(length, height, wallThickness, WALL, 0, midY, southZ + wallThickness / 2);
+  // The north wall stops short of its back face, so where a room such as
+  // the plant room lies behind it the two walls do not share a surface.
+  const backedWall = wallThickness - 0.04;
   run(-halfLength, halfLength, southZ, -1);
   for (const [x0, x1] of [
     [-halfLength, labMinX],
@@ -154,11 +157,11 @@ export function createCorridor(options: CorridorOptions) {
       box(
         b - a,
         height,
-        wallThickness,
+        backedWall,
         WALL,
         (a + b) / 2,
         midY,
-        northZ - wallThickness / 2,
+        northZ - backedWall / 2,
       );
       run(a, b, northZ, 1);
     }
@@ -166,11 +169,11 @@ export function createCorridor(options: CorridorOptions) {
       box(
         opening.width,
         height - opening.height,
-        wallThickness,
+        backedWall,
         WALL,
         opening.x,
         floorY + (height + opening.height) / 2,
-        northZ - wallThickness / 2,
+        northZ - backedWall / 2,
       );
   }
   const doorLeft = doorX - doorWidth / 2 - 0.07;

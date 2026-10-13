@@ -6,6 +6,8 @@ The workstation presents a fixed six-section early-1970s VX3 rack in a low-resol
 
 ## Next
 
+The redline and fire mission has begun with shared spindle, field and 6.5 kW supply limits, red sectors on their instruments, and a tested thermal model that produces visible machine smoke and log entries. Detector timing, alarm, sprinklers, fire and ruin remain to be wired; the [implementation analysis](design/redline-fire-analysis.md) records the sequence and remaining risks.
+
 A future mission is briefed in [the phase chamber brief](resume/2026-10-12_phase-chamber-mission.md): a third, interlocked door beside the lab that opens only with the ferrocores at the right speed, and a chamber where the operator shovels cadmium pellets into a great aperture to deepen phase coherence.
 
 The three framed advertisements now hang just above the west workbench, clear of its socket strip and sink. The query string ?view=workbench opens a direct inspection view of this arrangement.

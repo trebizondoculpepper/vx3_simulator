@@ -137,4 +137,31 @@ describe('secondary controls', () => {
     };
     expect(bleed(0.6)).toBeGreaterThan(bleed(0) * 2);
   });
+
+  it('reports where the strain came from when the breaker trips', () => {
+    const dry = createRig();
+    dry.controls.mains = true;
+    let report;
+    for (let t = 0; t < 80 && !report; t += 0.1)
+      report = stepRig(dry, 0.1, still, 0.02).find(
+        (event) => event.kind === 'incident',
+      )?.report;
+    expect(report?.hazardShare).toBeCloseTo(1);
+    expect(dry.strainFrom).toEqual({ field: 0, hazard: 0 });
+
+    const wild = createRig();
+    Object.assign(wild.controls, {
+      mains: true,
+      spindle: 1,
+      field: 1,
+      trim: 0,
+    });
+    report = undefined;
+    for (let t = 0; t < 120 && !report; t += 0.1)
+      report = stepRig(wild, 0.1, still).find(
+        (event) => event.kind === 'incident',
+      )?.report;
+    expect(report?.fieldShare).toBeCloseTo(1);
+    expect(report?.trimError).toBeLessThan(0);
+  });
 });

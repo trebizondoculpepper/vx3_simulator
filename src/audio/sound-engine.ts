@@ -12,6 +12,7 @@ export type SoundCue =
   | 'knob'
   | 'selector'
   | 'button'
+  | 'fire-call'
   | 'breaker-on'
   | 'breaker-off'
   | 'relay'
@@ -40,6 +41,7 @@ export type SoundSource =
   | 'computer'
   | 'cassette'
   | 'sink'
+  | 'sprinkler'
   | 'rectifier';
 
 export type CassetteButton = 'play' | 'stop' | 'fast-forward';
@@ -53,7 +55,8 @@ const cassetteAssetUrls: Record<CassetteButton, URL> = {
   ),
 };
 
-type Channel = 'hum' | 'heater' | 'spindle' | 'field' | 'strain' | 'rectifier';
+type Channel =
+  'hum' | 'heater' | 'spindle' | 'field' | 'strain' | 'rectifier' | 'sprinkler';
 
 const channelSources: Record<Channel, SoundSource> = {
   hum: 'supply',
@@ -62,6 +65,7 @@ const channelSources: Record<Channel, SoundSource> = {
   field: 'field',
   strain: 'monitor',
   rectifier: 'rectifier',
+  sprinkler: 'sprinkler',
 };
 
 // Cues from the apparatus itself. Control clicks and the logbook are at
@@ -90,6 +94,7 @@ interface AudioGraph {
   field: GainNode;
   strain: GainNode;
   rectifier: GainNode;
+  sprinkler: GainNode;
   panners: Record<Channel, StereoPannerNode>;
   spindleTone: OscillatorNode;
   rotorPulse: OscillatorNode;
@@ -144,6 +149,7 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
   const field = gain(0.2, 'field');
   const strain = gain(0.15, 'strain');
   const rectifier = gain(0, 'rectifier');
+  const sprinkler = gain(0, 'sprinkler');
   const sources: Array<OscillatorNode | AudioBufferSourceNode> = [];
   const oscillator = (
     type: OscillatorType,
@@ -207,6 +213,27 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
   bearingPulse.gain.value = 0.3;
   rotorDepth.connect(bearingPulse.gain);
   noise.connect(bearingFilter).connect(bearingPulse).connect(spindle);
+  // Water rushing through the heads, with a lower splatter layer. Both
+  // branches share the existing seamless noise source and follow room audio.
+  const sprayHigh = context.createBiquadFilter();
+  sprayHigh.type = 'highpass';
+  sprayHigh.frequency.value = 650;
+  const sprayLow = context.createBiquadFilter();
+  sprayLow.type = 'lowpass';
+  sprayLow.frequency.value = 4300;
+  const sprayHiss = context.createGain();
+  sprayHiss.gain.value = 0.68;
+  noise
+    .connect(sprayHigh)
+    .connect(sprayLow)
+    .connect(sprayHiss)
+    .connect(sprinkler);
+  const splashLow = context.createBiquadFilter();
+  splashLow.type = 'lowpass';
+  splashLow.frequency.value = 900;
+  const splashGain = context.createGain();
+  splashGain.gain.value = 0.25;
+  noise.connect(splashLow).connect(splashGain).connect(sprinkler);
   noise.start();
   sources.push(noise);
 
@@ -235,6 +262,9 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
     // Rubber mushroom button and low-pressure purge valve.
     button: new library.ZZFXSound([
       0.25, 0.04, 190, 0, 0.025, 0.07, 3, 1.3, -95,
+    ]),
+    'fire-call': new library.ZZFXSound([
+      0.46, 0.025, 370, 0, 0.018, 0.11, 4, 1.2, -260, 0, 0, 0, 0.045,
     ]),
     purge: new library.ZZFXSound([
       0.16, 0.06, 480, 0.02, 0.17, 0.14, 4, 1, -180, 0, 0, 0, 0.72,
@@ -284,6 +314,7 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
     field,
     strain,
     rectifier,
+    sprinkler,
     panners,
     spindleTone,
     rotorPulse,
@@ -308,6 +339,7 @@ export function createSoundEngine() {
   let cassetteSource: AudioBufferSourceNode | null = null;
   let cassetteRequest = 0;
   let plantPowered = false;
+  let sprinklersActive = false;
   let graph: AudioGraph | null = null;
   let loading: Promise<void> | null = null;
   let disposed = false;
@@ -469,6 +501,11 @@ export function createSoundEngine() {
       plantPowered ? 0.22 * distanceGain('rectifier') : 0,
       now,
     );
+    ramp(
+      graph.sprinkler.gain,
+      sprinklersActive ? 0.32 * distanceGain('sprinkler') : 0,
+      now,
+    );
     ramp(graph.hum.gain, parameters.humGain * distanceGain('supply'), now);
     ramp(
       graph.heater.gain,
@@ -567,6 +604,9 @@ export function createSoundEngine() {
   return {
     setPlantPower(on: boolean) {
       plantPowered = on;
+    },
+    setSprinklers(on: boolean) {
+      sprinklersActive = on;
     },
     unlock,
     playComputerBoot,

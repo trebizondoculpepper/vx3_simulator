@@ -3,6 +3,7 @@ import { BoxGeometry, CircleGeometry, Group, Mesh, PlaneGeometry } from 'three';
 import type { Material, Texture } from 'three';
 import { annunciatorLabels, boardHandles } from '../game/control-board';
 import { FERROCORE_MAX_ANGULAR_VELOCITY } from '../game/ferrocore-anomaly';
+import { redlineFraction } from '../game/redlines';
 import type { BoardView, gridChannels } from '../game/control-board';
 import { createPs1Material } from '../rendering/ps1-material';
 import {
@@ -99,17 +100,18 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
       glow,
     );
   };
-  const dial = createDialTexture();
-  textures.push(dial);
-  const dialMaterial = createPs1Material({ map: dial }, true);
-  materials.push(dialMaterial);
   const gauge = (
     x: number,
     y: number,
     radius: number,
     angle: number,
     square = false,
+    redline: number | null = null,
   ) => {
+    const dial = createDialTexture(redline);
+    textures.push(dial);
+    const dialMaterial = createPs1Material({ map: dial }, true);
+    materials.push(dialMaterial);
     const front = square ? 0.274 : 0.247;
     box(radius * 2.25, radius * 2.25, 0.025, '#242e2a', x, y, front - 0.016);
     const mesh = new Mesh(
@@ -190,7 +192,11 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
         off: paint('#b5b09a'),
       });
       label(
-        bay === 0 && i === 2 ? 'XE FLUSS' : annunciatorLabels[i],
+        bay === 0 && i === 2
+          ? 'XE FLUSS'
+          : bay === 0 && i === 4
+            ? 'XE RÜCKL.'
+            : annunciatorLabels[i],
         0.093,
         ax,
         2.055,
@@ -282,7 +288,10 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
   face(process.texture, 0.43, 0.46, -0.85, 1.59, 0.24);
   const meters: Array<[Mesh, keyof BoardDisplay['readings']]> = [
     [gauge(-0.49, 1.72, 0.066, -0.55), 'heater'],
-    [gauge(-0.49, 1.51, 0.066, 0.7), 'spindle'],
+    [
+      gauge(-0.49, 1.51, 0.066, 0.7, false, redlineFraction('spindle')),
+      'spindle',
+    ],
   ];
   const chart = createCanvasTexture(96, 160);
   textures.push(chart.texture);
@@ -358,7 +367,14 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
   for (const [side, x] of [-0.294, 0.294].entries())
     for (let i = 0; i < 3; i++)
       meters.push([
-        gauge(x, 1.75 - i * 0.205, 0.052, x * 2 + i * 0.2),
+        gauge(
+          x,
+          1.75 - i * 0.205,
+          0.052,
+          x * 2 + i * 0.2,
+          false,
+          sideMeters[side][i] === 'field' ? redlineFraction('field') : null,
+        ),
         sideMeters[side][i],
       ]);
   label('FERNANZEIGE · VX3', 0.38, 0, 1.24, 0.242);
@@ -432,7 +448,7 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
     };
   });
   meters.push(
-    [gauge(0.57, 1.28, 0.058, -0.2, true), 'load'],
+    [gauge(0.57, 1.28, 0.058, -0.2, true, redlineFraction('load')), 'load'],
     [gauge(0.76, 1.28, 0.058, 0.9, true), 'delta'],
   );
   label('NACHRÜSTUNG 1986', 0.36, 0.73, 1.05, 0.262);

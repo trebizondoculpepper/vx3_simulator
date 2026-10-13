@@ -151,4 +151,21 @@ describe('board lamps', () => {
     expect(tiles[1]).toBe(true);
     expect(tiles[2]).toBe(false);
   });
+
+  it('warns on the western bay when plant power is on but xenon recirculation has stopped', () => {
+    const board = createBoard();
+    const state = {
+      ...inputs(),
+      plantPowered: false,
+      recirculatorWorking: false,
+    };
+    expect(boardView(board, state).tiles[4]).toBe(false);
+    state.plantPowered = true;
+    expect(boardView(board, state).tiles[4]).toBe(true);
+    stepBoard(board, state, 0.5);
+    expect(boardView(board, state).tiles[4]).toBe(false);
+    state.recirculatorWorking = true;
+    stepBoard(board, state, 0.5);
+    expect(boardView(board, state).tiles[4]).toBe(false);
+  });
 });

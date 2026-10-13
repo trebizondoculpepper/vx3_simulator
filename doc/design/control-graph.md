@@ -41,6 +41,30 @@ LOAD --> WM["Wall load meter and kWh register"]:::ind
   
 ```
 
+## Redlines and first-stage overheating
+
+Spindle speed, field strength and supply load each have one operating limit shared by the affected gauges and the thermal model. Heat rises while a reading exceeds its limit and falls below it. At heat 0.35 the associated machine begins to smoke; device smoke contributes to laboratory smoke. The ashtray plume is decorative and never enters this hazard path. Detector, alarm, sprinkler and ruin links are planned in [the fire analysis](redline-fire-analysis.md) but are not wired yet.
+
+```mermaid
+flowchart LR
+classDef input fill:#f2c26b,stroke:#1d2622,color:#1d2622
+classDef state fill:#cfe5d2,stroke:#1d2622,color:#1d2622
+classDef ind fill:#cddbe8,stroke:#1d2622,color:#1d2622
+SPEED["SPEED and governor"]:::input --> SPIN(("Spindle speed")):::state
+FIELD["FIELD and EXCITE"]:::input --> HBF(("H-B field")):::state
+AUX["Auxiliaries and betaform gain"]:::input --> LOAD(("Supply load")):::state
+SPIN -- "above 85%" --> HEAT1(("Encabulator heat")):::state
+HBF -- "above 85%" --> HEAT2(("Coil heat")):::state
+LOAD -- "above 6.5 kW" --> HEAT3(("Amplifier heat")):::state
+HEAT1 --> SMOKE["Machine smoke and log"]:::ind
+HEAT2 --> SMOKE
+HEAT3 --> SMOKE
+SMOKE --> AIR(("Laboratory smoke")):::state
+SPIN --> SG["Spindle redline"]:::ind
+HBF --> FG["Field redline"]:::ind
+LOAD --> LG["Wall load redline"]:::ind
+```
+
 ## Field and stability
 
 The field needs a spindle above a fifth of full speed. Instability is the gap between BLATZ TRIM and where the field wants it, which moves with spindle, field, drift and the spindle gearing (RATIO). GND? earths the plasma inducer and slows the drift. Strain builds while instability is high, or while the xenon circuit is unsafe, and bleeds away fastest when the insulation BAND matches the field; at full strain an incident trips the mains. Time only dilates while the ferrocores are fully operational.
@@ -172,3 +196,6 @@ RACK --> HP["Handle positions and EIN lamps"]:::ind
 ## Spare inputs
 
 Every input fitted to this rack now changes the machine. Two alternate panels in the catalogue are not fitted: SERVICE-A's BUS BAND selector holds its own value but reaches nothing, and SUPPLY-A duplicates SUPPLY-B. The operator log is also printed, line by line, on the teleprinter's endless paper.
+## Fire incident route
+
+Spindle, field and supply-load redlines feed three stored device heats. Heat above 0.35 emits apparatus smoke, which contributes to laboratory room smoke. Twenty continuous seconds with room smoke at or above 0.25 latch the fire alarm; the lab call point latches it immediately. Three seconds after alarm, lab sprinklers run from their modeled ceiling heads and automatically close after 45 seconds. Device heat at or above 0.90 while powered ignites that device; 45 seconds of cumulative active burning ruins the lab. Five seconds of sprinkler water while mains remain closed also ruins it. Opening mains stops the live-water timer. The corridor fire panel resets alarm and water only after smoke falls below 0.25 and no device is burning. Ruin blocks machine controls while allowing camera and doors; the on-screen RESET starts a new cold run after 20 seconds.

@@ -1,6 +1,6 @@
 # Mission plan: redlines, smoke and the sprinklers
 
-A future mission from the owner, written for discussion before anything is built. Nothing here is built yet. Read AGENTS.md first, and keep `doc/design/control-graph.md` up to date as you wire it.
+An owner mission now underway. Shared redlines, heat accumulation, smoke, detector timing, a manual call point, sprinklers, fire and ruin are implemented as a playable first pass. The water and fire effects are deliberately simple scene approximations, and the complete browser playthrough still needs visual review. See [the implementation analysis](../design/redline-fire-analysis.md) for the timing contract and remaining polish. Read AGENTS.md first, and keep `doc/design/control-graph.md` up to date as you wire it.
 
 ## The idea
 
@@ -8,9 +8,9 @@ Some machines can be driven past their safe limit. Their gauges carry a redline.
 
 ## What already exists
 
-- **Redlines on every dial.** `createDialTexture` in `src/scene/screens.ts` paints a red band over the top sixth of every dial, from 83% to 100% of the scale. It is decorative today.
+- **Redlines on the affected dials.** `src/game/redlines.ts` now holds the 85% spindle and field limits and the 6.5 kW supply limit. `createDialTexture` paints the matching red sector only where a real limit is defined.
 - **Sprinklers and detectors.** `src/scene/ceiling-services.ts` already draws wet sprinkler mains with pendant heads (red glass bulbs) and optical smoke detectors, in both the lab (`lab-room.ts`) and the corridor (`corridor.ts`). Nothing drives them yet.
-- **Smoke.** The ashtray in `src/scene/ashtray.ts` has a pixel-smoke particle system that can be lifted into a reusable emitter.
+- **Smoke.** The ashtray and overheating apparatus now share `src/scene/smoke-emitter.ts`; only the apparatus contributes to laboratory smoke in `src/game/overheat.ts`.
 - **Incidents and alarms.** `stepRig` in `src/game/rig.ts` already trips the mains when strain reaches 1. The east board's alarm windows in `src/game/control-board.ts` show how a latched, acknowledged alarm sequence works.
 - **Rooms and doors.** `src/game/sound-rooms.ts` already stops sound at shut doors, so the alarm bell and the water can be heard properly from the corridor.
 
@@ -38,7 +38,7 @@ Each redline lives in data, and its dial draws its red band from that value, so 
 
 - **Detection.** When the lab's smoke level stays above the detector threshold for long enough (proposal: 20 seconds), the alarm goes off.
 - **The alarm.** A synthesised fire bell, a red flashing beacon in the lab and corridor, and the detectors' lamps lit. The east board's STÖRUNG window latches.
-- **The sprinklers.** A few seconds after the alarm, the lab's sprinkler heads burst their bulbs and spray: falling water particles, a hiss, and puddles spreading on the lino.
+- **The sprinklers.** Three seconds after the alarm, the lab's existing sprinkler heads spray falling water particles and floor splashes, with a sustained hiss and puddles spreading on the lino. The water supply shuts automatically after 45 seconds.
 - **Effects of the water.** The sprinklers soak the lab. If the apparatus is still live, the water shorts it out (see below). The lab lights flicker, and the paper log in the teleprinter goes soggy.
 - **Puddles, within reason.** A few flat puddles spread on the lino under the heads, then dry up and shrink away over a couple of minutes. This is a VX simulator, not a puddle simulator: no fluid simulation, splashing or footprints, just a handful of shrinking decals.
 
@@ -54,7 +54,7 @@ There are two ways to ruin the lab. Both end the run.
 
 - **A sustained fire.** A device that keeps overheating after the alarm catches fire. If a fire burns for 45 seconds in total, the lab is ruined. The sprinklers do not put out a fire on a device that is still powered. The ashtray's cigarette never counts as a fire, however long it burns.
 - **A short circuit.** Sprinkler water on live apparatus shorts it out. After a 5-second grace period of water with the mains closed, the lab is ruined. This applies however the sprinklers started, including a false alarm from the red button, so pressing the button with the rig running is a real mistake. The short shows: blue-white flashes of electrical discharge crackle along the exposed wiring (the loom in the rack's open inspection bay and the cable runs) and around the rack, with a matching crackle of sound.
-- **When the lab is ruined.** The rack's lamps die, the room lights go out with the beacon still turning, and the teleprinter prints a final deadpan incident report. A message across the screen reads **VX LAB IS RUINED**, then fades so the operator can walk around the wreckage: the sprinklers still running, the discharge still crackling, the smoke hanging. The controls no longer do anything. After a while (proposal: 20 seconds), a **RESET** button appears in the on-screen UI and starts a fresh run.
+- **When the lab is ruined.** The rack's lamps die, the room lights go out with the beacon still turning, and the teleprinter prints a final deadpan incident report. A message across the screen reads **VX LAB IS RUINED**, then fades so the operator can walk around the wreckage: the sprinklers run until their automatic 45-second shutoff, with discharge and smoke lingering. The controls no longer do anything. After 20 seconds, a **RESET** button appears in the on-screen UI and starts a fresh run.
 - **Recovery is always possible before either point.** Open the mains, let the smoke clear, then reset the sprinklers in the corridor.
 
 ## Integration checklist

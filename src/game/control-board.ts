@@ -106,6 +106,8 @@ export interface BoardInputs {
   controls: RackControls;
   telltales: SafetyTelltales;
   xenonFlowSlpm?: number;
+  plantPowered?: boolean;
+  recirculatorWorking?: boolean;
 }
 
 const alarmConditions = ({ rig }: BoardInputs): Record<AlarmId, boolean> => ({
@@ -231,6 +233,12 @@ export function boardView(board: BoardState, inputs: BoardInputs): BoardView {
     : [0, 1, 2].flatMap(() => tileStates);
   if (inputs.xenonFlowSlpm !== undefined)
     tiles[2] = test || (!xenonReady(inputs.xenonFlowSlpm) && flashOn);
+  if (
+    inputs.plantPowered !== undefined &&
+    inputs.recirculatorWorking !== undefined
+  )
+    tiles[4] =
+      test || (inputs.plantPowered && !inputs.recirculatorWorking && flashOn);
   return {
     tiles,
     grid: test ? Array(64).fill(true) : grid,
