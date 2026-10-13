@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { rackModules } from './rack-catalogue';
 import {
+  RACK_METRE,
   RACK_UNIT,
+  faceLayerOffset,
   layoutModule,
   moduleBands,
   validateModuleLayout,
 } from './rack-layout';
 import type { RackModule } from './rack-catalogue';
+import type { FaceLayer } from './rack-layout';
 
 describe('rack faceplate grid', () => {
   it('lays out every module without overprinting its title or neighbours', () => {
@@ -45,5 +48,12 @@ describe('rack faceplate grid', () => {
       provenance: 'invented',
     };
     expect(validateModuleLayout(crowded, RACK_UNIT)).not.toEqual([]);
+  });
+
+  it('stacks the faceplate layers 1 mm apart, metal at the back and labels in front', () => {
+    const order: FaceLayer[] = ['metal', 'branding', 'controls', 'labels'];
+    order.forEach((layer, i) =>
+      expect(faceLayerOffset(layer)).toBeCloseTo(i * 0.001 * RACK_METRE),
+    );
   });
 });

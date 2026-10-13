@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Group, PerspectiveCamera, Vector3 } from 'three';
-import { knobDirection, mountRotaryKnob, stepKnob } from './rotary-knob';
+import {
+  knobDirection,
+  mountRotaryKnob,
+  stepKnob,
+  stepSelector,
+} from './rotary-knob';
 
 describe('rotary knobs', () => {
   it('moves the offset marker around the shaft while keeping the body centred', () => {
@@ -50,5 +55,19 @@ describe('rotary knobs', () => {
     expect(stepKnob(0, -1)).toBe(0);
     expect(stepKnob(1, 1)).toBe(1);
     expect(stepKnob(stepKnob(0.5, 1), -1)).toBe(0.5);
+  });
+
+  it('steps knobs with other detent counts and stops at the ends', () => {
+    expect(stepKnob(0.4, 1, 5)).toBeCloseTo(0.6);
+    expect(stepKnob(0.4, -1, 5)).toBeCloseTo(0.2);
+    expect(stepKnob(1, 1, 5)).toBe(1);
+    expect(stepKnob(0, -1, 5)).toBe(0);
+  });
+
+  it('moves selectors one position at a time without wrapping', () => {
+    expect(stepSelector(1, 1, 3)).toBe(2);
+    expect(stepSelector(2, 1, 3)).toBe(2);
+    expect(stepSelector(1, -1, 3)).toBe(0);
+    expect(stepSelector(0, -1, 3)).toBe(0);
   });
 });

@@ -1,3 +1,4 @@
+import { MAX_ZOOM, MIN_ZOOM, wheelZoom } from './first-person';
 import {
   AmbientLight,
   Box3,
@@ -48,9 +49,12 @@ import { assembleRack } from '../game/rack-catalogue';
 import {
   PANEL_WIDTH,
   PART_LABEL_SIZE,
+  RACK_GRID,
   RACK_UNIT,
+  faceLayerOffset,
   layoutModule,
 } from '../game/rack-layout';
+import { componentCatalogue } from '../game/rig-model';
 import {
   applyRack,
   createRackControls,
@@ -108,7 +112,12 @@ import { createCorridor } from '../scene/corridor';
 import { createPlantRoom } from '../scene/plant-room';
 import { createMercuryRectifier } from '../scene/mercury-rectifier';
 import { createThermionicValve } from '../scene/thermionic-valve';
-import { knobDirection, mountRotaryKnob, stepKnob } from '../scene/rotary-knob';
+import {
+  knobDirection,
+  mountRotaryKnob,
+  stepKnob,
+  stepSelector,
+} from '../scene/rotary-knob';
 import {
   XENON_HAZARD_STRAIN_PER_SECOND,
   xenonHazard,
@@ -135,7 +144,11 @@ import { createTouchSticks } from '../ui/touch-sticks';
 import { slide } from '../game/walk-collision';
 import type { Footprint } from '../game/walk-collision';
 import { createTeleprinter } from '../scene/teleprinter';
-import { createPanelHeader, createPanelLivery } from '../scene/panel-livery';
+import {
+  createModuleBranding,
+  createPanelHeader,
+  createPanelLivery,
+} from '../scene/panel-livery';
 import { createPs1Material, dimPrintedWith, ps1Uniforms } from './ps1-material';
 
 const panelWidth = PANEL_WIDTH;
@@ -1880,6 +1893,17 @@ export function startScene(canvas: HTMLCanvasElement) {
   }
   disc(rack, 0.085, '#e4b775', antennaX, antennaBaseY + 0.92, 0.035);
 
+  // Inside a part's slot the mounting face is at z 0.25, on the controls
+  // layer; labels sit on the labels layer, 1 mm in front of it.
+  const SLOT_LABEL_Z =
+    0.25 + faceLayerOffset('labels') - faceLayerOffset('controls');
+  // Each maker's home town, from the lore catalogue, for its nameplate.
+  const makerOrigins = new Map(
+    componentCatalogue.map((component) => [
+      component.manufacturer.name.toUpperCase(),
+      component.manufacturer.origin,
+    ]),
+  );
   const addGauge = (
     panel: Group,
     x: number,
@@ -1896,9 +1920,10 @@ export function startScene(canvas: HTMLCanvasElement) {
       createPs1Material({ map: dial }, true),
     );
     materials.push(face.material);
-    face.position.set(x, y, 0.29);
+    // The dial face sits on the controls layer; the slot puts z 0.25 there.
+    face.position.set(x, y, 0.25);
     panel.add(face);
-    const needle = cube(panel, 0.018, 0.28, 0.012, '#a63425', x, y, 0.31);
+    const needle = cube(panel, 0.018, 0.28, 0.012, '#a63425', x, y, 0.262);
     needle.geometry.translate(0, 0.13, 0);
     indicator(face, machine, `${caption} gauge`);
     indicator(needle, machine, `${caption} gauge`);
@@ -1906,7 +1931,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       needle.rotation.z =
         anomaly.pi * (0.75 - Math.max(0, Math.min(1, reading())) * 1.5);
     });
-    label(panel, caption, x, y - 0.47, 0.27, 9);
+    label(panel, caption, x, y - 0.47, SLOT_LABEL_Z, 9);
   };
 
   let top = totalHeight / 2 - 0.2;
@@ -1919,17 +1944,40 @@ export function startScene(canvas: HTMLCanvasElement) {
     panel.position.y = y;
     rack.add(panel);
     soundPanels.push([module.id.split('-')[0] as SoundSource, panel]);
-    cube(panel, panelWidth, h - 0.055, 0.27, module.finish, 0, 0, 0.04);
-    const livery = createPanelLivery(module.maker, module.finish, module.units);
-    textures.push(livery);
-    const faceplate = new Mesh(
-      new PlaneGeometry(panelWidth - 0.22, h - 0.055),
-      createPs1Material({ map: livery }, true),
+    // The faceplate is built in layers, 1 mm apart (FACE_LAYERS in
+    // rack-layout.ts): bare metal, the maker's branding, the controls and
+    // dials, then the labels.
+    cube(panel, panelWidth, h - 0.055, 0.27, '#8a8f87', 0, 0, 0.04);
+    const metalZ = 0.04 + 0.27 / 2;
+    const layout = layoutModule(module, U);
+    const faceSize = { width: panelWidth - 0.22, height: h - 0.055 };
+    const branding = createModuleBranding(
+      module.maker,
+      module.title,
+      module.finish,
+      module.units,
+      makerOrigins.get(module.maker),
+      { face: faceSize, title: layout.title, halfWidth: RACK_GRID.halfWidth },
     );
-    materials.push(faceplate.material);
-    faceplate.position.z = 0.182;
-    panel.add(faceplate);
-    cube(panel, 4.1, 0.025, 0.015, '#adb0a0', 0, h / 2 - 0.1, 0.19);
+    textures.push(branding);
+    const brandingPlate = new Mesh(
+      new PlaneGeometry(faceSize.width, faceSize.height),
+      createPs1Material({ map: branding }, true),
+    );
+    materials.push(brandingPlate.material);
+    brandingPlate.position.z = metalZ + faceLayerOffset('branding');
+    panel.add(brandingPlate);
+    // A trim rule along the top edge, standing on the branding.
+    cube(
+      panel,
+      4.1,
+      0.025,
+      0.015,
+      '#adb0a0',
+      0,
+      h / 2 - 0.1,
+      metalZ + faceLayerOffset('branding') + 0.0075,
+    );
     for (const x of [-2.1, 2.1]) {
       cube(panel, 0.2, h - 0.04, 0.32, '#6c7169', x, 0, 0.1);
       for (const screwY of [-h / 2 + 0.16, h / 2 - 0.16]) {
@@ -1950,24 +1998,14 @@ export function startScene(canvas: HTMLCanvasElement) {
       }
     }
     // Everything on the faceplate sits on its grid (src/game/rack-layout.ts),
-    // so nothing can overprint the title plate, the footer or a neighbour.
-    const layout = layoutModule(module, U);
-    const header = createPanelHeader(module.maker, module.title);
-    textures.push(header);
-    const headerPlate = new Mesh(
-      new PlaneGeometry(layout.title.width, layout.title.height),
-      createPs1Material({ map: header }, true),
-    );
-    materials.push(headerPlate.material);
-    headerPlate.position.set(layout.title.x, layout.title.y, 0.235);
-    panel.add(headerPlate);
+    // so nothing can overprint the nameplate, the footer or a neighbour.
     // The footer carries the module stamp on the right and vents on the left.
     label(
       panel,
       module.id.toUpperCase(),
       1.55,
       layout.footer.y,
-      0.235,
+      metalZ + faceLayerOffset('labels'),
       6,
       '#342d20',
       '#c6b68e',
@@ -1981,14 +2019,20 @@ export function startScene(canvas: HTMLCanvasElement) {
         '#1d2423',
         -1.62 + vent * 0.1,
         layout.footer.y,
-        0.215,
+        metalZ + faceLayerOffset('controls') + 0.0075,
       );
 
     for (const part of layout.parts) {
       // Each part is drawn at its natural size around its cell's centre,
       // then scaled to fit; depth is left alone.
       const slot = new Group();
-      slot.position.set(part.rect.x, part.rect.y, 0);
+      // Parts are drawn with their mounting face at z 0.25; this puts it on
+      // the controls layer.
+      slot.position.set(
+        part.rect.x,
+        part.rect.y,
+        metalZ + faceLayerOffset('controls') - 0.25,
+      );
       slot.scale.set(part.scale, part.scale, 1);
       panel.add(slot);
       const machine = `VX3 rack · ${module.id.toUpperCase()}`;
@@ -2049,11 +2093,12 @@ export function startScene(canvas: HTMLCanvasElement) {
               audio.play('knob');
               write(knobLine(id, settings.knobs[id]));
             } else {
-              const band =
-                (Math.round(settings.knobs[id] * (bands.length - 1)) +
-                  direction +
-                  bands.length) %
-                bands.length;
+              // The band switch stops at A and at Ω, like any selector.
+              const band = stepSelector(
+                Math.round(settings.knobs[id] * (bands.length - 1)),
+                direction,
+                bands.length,
+              );
               settings.knobs[id] = band / (bands.length - 1);
               audio.play('selector');
               write(`Band ${bands[band]} selected.`);
@@ -2061,7 +2106,7 @@ export function startScene(canvas: HTMLCanvasElement) {
           };
           for (const part of [knob, mark])
             input(part, machine, `${control.label} ${control.kind}`, turn);
-          label(slot, control.label, 0, -0.28, 0.28, PART_LABEL_SIZE);
+          label(slot, control.label, 0, -0.28, SLOT_LABEL_Z, PART_LABEL_SIZE);
         } else if (control.kind === 'button') {
           const cy = 0.11;
           disc(slot, 0.24, '#202521', 0, cy, 0.25);
@@ -2083,7 +2128,7 @@ export function startScene(canvas: HTMLCanvasElement) {
               write('Pressed DO NOT. The annotation was unspecific.');
             }
           });
-          label(slot, control.label, 0, -0.27, 0.28, PART_LABEL_SIZE);
+          label(slot, control.label, 0, -0.27, SLOT_LABEL_Z, PART_LABEL_SIZE);
         } else {
           const cy = 0.05;
           const id = control.kind === 'toggle' ? control.id : null;
@@ -2114,7 +2159,7 @@ export function startScene(canvas: HTMLCanvasElement) {
             if (id) flipToggle(id);
             else flipMains();
           });
-          label(slot, control.label, 0, -0.3, 0.28, PART_LABEL_SIZE);
+          label(slot, control.label, 0, -0.3, SLOT_LABEL_Z, PART_LABEL_SIZE);
         }
         continue;
       }
@@ -2347,7 +2392,7 @@ export function startScene(canvas: HTMLCanvasElement) {
 
   const overlay = document.createElement('div');
   overlay.className = 'rack-ui';
-  overlay.innerHTML = `<div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Movement and zoom"><button type="button" data-pan="left" aria-label="Step left">◀</button><button type="button" data-pan="up" aria-label="Step forward">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Step back">▼</button><button type="button" data-pan="right" aria-label="Step right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook" hidden><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log">▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: MOVE · ALT+WHEEL: HEIGHT · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
+  overlay.innerHTML = `<div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Movement and zoom"><button type="button" data-pan="left" aria-label="Step left">◀</button><button type="button" data-pan="up" aria-label="Step forward">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Step back">▼</button><button type="button" data-pan="right" aria-label="Step right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook" hidden><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log">▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: ZOOM · ALT+WHEEL: HEIGHT · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
   const fireStatus = document.createElement('div');
   fireStatus.style.cssText =
     'position:absolute;left:50%;top:16%;transform:translateX(-50%);z-index:10;text-align:center;color:#ffd6b1;background:#420b08dd;padding:12px 20px;font:700 22px monospace;letter-spacing:2px;pointer-events:auto';
@@ -2509,7 +2554,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   let eyeOffset = 0;
   let cameraZoom = 1;
   const zoomTo = (value: number) => {
-    cameraZoom = Math.max(0.65, Math.min(1.8, value));
+    cameraZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
   };
   overlay.querySelector('[data-pan="up"]')!.addEventListener('click', () => {
     nudge.forward += 0.6 * worldUnitsPerMetre;
@@ -2529,11 +2574,13 @@ export function startScene(canvas: HTMLCanvasElement) {
   overlay.querySelector('[data-zoom="out"]')!.addEventListener('click', () => {
     zoomTo(cameraZoom - 0.15);
   });
+  // The wheel zooms, as in the developer room (see first-person.ts).
+  // Alt+wheel raises and lowers the eye, a clearly sideways swipe steps
+  // sideways, and a trackpad pinch (Ctrl+wheel) zooms too.
   const wheel = (event: WheelEvent) => {
     event.preventDefault();
     const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
-    nudge.right += event.deltaX * scale * 0.005 * worldUnitsPerMetre;
-    if (event.altKey)
+    if (event.altKey) {
       eyeOffset = Math.max(
         -1.1 * worldUnitsPerMetre,
         Math.min(
@@ -2541,7 +2588,13 @@ export function startScene(canvas: HTMLCanvasElement) {
           eyeOffset - event.deltaY * scale * 0.004 * worldUnitsPerMetre,
         ),
       );
-    else nudge.forward -= event.deltaY * scale * 0.005 * worldUnitsPerMetre;
+      return;
+    }
+    if (Math.abs(event.deltaX) > Math.abs(event.deltaY) * 2) {
+      nudge.right += event.deltaX * scale * 0.005 * worldUnitsPerMetre;
+      return;
+    }
+    cameraZoom = wheelZoom(cameraZoom, event.deltaY, event.deltaMode);
   };
   canvas.addEventListener('wheel', wheel, { passive: false });
   const raycaster = new Raycaster();
@@ -2565,6 +2618,9 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   // A shareable inspection view for the east-wall installation.
   const inspectionParams = new URLSearchParams(window.location.search);
+  // Inspection views (?view=…), each standing the walker in front of one
+  // installation in the game. Only views of dev-only spaces carry a dev_
+  // prefix; these are all part of the real game, so none does.
   const inspectionView = inspectionParams.get('view');
   if (inspectionParams.get('lights') === 'on') {
     labRoom.lights.toggle();
@@ -2801,7 +2857,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     const touch = overlay.dataset.input === 'touch';
     help.textContent = touch
       ? 'LEFT STICK: WALK (PUSH FULLY TO RUN) · RIGHT STICK: LOOK · TAP: USE · PINCH: ZOOM'
-      : 'CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: MOVE · ALT+WHEEL: HEIGHT · ESC: CURSOR';
+      : 'CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: ZOOM · ALT+WHEEL: HEIGHT · ESC: CURSOR';
   };
   const crosshair = overlay.querySelector<HTMLElement>('.crosshair')!;
   const target = (x = 0, y = 0) => {
@@ -2858,10 +2914,12 @@ export function startScene(canvas: HTMLCanvasElement) {
   window.addEventListener('blur', forget);
   const look = (event: MouseEvent) => {
     if (!locked()) return;
-    orbitYaw += event.movementX * 0.0022;
+    // Looking slows as the view zooms in, so small controls stay easy to aim at.
+    const rate = 0.0022 / cameraZoom;
+    orbitYaw += event.movementX * rate;
     orbitPitch = Math.max(
       -1.45,
-      Math.min(1.45, orbitPitch - event.movementY * 0.0022),
+      Math.min(1.45, orbitPitch - event.movementY * rate),
     );
   };
   document.addEventListener('mousemove', look);
@@ -2962,8 +3020,11 @@ export function startScene(canvas: HTMLCanvasElement) {
     if (drag.moved && drag.look) {
       // Drag the view: turn all the way round, look up to the ceiling or
       // down toward the floor.
-      orbitYaw = drag.yaw - dx * 0.004;
-      orbitPitch = Math.max(-1.2, Math.min(1.2, drag.pitch + dy * 0.003));
+      orbitYaw = drag.yaw - (dx * 0.004) / cameraZoom;
+      orbitPitch = Math.max(
+        -1.2,
+        Math.min(1.2, drag.pitch + (dy * 0.003) / cameraZoom),
+      );
     }
   };
   const lift = (event: PointerEvent) => {

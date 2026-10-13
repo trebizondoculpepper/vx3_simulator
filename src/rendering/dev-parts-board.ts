@@ -1,3 +1,4 @@
+import { stepKnob } from '../scene/rotary-knob';
 import { BoxGeometry, Group, Mesh } from 'three';
 import type { Object3D } from 'three';
 import { createPs1Material } from './ps1-material';
@@ -7,6 +8,7 @@ import {
   createMicroLabel,
   createPanelLed,
   createSevenSegment,
+  GERMAN_COUNT,
 } from '../scene/eighties-controls';
 import type { CapColour, PanelKit } from '../scene/eighties-controls';
 import {
@@ -31,41 +33,44 @@ import {
 } from '../scene/panel-instruments';
 
 /**
- * A catalogue board for the developer room: one of every 1980s panel part,
+ * The developer room's CONTROL TEST board: one of every 1980s panel part,
  * four times life size on a stand, each captioned, every control working
  * and every display running, so a part can be checked on its own before
- * it goes onto a panel.
+ * it goes onto a panel. Below them, at twice life size, the heavier
+ * switchgear: a key-locked selector and a rotary power isolator.
  */
 export function createPartsBoard(kit: PanelKit) {
   const group = new Group();
   const backing = createPs1Material({ color: '#c9c7bb' });
   const stand = createPs1Material({ color: '#4a4d48' });
   kit.materials.push(backing, stand);
-  const plate = new Mesh(new BoxGeometry(1.7, 1.08, 0.02), backing);
-  plate.position.z = -0.01;
+  // The plate runs from the parts rows down past the heavy switchgear.
+  const plate = new Mesh(new BoxGeometry(1.7, 1.78, 0.02), backing);
+  plate.position.set(0, -0.35, -0.01);
   group.add(plate);
-  const post = new Mesh(new BoxGeometry(0.05, 1.2, 0.05), stand);
-  post.position.set(0, -1.1, -0.05);
+  const post = new Mesh(new BoxGeometry(0.05, 1.6, 0.05), stand);
+  post.position.set(0, -1.9, -0.05);
   group.add(post);
   const parts = new Group();
   parts.scale.setScalar(4);
   group.add(parts);
 
-  const uses = new Map<Object3D, () => void>();
+  const uses = new Map<Object3D, (direction?: number) => void>();
   const updates: ((delta: number) => void)[] = [];
   const ticks: ((seconds: number) => void)[] = [];
   const at = (part: Object3D, x: number, y: number) => {
     part.position.set(x, y, 0);
     parts.add(part);
   };
-  const caption = (text: string, x: number, y: number) => {
+  const caption = (text: string, x: number, y: number, height = 0.0026) => {
     const label = createMicroLabel(kit, text, {
-      height: 0.0026,
+      height,
       ink: '#2b2a25',
     });
     label.position.set(x, y, 0.0005);
     parts.add(label);
   };
+  caption('CONTROL TEST', 0, 0.126, 0.006);
   const wave = (seconds: number, seed: number) =>
     0.5 + 0.4 * Math.sin(seconds * 0.8 + seed);
 
@@ -89,10 +94,15 @@ export function createPartsBoard(kit: PanelKit) {
   });
   caption('ILLUMINATED CAP · EVEN LATCHING, ODD MOMENTARY', -0.125, 0.085);
   (['green', 'amber', 'red', 'blue'] as const).forEach((led, i) => {
-    const made = createEightiesButton(kit, 'EIN', i === 3 ? 'white' : 'grey', {
-      led,
-      lit: true,
-    });
+    const made = createEightiesButton(
+      kit,
+      GERMAN_COUNT[i],
+      i === 3 ? 'white' : 'grey',
+      {
+        led,
+        lit: true,
+      },
+    );
     at(made.group, 0.0 + i * 0.026, 0.104);
     uses.set(made.cap, made.press);
     updates.push(made.update);
@@ -127,8 +137,8 @@ export function createPartsBoard(kit: PanelKit) {
     const made = createKnob(kit, { ...options, value });
     const x = -0.18 + i * 0.045;
     at(made.group, x, 0.045);
-    uses.set(made.group, () => {
-      value = value >= 0.95 ? 0 : value + 0.1;
+    uses.set(made.group, (direction = 1) => {
+      value = stepKnob(value, direction);
       made.set(value);
     });
     updates.push(made.update);
@@ -211,69 +221,46 @@ export function createPartsBoard(kit: PanelKit) {
   });
   caption('LED MATRIX', 0.13, -0.103);
 
-  return {
-    group,
-    uses,
-    update(seconds: number, delta: number) {
-      for (const tick of ticks) tick(seconds);
-      for (const step of updates) step(delta);
-    },
-  };
-}
-
-/**
- * A second stand for the heavier switchgear, at twice life size: a
- * key-operated selector that turns only once unlocked, and a surface-mounted
- * rotary power isolator.
- */
-export function createIsolatorBoard(kit: PanelKit) {
-  const group = new Group();
-  const backing = createPs1Material({ color: '#c9c7bb' });
-  const stand = createPs1Material({ color: '#4a4d48' });
-  kit.materials.push(backing, stand);
-  const plate = new Mesh(new BoxGeometry(0.9, 0.62, 0.02), backing);
-  plate.position.z = -0.01;
-  group.add(plate);
-  const post = new Mesh(new BoxGeometry(0.05, 1.0, 0.05), stand);
-  post.position.set(0, -0.8, -0.05);
-  group.add(post);
-  const parts = new Group();
-  parts.scale.setScalar(2);
-  group.add(parts);
-  const uses = new Map<Object3D, () => void>();
-  const updates: ((delta: number) => void)[] = [];
-  const caption = (text: string, x: number, y: number) => {
+  // Row 5: the heavier switchgear, at twice life size.
+  const heavy = new Group();
+  heavy.scale.setScalar(2);
+  heavy.position.set(0, -0.82, 0);
+  group.add(heavy);
+  const heavyCaption = (text: string, x: number, y: number) => {
     const label = createMicroLabel(kit, text, {
       height: 0.005,
       ink: '#2b2a25',
     });
     label.position.set(x, y, 0.0005);
-    parts.add(label);
+    heavy.add(label);
   };
+  heavyCaption('HEAVY SWITCHGEAR · TWICE LIFE SIZE', 0, 0.135);
   const selector = createKeyLockedKnob(kit, {
     radius: 0.022,
     positions: 3,
     ink: '#2b2a25',
   });
   selector.group.position.set(-0.11, 0.02, 0);
-  parts.add(selector.group);
+  heavy.add(selector.group);
   uses.set(selector.key, selector.toggleLock);
-  uses.set(selector.handle, () => {
-    selector.turn();
+  uses.set(selector.handle, (direction = 1) => {
+    selector.turn(direction);
   });
   updates.push(selector.update);
-  caption('KEY-LOCKED SELECTOR', -0.11, -0.07);
-  caption('TURN THE KEY TO UNLOCK', -0.11, -0.085);
+  heavyCaption('KEY-LOCKED SELECTOR', -0.11, -0.07);
+  heavyCaption('TURN THE KEY TO UNLOCK', -0.11, -0.085);
   const isolator = createPowerIsolator(kit);
   isolator.group.position.set(0.09, 0.0, 0);
-  parts.add(isolator.group);
+  heavy.add(isolator.group);
   uses.set(isolator.group, isolator.toggle);
   updates.push(isolator.update);
-  caption('POWER ISOLATOR', 0.09, -0.1);
+  heavyCaption('POWER ISOLATOR', 0.09, -0.1);
+
   return {
     group,
     uses,
-    update(delta: number) {
+    update(seconds: number, delta: number) {
+      for (const tick of ticks) tick(seconds);
       for (const step of updates) step(delta);
     },
   };

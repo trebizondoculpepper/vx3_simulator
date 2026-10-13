@@ -1,12 +1,17 @@
+import { stepKnob } from './rotary-knob';
 import {
+  BackSide,
   Box3,
   BoxGeometry,
   CatmullRomCurve3,
+  CircleGeometry,
   Color,
   CylinderGeometry,
+  DoubleSide,
   Group,
   Mesh,
   PointLight,
+  RingGeometry,
   TorusGeometry,
   TubeGeometry,
   Vector3,
@@ -25,6 +30,7 @@ import {
   disposeKit,
   kitGlow,
   kitPaint,
+  GERMAN_COUNT,
 } from './eighties-controls';
 import type { CapColour, EightiesButtonOptions } from './eighties-controls';
 import {
@@ -104,7 +110,8 @@ const HAND = '"Marker Felt", "Comic Sans MS", cursive';
 export interface RigClickable {
   object: Object3D;
   name: string;
-  use(): void;
+  /** Work it. Knobs and selectors take the click side: -1 left, 1 right. */
+  use(direction?: number): void;
 }
 
 export interface FerrocoreColumnRig {
@@ -122,6 +129,12 @@ export interface FerrocoreColumnRig {
    * brightness are set from outside, by the game's model in the end.
    */
   readonly prep: ColumnPrepState;
+  /**
+   * Direct control for the developer room's model drive: `hold` freezes the
+   * model's physics so values set by hand stay put, and `power` overrides
+   * the rig's own mains (null follows the rig).
+   */
+  readonly drive: { hold: boolean; power: boolean | null };
   update(seconds: number, delta: number, reducedMotion: boolean): void;
   dispose(): void;
 }
@@ -245,6 +258,10 @@ export function createFerrocoreColumnRig(
   let running = true;
   const supply = createPowerIsolator(kit, { on: true });
   const prep = createColumnPrep();
+  const drive: { hold: boolean; power: boolean | null } = {
+    hold: false,
+    power: null,
+  };
   const log = options.log ?? (() => {});
   let motion = 1;
   /** A slow wander between 0 and 1, different for every seed. */
@@ -256,7 +273,7 @@ export function createFerrocoreColumnRig(
   const worked = (
     object: Object3D,
     name: string,
-    use: () => void,
+    use: (direction?: number) => void,
     update: (delta: number) => void,
   ) => {
     clickables.push({ object, name, use });
@@ -424,8 +441,8 @@ export function createFerrocoreColumnRig(
     worked(
       made.group,
       'knob',
-      () => {
-        value = value >= 0.999 ? 0 : value + 1 / steps;
+      (direction = 1) => {
+        value = stepKnob(value, direction, steps);
         made.set(value);
       },
       made.update,
@@ -665,7 +682,7 @@ export function createFerrocoreColumnRig(
         );
       label(p.group, `KANAL ${i + 1}`, x, 0.031, { height: 0.0022, ink: INK });
       slide(p.group, x - 0.016, -0.006, i % 3 === 0 ? 1 : 0);
-      button(p.group, 'EIN', 'grey', x + 0.006, -0.006, {
+      button(p.group, GERMAN_COUNT[i], 'grey', x + 0.006, -0.006, {
         size: 0.015,
         led: 'green',
         lit: i % 3 !== 1,
@@ -789,13 +806,16 @@ export function createFerrocoreColumnRig(
     tube(
       left.group,
       [
+        // From the X input down the rack front, then back into the open bay
+        // to the measuring port beside the purge outlet (MESSSTUTZEN).
         [0.016, left.top - 14.1 * U, left.frontZ + 0.02],
         [0.03, left.top - 17 * U, left.frontZ + 0.07],
-        [0.05, 0.66, left.frontZ + 0.1],
-        [0.12, 0.52, left.frontZ + 0.12],
-        [0.2, 0.56, left.frontZ + 0.09],
-        [0.15, 0.64, left.frontZ + 0.07],
-        [0.3, 0.62, 0.26],
+        [0.05, 0.7, left.frontZ + 0.1],
+        [0.04, 0.58, left.frontZ + 0.09],
+        [-0.02, 0.55, left.frontZ + 0.03],
+        [-0.06, 0.55, 0.22],
+        [-0.08, 0.565, 0.185],
+        [-0.08, 0.565, 0.172],
       ],
       0.0035,
       '#2f5fb8',
@@ -1217,7 +1237,7 @@ export function createFerrocoreColumnRig(
     clickables.push({
       object: selector.handle,
       name: 'key-locked selector',
-      use: selector.turn,
+      use: (direction?: number) => selector.turn(direction),
     });
     label(p.group, 'SCHWEBUNG', 0.03, 0.046, { height: 0.0024, ink: INK });
     toggle(p.group, 0.11, 0.03);
@@ -1473,6 +1493,11 @@ export function createFerrocoreColumnRig(
         { axis: 'z', segments: 6 },
       );
     }
+    // The port's bore, seen from inside the vessel.
+    cyl(pivot, r * 0.8, 0.003, '#0d0e0f', 0, 0, bodyR - 0.014, {
+      axis: 'z',
+      segments: 14,
+    });
     if (window)
       cyl(pivot, r * 0.75, 0.004, window, 0, 0, bodyR + length + 0.0075, {
         axis: 'z',
@@ -1496,23 +1521,151 @@ export function createFerrocoreColumnRig(
     box(column, 0.03, 0.3, 0.03, '#7c8170', x, skidTop + 0.15, z);
   box(column, 0.38, 0.025, 0.38, '#7c8170', 0, 0.43, 0);
 
-  // The chamber.
+  // The chamber: a hollow pressure vessel, open at the top when the head is
+  // raised. A 12 mm wall, its inside a duller steel, a heater coil
+  // spiralling up the wall, a seat on the floor that the core drops into,
+  // the xenon inlet nozzle and a thermocouple.
   const chamberBottom = 0.46;
   const chamberTop = 0.98;
+  const chamberHeight = chamberTop - chamberBottom;
+  const chamberMiddle = (chamberBottom + chamberTop) / 2;
+  const outerR = 0.22;
+  const innerR = 0.208;
+  const insideSteel = createPs1Material({
+    color: '#5d6264',
+    metalness: 0.4,
+    side: BackSide,
+  });
+  const floorSteel = createPs1Material({ color: '#4c5153', metalness: 0.3 });
+  const rimSteel = createPs1Material({
+    color: STEEL,
+    metalness: 0.55,
+    side: DoubleSide,
+  });
+  kit.materials.push(insideSteel, floorSteel, rimSteel);
+  const shell = new Mesh(
+    new CylinderGeometry(outerR, outerR, chamberHeight, 28, 1, true),
+    steel,
+  );
+  shell.position.y = chamberMiddle;
+  column.add(shell);
+  const lining = new Mesh(
+    new CylinderGeometry(innerR, innerR, chamberHeight, 28, 1, true),
+    insideSteel,
+  );
+  lining.position.y = chamberMiddle;
+  column.add(lining);
+  const floor = new Mesh(new CircleGeometry(innerR, 28), floorSteel);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = chamberBottom + 0.012;
+  column.add(floor);
+  /** A ring-shaped flange, open in the middle so the vessel can be seen into. */
+  const openFlange = (y: number, h: number, bolts: number) => {
+    const outer = new Mesh(
+      new CylinderGeometry(0.25, 0.25, h, 28, 1, true),
+      steel,
+    );
+    outer.position.y = y;
+    column.add(outer);
+    const inner = new Mesh(
+      new CylinderGeometry(innerR, innerR, h, 28, 1, true),
+      insideSteel,
+    );
+    inner.position.y = y;
+    column.add(inner);
+    for (const face of [-1, 1]) {
+      const ring = new Mesh(new RingGeometry(innerR, 0.25, 28), rimSteel);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = y + (face * h) / 2;
+      column.add(ring);
+    }
+    for (let i = 0; i < bolts; i++) {
+      const a = (i / bolts) * Math.PI * 2;
+      cyl(
+        column,
+        0.006,
+        h + 0.012,
+        '#d0d3d3',
+        Math.cos(a) * 0.238,
+        y,
+        Math.sin(a) * 0.238,
+        {
+          segments: 6,
+          metalness: 0.6,
+        },
+      );
+    }
+  };
+  flange(chamberBottom - 0.004, 0.25, 0.03, 20);
+  openFlange(chamberTop + 0.012, 0.04, 24);
+  // The core's seat: a collar on the floor with a dark bore and three
+  // locating pins.
+  cyl(column, 0.075, 0.04, '#6f7476', 0, chamberBottom + 0.032, 0, {
+    segments: 20,
+    metalness: 0.4,
+  });
+  cyl(column, 0.05, 0.042, '#25282a', 0, chamberBottom + 0.033, 0, {
+    segments: 16,
+  });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.5;
+    cyl(
+      column,
+      0.005,
+      0.03,
+      '#c8cbcb',
+      Math.cos(a) * 0.062,
+      chamberBottom + 0.06,
+      Math.sin(a) * 0.062,
+      {
+        segments: 6,
+        metalness: 0.6,
+      },
+    );
+  }
+  // A heater coil spiralling up the inner wall on stand-offs.
+  const heaterTurns = 5;
+  const heaterPoints: [number, number, number][] = [];
+  for (let i = 0; i <= heaterTurns * 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    heaterPoints.push([
+      Math.cos(a) * 0.19,
+      chamberBottom + 0.09 + (i / (heaterTurns * 24)) * (chamberHeight - 0.18),
+      Math.sin(a) * 0.19,
+    ]);
+  }
+  tube(column, heaterPoints, 0.0055, '#9a4f2c', 360);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    box(
+      column,
+      0.012,
+      chamberHeight - 0.16,
+      0.012,
+      '#7a7f80',
+      Math.cos(a) * 0.199,
+      chamberMiddle,
+      Math.sin(a) * 0.199,
+    );
+  }
+  // The xenon inlet nozzle rising from the floor, and a thermocouple.
+  cyl(column, 0.012, 0.06, '#b99b52', 0.13, chamberBottom + 0.042, 0.06, {
+    segments: 10,
+    metalness: 0.5,
+  });
   cyl(
     column,
-    0.22,
-    chamberTop - chamberBottom,
-    steel,
-    0,
-    (chamberBottom + chamberTop) / 2,
-    0,
+    0.0035,
+    chamberHeight * 0.55,
+    '#d0d3d3',
+    -0.14,
+    chamberBottom + 0.012 + (chamberHeight * 0.55) / 2,
+    -0.1,
     {
-      segments: 28,
+      segments: 6,
+      metalness: 0.6,
     },
   );
-  flange(chamberBottom - 0.004, 0.25, 0.03, 20);
-  flange(chamberTop + 0.012, 0.25, 0.04, 24);
   cyl(column, 0.09, 0.05, STEEL_DARK, 0, chamberBottom - 0.04, 0, {
     segments: 14,
     metalness: 0.5,
@@ -1643,10 +1796,6 @@ export function createFerrocoreColumnRig(
   const head = new Group();
   head.name = 'column head';
   column.add(head);
-  // The chamber's open mouth, seen when the head is up.
-  cyl(column, 0.2, 0.002, '#141516', 0, chamberTop + 0.033, 0, {
-    segments: 24,
-  });
 
   // The ferrocore, mounted vertically: an iron core in copper windings with
   // glowing bands between the coils. It spins at full power.
@@ -1684,11 +1833,26 @@ export function createFerrocoreColumnRig(
   const coreLight = new PointLight('#ff9b3a', 0, 3.2, 1.6);
   coreLight.position.set(0, (coreBottom + coreTop) / 2, 0.15);
   head.add(coreLight);
-  // Two dark stage discs above and below the core, one tilted a touch.
-  cyl(head, 0.14, 0.022, '#18181a', 0, coreBottom + 0.02, 0, { segments: 24 });
-  cyl(head, 0.115, 0.016, '#1c1c1e', 0, coreTop - 0.005, 0, {
-    segments: 22,
-  }).rotation.x = 0.04;
+  // An open three-armed spider holds the foot of the core on the hangers,
+  // so the vessel below can be seen into.
+  cyl(head, 0.03, 0.02, '#8d9293', 0, coreBottom + 0.02, 0, {
+    segments: 12,
+    metalness: 0.5,
+  });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.5;
+    const arm = box(
+      head,
+      0.12,
+      0.012,
+      0.014,
+      '#8d9293',
+      Math.cos(a) * 0.06,
+      coreBottom + 0.02,
+      Math.sin(a) * 0.06,
+    );
+    arm.rotation.y = -a;
+  }
   // Hangers from the mating flange down to the lower stage disc.
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2 + 0.5;
@@ -1926,6 +2090,19 @@ export function createFerrocoreColumnRig(
     column.add(purgeVent.group);
     // Its tag, on the tube's front face just above and beside it.
     tag(column, 'SPÜLGAS-AUSLASS', -0.75, beamY, 0.0575);
+    // The measuring port beside it, where the blue lead from the grey
+    // rack's X input plugs in: a boss on the tube with a BNC socket.
+    const portY = beamY - 0.035;
+    cyl(column, 0.014, 0.034, steel, -0.74, portY, 0.062, {
+      axis: 'z',
+      segments: 12,
+    });
+    cyl(column, 0.009, 0.012, '#c8cbcb', -0.74, portY, 0.085, {
+      axis: 'z',
+      segments: 12,
+      metalness: 0.6,
+    });
+    tag(column, 'MESSSTUTZEN', -0.705, portY - 0.022, 0.06, { height: 0.003 });
   }
 
   // The vessel's xenon inlet, under the chamber where the feed hose comes in.
@@ -2181,8 +2358,11 @@ export function createFerrocoreColumnRig(
   // ---- Running state -------------------------------------------------------
   const update = (seconds: number, delta: number, reducedMotion: boolean) => {
     motion = reducedMotion ? 0 : 1;
-    for (const event of stepColumnPrep(prep, delta, { powered: running }))
-      log(describe(event));
+    if (!drive.hold)
+      for (const event of stepColumnPrep(prep, delta, {
+        powered: drive.power ?? running,
+      }))
+        log(describe(event));
     display.kelvin = prep.temperature;
     display.brightness = prep.brightness;
     display.failed = prep.failure !== null;
@@ -2311,6 +2491,7 @@ export function createFerrocoreColumnRig(
       return running;
     },
     prep,
+    drive,
     update,
     dispose() {
       purgeVent.dispose();

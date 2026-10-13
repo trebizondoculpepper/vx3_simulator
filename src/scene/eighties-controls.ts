@@ -131,6 +131,20 @@ const CAP: Record<CapColour, { lit: string; dark: string; ink: string }> = {
   grey: { lit: '#c9c6bb', dark: '#8e8b82', ink: '#1d1d1a' },
 };
 
+/** German counting words for rows of otherwise identical buttons: EINS, ZWEI, DREI … */
+export const GERMAN_COUNT = [
+  'EINS',
+  'ZWEI',
+  'DREI',
+  'VIER',
+  'FÜNF',
+  'SECHS',
+  'SIEBEN',
+  'ACHT',
+  'NEUN',
+  'ZEHN',
+] as const;
+
 function capTexture(kit: PanelKit, legend: string, ink: string, shift = 0) {
   const size = 64;
   const { context, texture } = createCanvasTexture(size, size);

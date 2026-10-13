@@ -14,6 +14,28 @@ import type { Instrument, RackModule } from './rack-catalogue';
 export const PANEL_WIDTH = 4.35;
 /** Height of one rack unit (1.75 in) at that scale. */
 export const RACK_UNIT = (PANEL_WIDTH * 1.75) / 19;
+/** Scene units per metre: a 19-inch panel is 482.6 mm wide. */
+export const RACK_METRE = PANEL_WIDTH / 0.4826;
+
+/**
+ * A faceplate is built in layers, each about 1 mm proud of the last, so
+ * nothing on one layer can fight with the layer below it: the bare metal
+ * plate, the maker's branding painted on it, the controls and dials
+ * mounted through it, and the labels on top. Heights are in metres above
+ * the bare metal.
+ */
+export const FACE_LAYERS = {
+  metal: 0,
+  branding: 0.001,
+  controls: 0.002,
+  labels: 0.003,
+} as const;
+export type FaceLayer = keyof typeof FACE_LAYERS;
+
+/** How far a layer stands in front of the bare metal, in scene units. */
+export function faceLayerOffset(layer: FaceLayer) {
+  return FACE_LAYERS[layer] * RACK_METRE;
+}
 
 export const RACK_GRID = {
   columns: 12,

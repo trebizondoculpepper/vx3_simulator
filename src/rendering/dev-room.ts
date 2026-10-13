@@ -1,5 +1,6 @@
 import {
   AmbientLight,
+  Box3,
   BoxGeometry,
   DirectionalLight,
   Group,
@@ -11,7 +12,9 @@ import {
   WebGLRenderer,
 } from 'three';
 import type { Material, Object3D } from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { knobDirection } from '../scene/rotary-knob';
+import { createFirstPerson } from './first-person';
+import type { Footprint } from '../game/walk-collision';
 import { createPs1Material, ps1Uniforms } from './ps1-material';
 import { createFerrocoreColumnRig } from '../scene/ferrocore-column-rig';
 import { createCoreVoice } from '../audio/core-voice';
@@ -36,7 +39,8 @@ import {
   createPanelKit,
   disposeKit,
 } from '../scene/eighties-controls';
-import { createIsolatorBoard, createPartsBoard } from './dev-parts-board';
+import { createPartsBoard } from './dev-parts-board';
+import { createModelDriveBoard } from './dev-model-board';
 
 /**
  * The developer room: not part of the game. A plain, evenly lit room
@@ -49,12 +53,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   const renderer = new WebGLRenderer({ canvas, antialias: false });
   renderer.setPixelRatio(1);
   const scene = new Scene();
-  const camera = new PerspectiveCamera(45, 1, 0.01, 60);
-  camera.position.set(0.3, 1.3, 2.9);
-  const controls = new OrbitControls(camera, canvas);
-  controls.target.set(0, 1.0, 0);
-  controls.enableDamping = true;
-  controls.update();
+  const camera = new PerspectiveCamera(52, 1, 0.01, 60);
 
   scene.background = null;
   renderer.setClearColor('#2b2d2c');
@@ -127,21 +126,27 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   rigNote.rotation.x = -Math.PI / 2;
   room.add(rigNote);
 
-  // A catalogue of the 1980s panel parts, four times life size.
+  // CONTROL TEST: a catalogue of the 1980s panel parts, four times life
+  // size, with the heavy switchgear at twice life size below.
   const board = createPartsBoard(kit);
-  board.group.position.set(-2.3, 1.25, 0.6);
+  board.group.position.set(-2.3, 1.6, 0.6);
   board.group.rotation.y = 0.6;
   scene.add(board.group);
 
-  const heavy = createIsolatorBoard(kit);
-  heavy.group.position.set(2.4, 1.1, 0.7);
-  heavy.group.rotation.y = -0.6;
-  scene.add(heavy.group);
+  // The model drive: controls that write straight into the column model.
+  const modelDrive = createModelDriveBoard(kit, rig, (text) => {
+    columnLog.unshift(text);
+    columnLog.length = Math.min(columnLog.length, 4);
+    console.debug(text);
+  });
+  modelDrive.group.position.set(2.4, 1.1, 0.7);
+  modelDrive.group.rotation.y = -0.6;
+  scene.add(modelDrive.group);
 
-  const uses = new Map<Object3D, () => void>([
+  const uses = new Map<Object3D, (direction?: number) => void>([
     ...rig.clickables.map((c) => [c.object, c.use] as const),
     ...board.uses,
-    ...heavy.uses,
+    ...modelDrive.uses,
   ]);
 
   // On-screen notes.
@@ -149,7 +154,8 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   notes.className = 'dev-room-notes';
   notes.innerHTML =
     '<strong>Developer room</strong> · not part of the game<br>' +
-    'Drag to orbit · scroll to zoom · right-drag to pan · click any control to work it<br>' +
+    'Click: mouse look · WASD: walk · Shift: run · C: crouch · V: lower crouch<br>' +
+    'Click / E: work the control under the crosshair · wheel: zoom · Alt+wheel: height · Esc: cursor<br>' +
     '<kbd>P</kbd> toggles PS1 resolution · <a href="/">back to the lab</a>';
   Object.assign(notes.style, {
     position: 'absolute',
@@ -397,6 +403,15 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
 
   const showStatus = () => {
     const prep = rig.prep;
+    // The stand-in sliders follow the model, which the drive board can set.
+    if (document.activeElement !== activation)
+      activation.value = String(Math.round(prep.setpoint));
+    if (document.activeElement !== brightness)
+      brightness.value = String(prep.brightness);
+    activation.nextElementSibling!.textContent = `${activation.value} K`;
+    brightness.nextElementSibling!.textContent = Number(
+      brightness.value,
+    ).toFixed(2);
     const head =
       prep.lift === 0
         ? 'down'
@@ -442,10 +457,21 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
 
   // A handle for scripted views: place the camera and its target.
   (window as unknown as { vx3Dev: unknown }).vx3Dev = {
+    /** Stand the walker with its eye at (x, y, z), looking at (tx, ty, tz). */
     view(x: number, y: number, z: number, tx: number, ty: number, tz: number) {
-      camera.position.set(x, y, z);
-      controls.target.set(tx, ty, tz);
-      controls.update();
+      const dx = tx - x;
+      const dz = tz - z;
+      walk.place(
+        x,
+        z,
+        Math.atan2(dx, -dz),
+        Math.atan2(ty - y, Math.hypot(dx, dz)),
+        y,
+      );
+    },
+    /** Set the zoom: 1 is normal, up to 4 times closer. */
+    zoom(value: number) {
+      walk.walker.zoom = value;
     },
     setPs1(value: boolean) {
       ps1 = value;
@@ -543,52 +569,91 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
 
   const raycaster = new Raycaster();
   const pointer = new Vector2();
-  let downAt: [number, number] | null = null;
-  const down = (event: PointerEvent) => {
-    downAt = [event.clientX, event.clientY];
-  };
-  const up = (event: PointerEvent) => {
-    if (!downAt) return;
-    const moved = Math.hypot(
-      event.clientX - downAt[0],
-      event.clientY - downAt[1],
-    );
-    downAt = null;
-    if (moved > 5) return;
-    const rect = canvas.getBoundingClientRect();
-    pointer.set(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1,
-    );
+  /** The usable part at a normalised screen point, walking up from the mesh hit. */
+  const usableAt = (x: number, y: number) => {
+    pointer.set(x, y);
     raycaster.setFromCamera(pointer, camera);
-    // Walk up from the mesh hit to the part that takes the click.
     const hit = raycaster.intersectObjects([...uses.keys()], true)[0];
     for (let o: Object3D | null = hit?.object ?? null; o; o = o.parent) {
       const use = uses.get(o);
-      if (use) {
-        console.debug('dev room: worked', o.name || o.type);
-        // The part's sound, judged before the click changes it.
-        const kind = soundOf(hit!.object);
-        use();
-        if (kind) sounds?.play(kind);
-        break;
-      }
+      if (use && hit)
+        return { object: o, use, point: hit.point, mesh: hit.object };
     }
+    return undefined;
   };
-  canvas.addEventListener('pointerdown', down);
-  canvas.addEventListener('pointerup', up);
+  const useAt = (x: number, y: number) => {
+    const found = usableAt(x, y);
+    if (!found) return;
+    console.debug('dev room: worked', found.object.name || found.object.type);
+    // The part's sound, judged before the click changes it.
+    const kind = soundOf(found.mesh);
+    // Knobs and selectors turn by the side clicked, as everywhere in the game.
+    found.use(knobDirection(found.object, found.point, camera));
+    if (kind) sounds?.play(kind);
+  };
 
+  // Walk the room as in the lab. The walls, the open front and the three
+  // exhibits are solid.
+  const solids: Footprint[] = [
+    {
+      minX: -size / 2 - 1,
+      maxX: size / 2 + 1,
+      minZ: -size / 2 - 1,
+      maxZ: -size / 2 + 0.05,
+    },
+    {
+      minX: -size / 2 - 1,
+      maxX: -size / 2 + 0.05,
+      minZ: -size / 2,
+      maxZ: size / 2,
+    },
+    {
+      minX: size / 2 - 0.05,
+      maxX: size / 2 + 1,
+      minZ: -size / 2,
+      maxZ: size / 2,
+    },
+    {
+      minX: -size / 2 - 1,
+      maxX: size / 2 + 1,
+      minZ: size / 2,
+      maxZ: size / 2 + 1,
+    },
+  ];
+  for (const exhibit of [rig.group, board.group, modelDrive.group]) {
+    const bounds = new Box3().setFromObject(exhibit);
+    if (bounds.isEmpty()) continue;
+    solids.push({
+      minX: bounds.min.x,
+      maxX: bounds.max.x,
+      minZ: bounds.min.z,
+      maxZ: bounds.max.z,
+    });
+  }
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const walk = createFirstPerson({
+    canvas,
+    camera,
+    metre: 1,
+    floorY: 0,
+    // Where the orbit camera used to start, facing the concept rig.
+    start: { x: 0.3, z: 2.9, yaw: Math.atan2(-0.3, 2.9), pitch: -0.27 },
+    solids: () => solids,
+    use: useAt,
+    aimed: () => Boolean(usableAt(0, 0)),
+    reducedMotion: () => reducedMotion.matches,
+  });
+
   let last = 0;
   renderer.setAnimationLoop((time) => {
     const seconds = time / 1000;
     const delta = Math.min(0.1, last ? seconds - last : 0);
     last = seconds;
     ps1Uniforms.time.value = seconds;
-    controls.update();
+    walk.update(delta);
     rig.update(seconds, delta, reducedMotion.matches);
     board.update(seconds, delta);
-    heavy.update(delta);
+    modelDrive.update(delta);
     showStatus();
     voiceFrame();
     renderer.render(scene, camera);
@@ -598,9 +663,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     renderer.setAnimationLoop(null);
     observer.disconnect();
     window.removeEventListener('keydown', onKey);
-    canvas.removeEventListener('pointerdown', down);
-    canvas.removeEventListener('pointerup', up);
-    controls.dispose();
+    walk.dispose();
     notes.remove();
     model.remove();
     voice?.dispose();
@@ -608,7 +671,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     void audio?.close();
     rig.dispose();
     disposeKit(kit, board.group);
-    heavy.group.traverse((object) => {
+    modelDrive.group.traverse((object) => {
       if (object instanceof Mesh) object.geometry.dispose();
     });
     room.traverse((object) => {

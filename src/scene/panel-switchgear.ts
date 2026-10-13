@@ -1,3 +1,4 @@
+import { stepSelector } from './rotary-knob';
 import {
   BoxGeometry,
   CylinderGeometry,
@@ -565,7 +566,8 @@ export interface KeyLockedKnob {
   /** Turn the key: lock an unlocked knob, unlock a locked one. */
   toggleLock(): void;
   /** Step to the next position; refused, with a jiggle, while locked. */
-  turn(): boolean;
+  /** Move one position: -1 anticlockwise, 1 clockwise. Stops at the ends. */
+  turn(direction?: number): boolean;
   update(delta: number): void;
 }
 
@@ -702,12 +704,12 @@ export function createKeyLockedKnob(
       isUnlocked = !isUnlocked;
       twist.to(isUnlocked ? -Math.PI / 2 : 0);
     },
-    turn() {
+    turn(direction = 1) {
       if (!isUnlocked) {
         jiggle = 0.35;
         return false;
       }
-      at = (at + 1) % positions;
+      at = stepSelector(at, direction, positions);
       handleAngle = angle(at);
       return true;
     },

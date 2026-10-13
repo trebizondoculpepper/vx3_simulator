@@ -136,6 +136,53 @@ export function createPanelLivery(
   context.globalAlpha = 1;
   context.save();
   context.translate(60, height * 0.52);
+  drawBrandMark(context, brand, finish);
+  context.restore();
+
+  context.globalAlpha = 0.8;
+  context.fillStyle = brand.primary;
+  context.font = '900 21px "Arial Rounded MT Bold", "Arial Black", sans-serif';
+  context.textAlign = 'right';
+  context.fillText(maker.split(' ')[0], width - 37, height - 34);
+  context.globalAlpha = 1;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/** Each maker gets a coloured identity strip over a common cream apparatus plate. */
+export function createPanelHeader(maker: string, title: string) {
+  const width = 512;
+  const height = 38;
+  const { context, texture } = createCanvasTexture(width, height);
+  const brand = brands[maker] ?? brands['VOLT XOCCULA'];
+  context.fillStyle = brand.mark === 'arrow' ? '#d1c6a1' : '#e5d7aa';
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = brand.mark === 'rings' ? '#d2c29a' : brand.primary;
+  context.fillRect(0, 0, 173, height);
+  context.fillStyle = brand.secondary;
+  context.fillRect(173, 0, 7, height);
+  context.fillStyle = '#202826';
+  context.textBaseline = 'middle';
+  context.font = '900 22px "Arial Rounded MT Bold", "Arial Black", sans-serif';
+  context.textAlign = 'center';
+  context.fillText(maker, 86, height / 2 + 1, 162);
+  context.textAlign = 'left';
+  context.font = '900 18px "Arial Rounded MT Bold", "Arial Black", sans-serif';
+  context.fillText(title, 193, height / 2 + 1, 307);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/**
+ * The maker's mark, about 64 px across, centred on the current origin:
+ * Volt Xoccula's bolt, Neumann's rings, Synclex's links, Wonshou's sun,
+ * Bonk's gear and Gorskiy's arrow.
+ */
+function drawBrandMark(
+  context: CanvasRenderingContext2D,
+  brand: BrandStyle,
+  finish: string,
+) {
   const radius = 29;
   context.strokeStyle = brand.primary;
   context.fillStyle = brand.primary;
@@ -191,38 +238,100 @@ export function createPanelLivery(
     context.fillStyle = brand.secondary;
     context.fillRect(-30, 25, 60, 6);
   }
-  context.restore();
-
-  context.globalAlpha = 0.8;
-  context.fillStyle = brand.primary;
-  context.font = '900 21px "Arial Rounded MT Bold", "Arial Black", sans-serif';
-  context.textAlign = 'right';
-  context.fillText(maker.split(' ')[0], width - 37, height - 34);
-  context.globalAlpha = 1;
-  texture.needsUpdate = true;
-  return texture;
 }
 
-/** Each maker gets a coloured identity strip over a common cream apparatus plate. */
-export function createPanelHeader(maker: string, title: string) {
-  const width = 512;
-  const height = 38;
+/** Size of a module's face and where its parts sit, in scene units. */
+export interface BrandingLayout {
+  /** The painted face, centred on the panel. */
+  face: { width: number; height: number };
+  /** The nameplate, centred at (x, y) on the face. */
+  title: { x: number; y: number; width: number; height: number };
+  /** Half the usable width either side of centre, inside the rack ears. */
+  halfWidth: number;
+}
+
+/**
+ * Everything a maker painted on one rack module, as a single decal for the
+ * branding layer: the livery, the nameplate with maker and title, a round
+ * maker badge with its mark left of the nameplate, and a small plate naming
+ * the maker's home town to the right of it.
+ */
+export function createModuleBranding(
+  maker: string,
+  title: string,
+  finish: string,
+  units: number,
+  origin: string | undefined,
+  layout: BrandingLayout,
+) {
+  const { face, title: plate, halfWidth } = layout;
+  const width = 1024;
+  const height = Math.round((width * face.height) / face.width);
   const { context, texture } = createCanvasTexture(width, height);
+  const toX = (x: number) => ((x + face.width / 2) / face.width) * width;
+  const toY = (y: number) => ((face.height / 2 - y) / face.height) * height;
   const brand = brands[maker] ?? brands['VOLT XOCCULA'];
-  context.fillStyle = brand.mark === 'arrow' ? '#d1c6a1' : '#e5d7aa';
-  context.fillRect(0, 0, width, height);
-  context.fillStyle = brand.mark === 'rings' ? '#d2c29a' : brand.primary;
-  context.fillRect(0, 0, 173, height);
-  context.fillStyle = brand.secondary;
-  context.fillRect(173, 0, 7, height);
-  context.fillStyle = '#202826';
-  context.textBaseline = 'middle';
-  context.font = '900 22px "Arial Rounded MT Bold", "Arial Black", sans-serif';
-  context.textAlign = 'center';
-  context.fillText(maker, 86, height / 2 + 1, 162);
-  context.textAlign = 'left';
-  context.font = '900 18px "Arial Rounded MT Bold", "Arial Black", sans-serif';
-  context.fillText(title, 193, height / 2 + 1, 307);
+
+  const livery = createPanelLivery(maker, finish, units);
+  context.drawImage(livery.image as CanvasImageSource, 0, 0, width, height);
+  livery.dispose();
+
+  const left = toX(plate.x - plate.width / 2);
+  const right = toX(plate.x + plate.width / 2);
+  const top = toY(plate.y + plate.height / 2);
+  const tall = toY(plate.y - plate.height / 2) - top;
+  const header = createPanelHeader(maker, title);
+  context.drawImage(
+    header.image as CanvasImageSource,
+    left,
+    top,
+    right - left,
+    tall,
+  );
+  header.dispose();
+
+  // The maker's badge: an enamel roundel carrying its mark.
+  const middle = top + tall / 2;
+  const badgeX = (toX(-halfWidth) + left) / 2;
+  const radius = Math.min(tall * 0.62, (left - toX(-halfWidth)) * 0.42);
+  context.fillStyle = '#1b2627';
+  context.beginPath();
+  context.arc(badgeX, middle, radius, 0, Math.PI * 2);
+  context.fill();
+  context.strokeStyle = brand.primary;
+  context.lineWidth = Math.max(2, radius * 0.12);
+  context.stroke();
+  context.save();
+  context.translate(badgeX, middle);
+  context.scale(radius / 46, radius / 46);
+  drawBrandMark(context, brand, '#1b2627');
+  context.restore();
+
+  // Where it was made, on a small plate to the right of the nameplate.
+  if (origin) {
+    const plateLeft = right + (toX(halfWidth) - right) * 0.1;
+    const plateWidth = (toX(halfWidth) - right) * 0.8;
+    const plateHeight = tall * 0.62;
+    context.fillStyle = '#1b2627';
+    context.fillRect(
+      plateLeft,
+      middle - plateHeight / 2,
+      plateWidth,
+      plateHeight,
+    );
+    context.fillStyle = brand.secondary;
+    context.fillRect(plateLeft, middle + plateHeight / 2 - 3, plateWidth, 3);
+    context.fillStyle = '#e5d7aa';
+    context.font = `700 ${Math.round(plateHeight * 0.5)}px "Arial Narrow", "Arial", sans-serif`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(
+      origin.toUpperCase(),
+      plateLeft + plateWidth / 2,
+      middle,
+      plateWidth * 0.9,
+    );
+  }
   texture.needsUpdate = true;
   return texture;
 }

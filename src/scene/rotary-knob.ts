@@ -19,9 +19,27 @@ export function knobDirection(shaft: Object3D, point: Vector3, camera: Camera) {
   return point.clone().project(camera).x < centre.x ? -1 : 1;
 }
 
-export function stepKnob(value: number, direction: number) {
+/**
+ * Every knob in the game turns the same way: a click on its left half turns
+ * it anticlockwise (down), a click on its right half clockwise (up), one
+ * detent at a time, and it stops at its end stops instead of wrapping.
+ * `steps` is how many detents span the full travel.
+ *
+ * The one exception is the emergency telephone's rotary dial, which is not
+ * a rotary control at all: it dials numbers and must not use this rule.
+ */
+export function stepKnob(value: number, direction: number, steps = 10) {
   return Math.max(
     0,
-    Math.min(1, Math.round((value + direction * 0.1) * 10) / 10),
+    Math.min(1, Math.round((value + direction / steps) * steps) / steps),
   );
+}
+
+/** A rotary selector moves one position per click and stops at its ends. */
+export function stepSelector(
+  position: number,
+  direction: number,
+  positions: number,
+) {
+  return Math.max(0, Math.min(positions - 1, position + Math.sign(direction)));
 }
