@@ -8,6 +8,7 @@ import { createMachineActionLog } from '../game/machine-action-log';
 import { DEV_DOOR_WIDTH, DEV_DOOR_HEIGHT } from '../game/dev-room-links';
 import { createDevDoorways } from '../scene/dev-doorways';
 import { MAX_ZOOM, MIN_ZOOM, wheelZoom } from './first-person';
+import { HALLWAY_LAYER, renderWithHallwayLighting } from './hallway-render';
 import {
   AmbientLight,
   Box3,
@@ -657,11 +658,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     return { spray, puddle };
   });
   dynamic.push(() =>
-    corridor.update(
-      performance.now() / 1000,
-      reducedMotion.matches,
-      1 - fillLevel(),
-    ),
+    corridor.update(performance.now() / 1000, reducedMotion.matches),
   );
   // The everyday tool board hangs on the south wall east of the door,
   // facing into the lab; the west side of the door is the sink's corner.
@@ -1175,6 +1172,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     [0.34, -0.16],
   ])
     disc(pinBoard, 0.04, '#c34b39', x, y, 0.14);
+  const posterFrameDepth = 0.012;
+  const posterFrameGap = 0.001; // Metres; the frame group scales to world units.
   for (const [index, name] of [
     'volt-xoccula',
     'neumann-dynamik',
@@ -1189,15 +1188,24 @@ export function startScene(canvas: HTMLCanvasElement) {
     frame.rotation.y = Math.PI / 2;
     frame.scale.setScalar(worldUnitsPerMetre);
     lab.add(frame);
-    cube(frame, 0.46, 0.67, 0.012, '#4b3e31', 0, 0, 0);
+    cube(frame, 0.46, 0.67, posterFrameDepth, '#4b3e31', 0, 0, 0);
     const poster = createPrintedImageTexture(`/posters/${name}.webp`);
     textures.push(poster);
     const printedFace = new Mesh(
       new PlaneGeometry(0.42, 0.63),
-      createPs1Material({ map: poster }, true),
+      createPs1Material(
+        {
+          map: poster,
+          // Keep the printed face ahead of the backing at grazing angles.
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -1,
+        },
+        true,
+      ),
     );
     materials.push(printedFace.material);
-    printedFace.position.z = 0.007;
+    printedFace.position.z = posterFrameDepth / 2 + posterFrameGap;
     frame.add(printedFace);
   }
   for (let x = -8.5; x <= 8.5; x += 2.4) {
@@ -2239,6 +2247,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   // The plant room is drawn on layer 1 for its own lighting; the pointer
   // must see it too, or none of its controls can be worked.
   raycaster.layers.enable(1);
+  raycaster.layers.enable(HALLWAY_LAYER);
   const pointer = new Vector2();
   let orbitYaw = 0;
   let orbitPitch = 0;
@@ -2428,6 +2437,34 @@ export function startScene(canvas: HTMLCanvasElement) {
       write(`Teleport: ${caption.toLowerCase()}.`);
     });
   });
+  // The corridor has its own permanently energised lighting circuit.
+  perspectiveCamera.layers.enable(HALLWAY_LAYER);
+  const corridorLight = { value: 1 };
+  const corridorRoots = [
+    corridor.group,
+    devPassages.group,
+    cheats.group,
+    teleports.group,
+    hotline.group,
+    firePanel,
+    hallBeacon,
+  ];
+  dimPrintedWith(corridorRoots, corridorLight, () => false, true);
+  for (const root of corridorRoots)
+    root.traverse((object) => {
+      object.layers.set(HALLWAY_LAYER);
+      if (object instanceof PointLight)
+        object.shadow.camera.layers.set(HALLWAY_LAYER);
+    });
+  for (const part of plantRoom.entryParts) part.layers.set(HALLWAY_LAYER);
+  const corridorFill = new AmbientLight('#d8dcbe', 1.15);
+  corridorFill.layers.set(HALLWAY_LAYER);
+  scene.add(corridorFill);
+  const corridorLamp = new DirectionalLight('#d8dcbe', 0.6);
+  corridorLamp.position.copy(lamp.position);
+  corridorLamp.layers.set(HALLWAY_LAYER);
+  scene.add(corridorLamp);
+
   const keys = new Set<string>();
   const nudge = { forward: 0, right: 0 };
   // Development builds expose the walker so browser checks can place the
@@ -3101,6 +3138,8 @@ export function startScene(canvas: HTMLCanvasElement) {
       delta: deltaScore(rig),
       ferrocoreRadiansPerSecond: ferrocoreAngularVelocity(rig),
       ferrocoreActivity: activity,
+      coreTemperature: gen2.prep.temperature,
+      coreFailed: gen2.prep.failure !== null,
       seconds: delta,
     });
     audio.update(rig, settings, reducedMotion.matches);
@@ -3217,7 +3256,7 @@ export function startScene(canvas: HTMLCanvasElement) {
               source === 'sink',
             ),
       );
-    renderer.render(scene, viewer);
+    renderWithHallwayLighting(renderer, scene, viewer);
   });
   const dispose = () => {
     renderer.setAnimationLoop(null);

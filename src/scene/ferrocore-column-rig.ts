@@ -450,7 +450,8 @@ export function createFerrocoreColumnRig(
     });
     mesh.name = `Label: ${intended}`;
     mesh.userData.legend = intended;
-    mesh.position.set(x, y, 0.0005);
+    // Print ahead of the 2 mm retrofit/title strips as well as bare metal.
+    mesh.position.set(x, y, 0.0025);
     mesh.rotation.z = tilt;
     parent.add(mesh);
     fitted(parent, mesh);
@@ -1475,7 +1476,10 @@ export function createFerrocoreColumnRig(
     );
     for (let i = 0; i < 4; i++)
       bars(p.group, -0.105 + i * 0.016, 0.002, 11 + i);
-    for (let i = 0; i < 5; i++) knob(p.group, -0.01 + i * 0.05, 0.006, 0.0065);
+    for (let i = 0; i < 5; i++) {
+      knob(p.group, -0.01 + i * 0.05, 0.006, 0.0065);
+      named(p.group, 'knob', `OFFSET ${i + 1} knob`);
+    }
     label(p.group, 'OFFS. 1 2 3 4 5', 0.09, -0.025, { height: 0.002 });
   }
   {
@@ -1716,6 +1720,10 @@ export function createFerrocoreColumnRig(
         ink: INK,
       });
       box(c.group, 0.05, 0.03, 0.001, '#d9d4bf', 0.2, 0.01, 0.0005);
+      label(c.group, 'KERNWECHSEL\n04.10.89', 0.2, 0.01, {
+        height: 0.0025,
+        ink: INK,
+      });
     }
   }
   {

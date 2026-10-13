@@ -2,13 +2,16 @@ import { TextureLoader } from 'three';
 import { createCanvasTexture } from './screens';
 
 /** Keep a valid printable texture while the image loads, then upload decoded canvas pixels. */
-export function createPrintedImageTexture(url: string, aspect = 1.5) {
+export function createPrintedImageTexture(
+  url: string,
+  { aspect = 1.5, width = 768, paper = '#ddd1b2' } = {},
+) {
   // WebGL texture storage cannot be resized after its first upload.
   const { canvas, context, texture } = createCanvasTexture(
-    768,
-    Math.round(768 * aspect),
+    width,
+    Math.round(width * aspect),
   );
-  context.fillStyle = '#ddd1b2';
+  context.fillStyle = paper;
   context.fillRect(0, 0, canvas.width, canvas.height);
   texture.needsUpdate = true;
   let disposed = false;

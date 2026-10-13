@@ -190,7 +190,7 @@ STRAIN -- "DRUCK" --> ALM
 RIG -- "instability: STÖRUNG" --> ALM
 ALM --> WIN["Alarm windows and STÖRUNG lamps"]:::ind
 RIG --> GRID["Channel grid: heater, spindle, field, trim match,<br/>instability, strain, Delta, load"]:::ind
-RIG --> MET["Ten meters, IST and SOLL trim pointers,<br/>trend screen, kW, kWh and δ readouts"]:::ind
+RIG --> MET["Ten meters, IST and SOLL trim pointers,<br/>core-temperature geometry screen, kW, kWh and δ readouts"]:::ind
 RACK --> HP["Handle positions and EIN lamps"]:::ind
   
 ```
@@ -201,3 +201,5 @@ Every input fitted to this rack now changes the machine. Two alternate panels in
 ## Fire incident route
 
 Spindle, field and supply-load redlines feed three stored device heats. Heat above 0.35 emits apparatus smoke, which contributes to laboratory room smoke. Twenty continuous seconds with room smoke at or above 0.25 latch the fire alarm; the lab call point latches it immediately. Three seconds after alarm, lab sprinklers run from their modeled ceiling heads and automatically close after 45 seconds. Device heat at or above 0.90 while powered ignites that device; 45 seconds of cumulative active burning ruins the lab. Five seconds of sprinkler water while mains remain closed also ruins it. Opening mains stops the live-water timer. The corridor fire panel resets alarm and water only after smoke falls below 0.25 and no device is burning. Ruin blocks machine controls while allowing camera and doors; the on-screen RESET starts a new cold run after 20 seconds.
+
+The southmost CRT uses pre-rendered green wireframe screens selected by core temperature (plane, cube, regular polyhedron, irregular polyhedron, projected tesseract); 3,200 K is the model's full-power/critical boundary. A failed core selects the fault screen. The Stage 3 cheat restores the purged, pressurised vessel and starts the xenon recirculator and plant supply while leaving the drive off; LIGHTS ON energises both room lighting selections. The corridor stays lit on an independent circuit.

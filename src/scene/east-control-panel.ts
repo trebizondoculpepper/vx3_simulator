@@ -1,11 +1,11 @@
+import { coreProjection } from '../game/core-projection';
+import { createPrintedImageTexture } from './printed-image';
+import type { CoreProjection } from '../game/core-projection';
 import { designate } from '../game/machine-parts';
 import { BoxGeometry, CircleGeometry, Group, Mesh, PlaneGeometry } from 'three';
 import type { Material, Texture } from 'three';
 import { annunciators, boardHandles } from '../game/control-board';
-import {
-  FERROCORE_MAX_ANGULAR_VELOCITY,
-  ferrocoreMonitorSample,
-} from '../game/ferrocore-anomaly';
+import { FERROCORE_MAX_ANGULAR_VELOCITY } from '../game/ferrocore-anomaly';
 import { redlineFraction } from '../game/redlines';
 import type { BoardView, gridChannels } from '../game/control-board';
 import { createPs1Material } from '../rendering/ps1-material';
@@ -26,6 +26,8 @@ export interface BoardDisplay {
   delta: number;
   ferrocoreRadiansPerSecond: number;
   ferrocoreActivity: number;
+  coreTemperature: number;
+  coreFailed: boolean;
   seconds: number;
 }
 
@@ -75,7 +77,16 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
     z: number,
     glow = false,
   ) => {
-    const material = createPs1Material({ map: texture }, true, glow);
+    const material = createPs1Material(
+      {
+        map: texture,
+        polygonOffset: glow,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      },
+      true,
+      glow,
+    );
     materials.push(material);
     const mesh = new Mesh(new PlaneGeometry(w, h), material);
     mesh.position.set(x, y, z);
@@ -390,46 +401,38 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
   // Beige adapter plate and digital instruments added in 1986.
   box(0.66, 0.75, 0.025, '#afa990', 0.75, 1.48, 0.242);
   box(0.34, 0.28, 0.06, '#343a31', 0.64, 1.64, 0.265);
-  const crt = createCanvasTexture(128, 96);
-  textures.push(crt.texture);
-  // A rolling trend of field strength and VX instability, sampled four times a second.
-  const trend = { field: [] as number[], instability: [] as number[] };
-  const drawTrend = (activity: number) => {
-    const { context } = crt;
-    context.fillStyle = '#0d2118';
-    context.fillRect(0, 0, 128, 96);
-    context.strokeStyle = '#31523d';
-    for (let y = 16; y < 96; y += 16) {
-      context.beginPath();
-      context.moveTo(0, y);
-      context.lineTo(128, y);
-      context.stroke();
-    }
-    for (const [samples, color] of [
-      [trend.field, '#7ba97c'],
-      [trend.instability, '#c9a35e'],
-    ] as const) {
-      context.strokeStyle = color;
-      context.beginPath();
-      samples.forEach((value, x) => {
-        const y = 88 - value * 68;
-        if (!x) context.moveTo(x * 2, y);
-        else context.lineTo(x * 2, y);
-      });
-      context.stroke();
-    }
-    context.fillStyle = '#8aad88';
-    context.font = '9px monospace';
-    context.fillText('VX / FELD · INSTAB', 8, 13);
-    context.fillStyle = activity > 0.1 ? '#d6ac67' : '#66866c';
-    context.fillText(activity > 0.1 ? 'AKTIV' : 'RUHE', 90, 93);
-    crt.texture.needsUpdate = true;
-  };
-  drawTrend(0);
-  indicator(
-    face(crt.texture, 0.282, 0.213, 0.64, 1.64, 0.298, true),
-    'Trend screen',
+  // Pre-rendered green phosphor projections on the southernmost bay's CRT.
+  const projections = new Map<CoreProjection, Texture>(
+    (
+      [
+        'basis',
+        'cube',
+        'polyhedron',
+        'irregular',
+        'tesseract',
+        'fault',
+      ] as CoreProjection[]
+    ).map((name) => {
+      const texture = createPrintedImageTexture(
+        `/screens/criticality/${name}.svg`,
+        { width: 256, aspect: 0.75, paper: '#021008' },
+      );
+      textures.push(texture);
+      return [name, texture] as const;
+    }),
   );
+  const projectionScreen = face(
+    projections.get('basis')!,
+    0.282,
+    0.213,
+    0.64,
+    1.64,
+    0.298,
+    true,
+  );
+  indicator(projectionScreen, 'Ferrocore geometry screen');
+  label('FC · RAUMPROJEKTION', 0.28, 0.64, 1.475, 0.299);
+  let shownProjection: CoreProjection = 'basis';
   // Red LED readouts: load, consumption and Delta.
   const readouts = (['kW', 'kWh', 'δ'] as const).map((unit, i) => {
     const y = 1.74 - i * 0.12;
@@ -444,7 +447,15 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
     const screen = createCanvasTexture(48, 22);
     textures.push(screen.texture);
     indicator(
-      face(screen.texture, 0.126, 0.058, 0.96, y, 0.286, true),
+      face(
+        screen.texture,
+        0.126,
+        0.058,
+        0.96,
+        y,
+        0.27 + 0.025 / 2 + 0.001,
+        true,
+      ),
       `${unit} readout`,
     );
     let shown = '';
@@ -495,7 +506,6 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
   );
 
   let sampleClock = 0;
-  let trendClock = 0;
   return {
     group,
     /** Handles in board order, each with every mesh that should take a click. */
@@ -519,26 +529,21 @@ export function createEastControlPanel(worldUnitsPerMetre: number) {
       readouts[1](display.energyKwh.toFixed(1));
       readouts[2](display.delta.toFixed(2));
       sampleClock += display.seconds;
-      trendClock += display.seconds;
+      const nextProjection = coreProjection(
+        display.coreTemperature,
+        display.coreFailed,
+      );
+      if (nextProjection !== shownProjection) {
+        shownProjection = nextProjection;
+        const material =
+          projectionScreen.material as import('three').MeshBasicMaterial;
+        material.map = projections.get(nextProjection)!;
+      }
       if (sampleClock >= 0.25) {
         sampleClock %= 0.25;
         chartSamples.unshift(display.ferrocoreRadiansPerSecond);
         if (chartSamples.length > 160) chartSamples.pop();
         drawChart();
-        const activity = display.ferrocoreActivity;
-        const sample = ferrocoreMonitorSample(
-          readings.field,
-          readings.instability,
-          activity,
-          trendClock,
-        );
-        trend.field.push(sample.field);
-        trend.instability.push(sample.instability);
-        if (trend.field.length > 64) {
-          trend.field.shift();
-          trend.instability.shift();
-        }
-        drawTrend(activity);
       }
     },
     dispose() {

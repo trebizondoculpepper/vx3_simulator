@@ -38,7 +38,7 @@ export function createBbcUserGuide(worldUnitsPerMetre: number) {
 
   const coverImage = createPrintedImageTexture(
     '/reference/bbc-micro-user-guide-cover.webp',
-    1599 / 1127,
+    { aspect: 1599 / 1127 },
   );
   const printedCover = createPs1Material({ map: coverImage }, true);
   materials.push(printedCover);

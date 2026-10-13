@@ -7,7 +7,6 @@ import {
   PlaneGeometry,
   PointLight,
 } from 'three';
-import { MeshStandardMaterial } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { createCeilingServices } from './ceiling-services';
@@ -522,29 +521,11 @@ export function createCorridor(options: CorridorOptions) {
     fittings.push({ pivot, tube, light, phase: index * 1.37, failing });
   }
 
-  // The scene's fill light belongs to the lab's switch. As the lab goes
-  // dark, the corridor's surfaces make up the difference themselves so the
-  // corridor keeps its own dim lighting either way.
-  const surfaces = new Set<MeshStandardMaterial>();
-  group.traverse((object) => {
-    if (
-      object instanceof Mesh &&
-      object.material instanceof MeshStandardMaterial
-    )
-      surfaces.add(object.material);
-  });
-  let lastDark = -1;
-
   return {
     group,
     /** Where a visitor stands to face the lab door: on the corridor's centre line. */
     spawn: { x: doorX, z: southZ - 0.45 * m },
-    update(seconds: number, reducedMotion: boolean, labDark = 0) {
-      if (Math.abs(labDark - lastDark) > 0.01) {
-        lastDark = labDark;
-        for (const surface of surfaces)
-          surface.emissive.copy(surface.color).multiplyScalar(0.55 * labDark);
-      }
+    update(seconds: number, reducedMotion: boolean) {
       services.update(seconds);
       for (const fitting of fittings) {
         const t = seconds * 0.3 + fitting.phase;

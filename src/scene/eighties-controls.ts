@@ -399,10 +399,19 @@ export function createSevenSegment(
   );
   frame.position.z = 0.0015;
   group.add(frame);
-  const material = createPs1Material({ map: texture }, true, true);
+  const material = createPs1Material(
+    {
+      map: texture,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    },
+    true,
+    true,
+  );
   kit.materials.push(material);
   const window = new Mesh(new PlaneGeometry(w * scale, h * scale), material);
-  window.position.z = 0.0031;
+  window.position.z = frame.position.z + 0.003 / 2 + 0.001;
   group.add(window);
   const segment = (x: number, y: number, which: string, on: boolean) => {
     context.fillStyle = on ? colour : '#2b0e0a';

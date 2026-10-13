@@ -154,13 +154,23 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
   );
   const screen = createScreen();
   textures.push(screen.texture);
-  const glass = createPs1Material({ map: screen.texture }, true, true);
+  const glass = createPs1Material(
+    {
+      map: screen.texture,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    },
+    true,
+    true,
+  );
   materials.push(glass);
   // A 4:3 picture within the 14-inch tube's bezel.
   const screenW = 0.276;
   const screenH = screenW * 0.75;
   const face = new Mesh(new PlaneGeometry(screenW * m, screenH * m), glass);
-  face.position.set(0.004 * m, screenY * m, (front + 0.0155) * m);
+  const screenFaceZ = front + 0.012 + 0.006 / 2 + 0.001;
+  face.position.set(0.004 * m, screenY * m, screenFaceZ * m);
   group.add(face);
   designate(face, {
     machine: 'Bench computer',
@@ -175,7 +185,7 @@ export function createCubMonitor(worldUnitsPerMetre: number) {
     '#f2f2ee',
     0.004 - screenW / 2 + screenW * (18 / 320),
     0,
-    front + 0.0165,
+    screenFaceZ + 0.001 + 0.001 / 2,
     true,
   );
   designate(cursor, {

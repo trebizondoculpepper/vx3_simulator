@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="192" viewBox="0 0 256 192">
+<defs><filter id="phosphor" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.4"/></filter><pattern id="scan" width="4" height="3" patternUnits="userSpaceOnUse"><path d="M 0 1.5 H 4" stroke="#001b0b" stroke-opacity=".36"/></pattern></defs>
+<rect width="256" height="192" fill="#021008"/>
+<g fill="none" stroke="#0c321d" stroke-width=".6"><path d="M 16 30 V 164"/><path d="M 32 30 V 164"/><path d="M 48 30 V 164"/><path d="M 64 30 V 164"/><path d="M 80 30 V 164"/><path d="M 96 30 V 164"/><path d="M 112 30 V 164"/><path d="M 128 30 V 164"/><path d="M 144 30 V 164"/><path d="M 160 30 V 164"/><path d="M 176 30 V 164"/><path d="M 192 30 V 164"/><path d="M 208 30 V 164"/><path d="M 224 30 V 164"/><path d="M 240 30 V 164"/><path d="M 10 36 H 246"/><path d="M 10 52 H 246"/><path d="M 10 68 H 246"/><path d="M 10 84 H 246"/><path d="M 10 100 H 246"/><path d="M 10 116 H 246"/><path d="M 10 132 H 246"/><path d="M 10 148 H 246"/></g>
+<g fill="none" stroke="#58ff93" stroke-width="2.3" filter="url(#phosphor)" opacity=".55"><path d="M 87 60 L 169 142 M 169 60 L 87 142"/><rect x="73" y="46" width="110" height="110"/></g>
+<g fill="none" stroke="#83ffa5" stroke-width="1.1"><path d="M 87 60 L 169 142 M 169 60 L 87 142"/><rect x="73" y="46" width="110" height="110"/></g>
+<g fill="#85ffa5" font-family="monospace" font-size="10"><text x="12" y="17">FC / STOERUNG</text><text x="12" y="181">KERN DEFEKT / KEIN SIGNAL</text></g>
+<path d="M 10 23 H 246 M 10 170 H 246" fill="none" stroke="#2b7e47" stroke-width=".7"/>
+<rect width="256" height="192" fill="url(#scan)"/>
+</svg>
