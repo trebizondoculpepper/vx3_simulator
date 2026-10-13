@@ -15,8 +15,17 @@ const showError = (error: unknown) => {
 };
 
 // `/?room=dev` opens the developer room, where new apparatus is built and
-// tested before it joins the game. It is loaded only when asked for.
-if (new URLSearchParams(location.search).get('room') === 'dev') {
+// tested before it joins the game; `/?room=dev1` opens the effects room,
+// for trying the end-state effects. Each is loaded only when asked for.
+const room = new URLSearchParams(location.search).get('room');
+if (room === 'dev1') {
+  import('./rendering/effects-room')
+    .then(({ startEffectsRoom }) => {
+      const dispose = startEffectsRoom(canvas);
+      if (import.meta.hot) import.meta.hot.dispose(dispose);
+    })
+    .catch(showError);
+} else if (room === 'dev') {
   import('./rendering/dev-room')
     .then(({ startDevRoom }) => {
       const dispose = startDevRoom(canvas);

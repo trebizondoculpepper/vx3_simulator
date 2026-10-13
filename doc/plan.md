@@ -10,6 +10,8 @@ The redline and fire mission has begun with shared spindle, field and 6.5 kW sup
 
 A future mission is briefed in [the phase chamber brief](resume/2026-10-12_phase-chamber-mission.md): a third, interlocked door beside the lab that opens only with the ferrocores at the right speed, and a chamber where the operator shovels cadmium pellets into a great aperture to deepen phase coherence.
 
+The effects room at `/?room=dev1` (not part of the game) is a walkable 10 m grid room with test objects and an in-room console for every dial on the end-state effects: the lab's warp, π drift and colour phaser, plus a centred warp, chromatic divergence and lost numerical precision still to be brought into the lab. The remaining ideas are briefed as a future mission in [the reality distortion brief](resume/2026-10-13_reality-distortion-mission.md).
+
 The three framed advertisements now hang just above the west workbench, clear of its socket strip and sink. The query string ?view=workbench opens a direct inspection view of this arrangement.
 
 The compact east-wall control board blends 1970s mint process panels and a channel map with a beige 1980s CRT retrofit, using original geometry and procedural instrument textures. Its handles operate the rack and its instruments repeat machine state. The phone and its hazard sign sit on the corridor side of the lab door, clear of the toolboard, while the filing cabinet occupies the south-east corner. The query string ?view=control-panel opens a direct inspection view. Local development uses port 5174 when Idea Grabber occupies 5173.
