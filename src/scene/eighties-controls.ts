@@ -206,6 +206,7 @@ export function createEightiesButton(
   } = options;
   const group = new Group();
   group.name = `Button ${legend}`;
+  group.userData.sound = 'button';
   const bezel = new Mesh(
     new BoxGeometry(size, size, 0.003),
     paint(kit, '#15161a'),
@@ -266,12 +267,14 @@ export function createEightiesButton(
     latching,
     lit,
     press() {
+      // Every press pushes the cap in; a latching one also toggles, and
+      // stays in while lit. A refused press still dips, so it never feels dead.
       if (latching) button.lit = !button.lit;
-      else held = 0.18;
+      held = latching ? 0.12 : 0.18;
     },
     update(delta) {
       held = Math.max(0, held - delta);
-      const on = button.lit || held > 0;
+      const on = button.lit || (!latching && held > 0);
       if (illuminated) {
         const shade = on ? litColour : darkColour;
         capMaterial.color.copy(shade);

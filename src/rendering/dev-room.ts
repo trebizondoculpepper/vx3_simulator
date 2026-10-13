@@ -19,11 +19,18 @@ import type { CoreVoice } from '../audio/core-voice';
 import { coreVoiceParameters } from '../audio/core-voice-parameters';
 import type { CoreVoiceScene } from '../audio/core-voice-render';
 import {
+  AMBIENT,
   FULL_BOTTLE,
+  acknowledge,
   airShare,
+  chamberPressure,
   coreStage,
+  isSealed,
   setActivation,
+  setClamped,
 } from '../game/column-prep';
+import { createRigSounds } from '../audio/rig-sounds';
+import type { ControlSound, RigSounds } from '../audio/rig-sounds';
 import {
   createMicroLabel,
   createPanelKit,
@@ -166,6 +173,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     '<label>Activation <input type="range" min="293" max="4000" step="1" value="293" data-control="activation"> <output>293 K</output></label>' +
     '<label>Brightness <input type="range" min="0" max="1" step="0.01" value="0.6" data-control="brightness"> <output>0.60</output></label>' +
     '<button type="button" data-sound>Sound: off</button>' +
+    '<div data-scenes></div>' +
     '<div data-status></div><div data-log></div>';
   Object.assign(model.style, {
     position: 'absolute',
@@ -203,6 +211,118 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   };
   activation.addEventListener('input', onModel);
   brightness.addEventListener('input', onModel);
+  // Scenario buttons: jump the column straight to a state, to see and hear
+  // it without working through the cold start each time.
+  const setActivationSlider = (kelvin: number) => {
+    activation.value = String(Math.round(kelvin));
+    onModel();
+  };
+  const ready = () => {
+    const prep = rig.prep;
+    prep.failure = null;
+    prep.lift = 0;
+    prep.liftTarget = 0;
+    prep.clamped = true;
+    prep.inletOpen = false;
+    prep.outletOpen = false;
+    prep.air = 0;
+    prep.xenon = 1.8;
+    prep.supply = FULL_BOTTLE;
+  };
+  const scenes: [string, () => void][] = [
+    [
+      'Cold',
+      () => {
+        const prep = rig.prep;
+        acknowledge(prep);
+        setClamped(prep, false);
+        prep.lift = 1;
+        prep.liftTarget = 1;
+        prep.inletOpen = false;
+        prep.outletOpen = false;
+        prep.air = 1;
+        prep.xenon = 0;
+        prep.temperature = AMBIENT;
+        setActivationSlider(AMBIENT);
+      },
+    ],
+    ['Vessel ready', ready],
+    [
+      'Glowing',
+      () => {
+        ready();
+        setActivationSlider(1600);
+      },
+    ],
+    [
+      'Full power',
+      () => {
+        ready();
+        setActivationSlider(4000);
+      },
+    ],
+    [
+      'Purging',
+      () => {
+        ready();
+        rig.prep.air = 0.6;
+        rig.prep.xenon = 0.3;
+        rig.prep.inletOpen = true;
+        rig.prep.outletOpen = true;
+        rig.prep.temperature = AMBIENT;
+        setActivationSlider(AMBIENT);
+      },
+    ],
+    [
+      'Burnout',
+      () => {
+        ready();
+        rig.prep.temperature = 2000;
+        setActivationSlider(2000);
+        setClamped(rig.prep, false);
+      },
+    ],
+    [
+      'Flux inductance',
+      () => {
+        // Hot, with the purge left open on an almost empty bottle: the
+        // chamber is pumped down within a few seconds.
+        ready();
+        rig.prep.inletOpen = true;
+        rig.prep.outletOpen = true;
+        rig.prep.supply = 0.02;
+        rig.prep.xenon = 0.5;
+        rig.prep.temperature = 2000;
+        setActivationSlider(2000);
+      },
+    ],
+    [
+      'Acknowledge',
+      () => {
+        acknowledge(rig.prep);
+        setActivationSlider(AMBIENT);
+      },
+    ],
+  ];
+  const sceneRow = model.querySelector<HTMLElement>('[data-scenes]')!;
+  Object.assign(sceneRow.style, {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '4px',
+  });
+  for (const [name, apply] of scenes) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = name;
+    Object.assign(button.style, {
+      font: 'inherit',
+      padding: '1px 6px',
+      cursor: 'pointer',
+    });
+    button.addEventListener('click', apply);
+    sceneRow.appendChild(button);
+  }
+
   const status = model.querySelector<HTMLElement>('[data-status]')!;
   const logView = model.querySelector<HTMLElement>('[data-log]')!;
   logView.style.color = '#ffb43a';
@@ -211,6 +331,9 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   // starts on the button.
   let audio: AudioContext | null = null;
   let voice: CoreVoice | null = null;
+  let sounds: RigSounds | null = null;
+  let wasClamped = false;
+  let wasMoving = false;
   let lastFailure: string | null = null;
   const soundButton = model.querySelector<HTMLButtonElement>('[data-sound]')!;
   Object.assign(soundButton.style, {
@@ -224,6 +347,8 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       audio = new AudioContext();
       voice = createCoreVoice(audio);
       voice.output.connect(audio.destination);
+      sounds = createRigSounds(audio);
+      sounds.output.connect(audio.destination);
     } else if (audio.state === 'running') void audio.suspend();
     else void audio.resume();
     // The label says what a click does next, once the state has settled.
@@ -235,6 +360,22 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   const voiceFrame = () => {
     if (!voice) return;
     const prep = rig.prep;
+    // The column's mechanical sounds: the pump while the head moves, a thud
+    // at the end of its travel, the clamps, and the purge port's hiss.
+    if (sounds) {
+      const moving = !prep.clamped && prep.lift !== prep.liftTarget;
+      if (wasMoving && !moving) sounds.play('ram-stop');
+      if (prep.clamped !== wasClamped) sounds.play('clamp');
+      wasMoving = moving;
+      wasClamped = prep.clamped;
+      sounds.update({
+        rams: moving ? (prep.liftTarget > prep.lift ? 1 : -1) : 0,
+        venting:
+          isSealed(prep) && prep.outletOpen
+            ? Math.min(1, chamberPressure(prep))
+            : 0,
+      });
+    }
     // A new failure gets its catastrophe; an acknowledged one, a fresh voice.
     if (prep.failure !== lastFailure) {
       if (prep.failure === 'flux-inductance') voice.collapse();
@@ -312,15 +453,70 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     },
     /** The column's model, for scripted tests. */
     prep: rig.prep,
+    /** The last frame's draw calls and triangles, and what the GPU holds. */
+    stats: () => ({
+      calls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
+      geometries: renderer.info.memory.geometries,
+      textures: renderer.info.memory.textures,
+      programs: renderer.info.programs?.length ?? 0,
+    }),
     /** The rig's panel layout problems. */
     layout: (part?: number, edge?: number) => rig.layoutProblems(part, edge),
     /** How many parts are fitted to each panel. */
     fittedCounts: () => rig.fittedCounts(),
+    /**
+     * Work every control on the rig once and report which moved nothing
+     * visible: each is clicked, the rig run on a tenth of a second, and its
+     * part compared before and after. Leaves the rig in a muddle; reload.
+     */
+    exerciseControls() {
+      const pose = (root: Object3D) => {
+        const values: number[] = [];
+        root.updateMatrixWorld(true);
+        root.traverse((o) => {
+          values.push(...o.matrixWorld.elements);
+          // Colour counts too, on single materials and on arrays of them.
+          const own = (o as { material?: unknown }).material;
+          for (const material of Array.isArray(own) ? own : [own]) {
+            const colour = (
+              material as
+                { color?: { r: number; g: number; b: number } } | undefined
+            )?.color;
+            if (colour) values.push(colour.r, colour.g, colour.b);
+          }
+        });
+        return values;
+      };
+      const still: string[] = [];
+      let t = 1000;
+      for (const control of rig.clickables) {
+        // Judge from the part the control belongs to.
+        let part: Object3D = control.object;
+        while (part.parent && !part.userData.sound && part.parent !== rig.group)
+          part = part.parent;
+        const before = pose(part);
+        control.use();
+        for (let i = 0; i < 2; i++) rig.update((t += 0.05), 0.05, false);
+        const after = pose(part);
+        if (!before.some((v, i) => Math.abs(v - after[i]) > 1e-6))
+          still.push(control.name);
+      }
+      return { total: rig.clickables.length, still };
+    },
     /** Work a rig control by its name, as a click would. */
     work(name: string) {
       const control = rig.clickables.find((c) => c.name === name);
       control?.use();
       return Boolean(control);
+    },
+    /** Render the rig's mechanical sounds as one clip, WAV bytes in base64. */
+    async renderRigSounds() {
+      const { renderRigSounds } = await import('../audio/core-voice-render');
+      const bytes = await renderRigSounds();
+      let text = '';
+      for (const byte of bytes) text += String.fromCharCode(byte);
+      return btoa(text);
     },
     /** Render the core's voice through a set scene, as WAV bytes in base64. */
     async renderVoice(scene: CoreVoiceScene) {
@@ -335,6 +531,16 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       onModel();
     },
   };
+  /** The sound of the part a mesh belongs to, from its nearest tagged ancestor. */
+  const soundOf = (object: Object3D): ControlSound | null => {
+    for (let o: Object3D | null = object; o; o = o.parent) {
+      const sound = o.userData.sound as
+        ControlSound | (() => ControlSound) | undefined;
+      if (sound) return typeof sound === 'function' ? sound() : sound;
+    }
+    return null;
+  };
+
   const raycaster = new Raycaster();
   const pointer = new Vector2();
   let downAt: [number, number] | null = null;
@@ -361,7 +567,10 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       const use = uses.get(o);
       if (use) {
         console.debug('dev room: worked', o.name || o.type);
+        // The part's sound, judged before the click changes it.
+        const kind = soundOf(hit!.object);
         use();
+        if (kind) sounds?.play(kind);
         break;
       }
     }
@@ -395,6 +604,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     notes.remove();
     model.remove();
     voice?.dispose();
+    sounds?.dispose();
     void audio?.close();
     rig.dispose();
     disposeKit(kit, board.group);

@@ -139,6 +139,7 @@ export function createKnob(
   } = {},
 ): Knob {
   const group = new Group();
+  group.userData.sound = style === 'pointer' ? 'selector' : 'knob';
   const spindle = new Group();
   group.add(spindle);
   const black = kitPaint(kit, '#141414');
@@ -219,6 +220,7 @@ export interface Toggle {
 /** A miniature bat-handle toggle: hex nut, threaded bushing, chrome lever. */
 export function createToggle(kit: PanelKit, up = true): Toggle {
   const group = new Group();
+  group.userData.sound = 'toggle';
   const chrome = kitPaint(kit, '#d2d5d5', 0.65);
   peg(group, kitPaint(kit, '#b8bbbb', 0.6), 0.0052, 0.0018, 0, 6);
   peg(group, chrome, 0.0032, 0.004, 0.0018, 10);
@@ -261,6 +263,7 @@ export interface Rocker {
  */
 export function createRocker(kit: PanelKit, on = false): Rocker {
   const group = new Group();
+  group.userData.sound = 'rocker';
   add(
     group,
     new BoxGeometry(0.022, 0.03, 0.004),
@@ -312,6 +315,7 @@ export interface KeySwitch {
 /** A chrome key switch barrel with its key left in, turned 0 or I. */
 export function createKeySwitch(kit: PanelKit, on = false): KeySwitch {
   const group = new Group();
+  group.userData.sound = 'key-switch';
   const chrome = kitPaint(kit, '#c9cccc', 0.65);
   peg(group, chrome, 0.0105, 0.003, 0, 18);
   peg(group, kitPaint(kit, '#9fa3a3', 0.6), 0.0085, 0.004, 0.003, 18);
@@ -353,6 +357,7 @@ export function createSlideSwitch(
   at = 0,
 ): SlideSwitch {
   const group = new Group();
+  group.userData.sound = 'slide';
   const travel = 0.004 * (positions - 1);
   add(
     group,
@@ -400,6 +405,7 @@ export function createKeycap(
   { width = 0.014, height = 0.011, colour = '#d8d6cc', ink = '#1d1d1a' } = {},
 ): Keycap {
   const group = new Group();
+  group.userData.sound = 'key';
   const px = 48;
   const { context: c, texture } = createCanvasTexture(
     Math.round((px * width) / height),
@@ -617,6 +623,8 @@ export function createKeyLockedKnob(
   // The handle: a round hub with a bar across it, pointer line at one end.
   const handle = new Group();
   handle.name = 'selector handle';
+  // It clicks over when unlocked and rattles against its stop when not.
+  handle.userData.sound = () => (isUnlocked ? 'selector' : 'locked');
   group.add(handle);
   peg(handle, black, radius, radius * 0.7, 0, 20, radius * 1.05);
   add(
@@ -640,6 +648,7 @@ export function createKeyLockedKnob(
   // its plug turns with the key as a real lock's does.
   const key = new Group();
   key.name = 'selector key';
+  key.userData.sound = 'key-switch';
   key.position.z = radius * 1.56;
   handle.add(key);
   peg(key, chrome, radius * 0.48, radius * 1.15, -radius * 1.16, 16);
@@ -848,6 +857,7 @@ export function createPowerIsolator(
   const handle = new Group();
   handle.name = 'isolator handle';
   group.name = 'power isolator';
+  group.userData.sound = 'isolator';
   handle.position.set(0.004, plateY, face + 0.017);
   group.add(handle);
   peg(handle, red, 0.028, 0.006, 0, 24, 0.029);

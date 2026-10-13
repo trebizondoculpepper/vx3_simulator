@@ -1598,6 +1598,7 @@ export function createFerrocoreColumnRig(
   cyl(column, 0.012, 0.05, STEEL_DARK, -0.48, beamY, 0.16, { axis: 'z' });
   const wheel = new Group();
   wheel.position.set(-0.48, beamY, 0.185);
+  wheel.userData.sound = 'handwheel';
   column.add(wheel);
   wheel.add(
     new Mesh(new TorusGeometry(0.042, 0.007, 6, 16), paint('#c4c8c8', 0.5)),

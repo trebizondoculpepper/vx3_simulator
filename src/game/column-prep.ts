@@ -185,8 +185,12 @@ export function setActivation(state: ColumnPrepState, kelvin: number) {
   state.setpoint = Math.max(AMBIENT, Math.min(MAXIMUM, kelvin));
 }
 
-/** Acknowledge a failure: the burnt core is changed and a fresh bottle put on. */
+/**
+ * Acknowledge a failure: the burnt core is changed for a fresh, cold one
+ * and a fresh bottle put on.
+ */
 export function acknowledge(state: ColumnPrepState) {
+  if (state.failure) state.temperature = AMBIENT;
   state.failure = null;
   state.supply = FULL_BOTTLE;
 }

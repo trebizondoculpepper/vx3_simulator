@@ -118,3 +118,46 @@ function encodeWav(samples: Float32Array, sampleRate: number) {
   );
   return new Uint8Array(buffer);
 }
+
+/**
+ * Render the rig's mechanical sounds as one clip: every control's sound in
+ * turn, then the rams lifting and lowering with their end-stop thuds, then
+ * the purge port's hiss swelling and fading.
+ */
+export async function renderRigSounds() {
+  const { controlSounds, createRigSounds } = await import('./rig-sounds');
+  const kinds = Object.keys(controlSounds) as (keyof typeof controlSounds)[];
+  const clicksEnd = kinds.length * 0.7;
+  const seconds = clicksEnd + 12;
+  const sampleRate = 44100;
+  const context = new OfflineAudioContext(
+    1,
+    Math.ceil(seconds * sampleRate),
+    sampleRate,
+  );
+  const sounds = createRigSounds(context);
+  sounds.output.connect(context.destination);
+  const at = (t: number, act: () => void) =>
+    void context.suspend(t).then(() => {
+      act();
+      void context.resume();
+    });
+  kinds.forEach((kind, i) => at(0.2 + i * 0.7, () => sounds.play(kind)));
+  const lift = clicksEnd + 0.5;
+  at(lift, () => sounds.update({ rams: 1, venting: 0 }));
+  at(lift + 3, () => {
+    sounds.update({ rams: 0, venting: 0 });
+    sounds.play('ram-stop');
+  });
+  at(lift + 3.6, () => sounds.update({ rams: -1, venting: 0 }));
+  at(lift + 6.6, () => {
+    sounds.update({ rams: 0, venting: 0 });
+    sounds.play('ram-stop');
+  });
+  for (let t = 0; t <= 4; t += 0.1)
+    at(lift + 7.2 + t, () =>
+      sounds.update({ rams: 0, venting: Math.sin((t / 4) * Math.PI) }),
+    );
+  const rendered = await context.startRendering();
+  return encodeWav(rendered.getChannelData(0), sampleRate);
+}

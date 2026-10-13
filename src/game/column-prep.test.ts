@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AIR_LIMIT,
+  AMBIENT,
   FULL_POWER,
   FULL_SPIN,
   LIFT_SECONDS,
@@ -179,6 +180,8 @@ describe('column cold start', () => {
     acknowledge(state);
     expect(state.failure).toBeNull();
     expect(state.supply).toBeGreaterThan(0);
+    // The burnt core is changed for a cold one.
+    expect(state.temperature).toBe(AMBIENT);
   });
 
   it('stays cold without power, whatever the activation temperature', () => {

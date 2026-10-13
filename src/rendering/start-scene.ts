@@ -99,7 +99,7 @@ import { createSmokeEmitter } from '../scene/smoke-emitter';
 import { createSprinklerSpray } from '../scene/sprinkler-spray';
 import { createXenonCylinders } from '../scene/xenon-cylinders';
 import { createXenonRecirculator } from '../scene/xenon-recirculator';
-import { createCheatBoard } from '../scene/cheat-board';
+import { createCheatBoard, createTestingBoard } from '../scene/cheat-board';
 import { visibleRooms } from '../game/room-visibility';
 import { tripClues } from '../game/trip-report';
 import { createHotlinePhone } from '../scene/hotline-phone';
@@ -2570,63 +2570,142 @@ export function startScene(canvas: HTMLCanvasElement) {
     labRoom.lights.toggle();
     plantRoom.toggleLights();
   }
-  if (inspectionView === 'control-panel') {
-    walker.x = room.maxX - 2.8 * metre;
-    walker.z = eastControlPanel.group.position.z;
-    orbitYaw = Math.PI / 2;
-    orbitPitch = -0.16;
-  } else if (inspectionView === 'rack') {
-    walker.x = 0;
-    walker.z = rack.position.z + 2.05 * metre;
-    orbitYaw = 0;
-    orbitPitch = -0.26;
-  } else if (inspectionView === 'workbench') {
-    walker.x = room.minX + 2.8 * metre;
-    walker.z = room.minZ + 2.75 * metre;
-    orbitYaw = -Math.PI / 2;
-    orbitPitch = -0.16;
-  } else if (inspectionView === 'computer') {
-    walker.x = bbc.group.position.x - 0.4 * worldUnitsPerMetre;
-    walker.z = bbc.group.position.z + 0.95 * worldUnitsPerMetre;
-    orbitYaw = 0.4;
-    orbitPitch = -0.65;
-    cameraZoom = 1.2;
-  } else if (inspectionView === 'xenon') {
-    walker.x = plantRoom.bank.x;
-    walker.z = plantRoom.bank.z + 1.65 * worldUnitsPerMetre;
-    orbitYaw = 0;
-    orbitPitch = -0.305;
-  } else if (inspectionView === 'recirculator') {
-    walker.x = recirculator.group.position.x;
-    walker.z = recirculator.group.position.z + 1.6 * worldUnitsPerMetre;
-    orbitYaw = 0;
-    orbitPitch = -0.2;
-  } else if (inspectionView === 'plant-room') {
-    walker.x = plantRoom.doorway.x;
-    walker.z = room.maxZ + 2.25 * worldUnitsPerMetre;
-    orbitYaw = 0;
-    orbitPitch = -0.05;
-  } else if (inspectionView === 'printer') {
-    walker.x = room.maxX - 2.2 * metre;
-    walker.z = printerZ;
-    orbitYaw = Math.PI / 2;
-    orbitPitch = -0.35;
-  } else if (inspectionView === 'rectifier') {
-    walker.x = plantRoom.rectifierPosition.x - 1.45 * worldUnitsPerMetre;
-    walker.z = plantRoom.rectifierPosition.z + 0.75 * worldUnitsPerMetre;
-    orbitYaw = Math.PI / 2;
-    orbitPitch = -0.28;
-  } else if (inspectionView === 'fire-call') {
-    walker.x = firePoint.position.x;
-    walker.z = firePoint.position.z - 1.55 * worldUnitsPerMetre;
-    orbitYaw = Math.PI;
-    orbitPitch = -0.23;
-  } else if (inspectionView === 'fire-reset') {
-    walker.x = firePanel.position.x;
-    walker.z = firePanel.position.z + 1.55 * worldUnitsPerMetre;
-    orbitYaw = 0;
-    orbitPitch = -0.23;
-  }
+  // Named viewpoints: shareable inspection links (?view=rack) and the
+  // teleport board's destinations.
+  const viewpoints: Record<string, () => void> = {
+    'control-panel': () => {
+      walker.x = room.maxX - 2.8 * metre;
+      walker.z = eastControlPanel.group.position.z;
+      orbitYaw = Math.PI / 2;
+      orbitPitch = -0.16;
+    },
+    rack: () => {
+      walker.x = 0;
+      walker.z = rack.position.z + 2.05 * metre;
+      orbitYaw = 0;
+      orbitPitch = -0.26;
+    },
+    workbench: () => {
+      walker.x = room.minX + 2.8 * metre;
+      walker.z = room.minZ + 2.75 * metre;
+      orbitYaw = -Math.PI / 2;
+      orbitPitch = -0.16;
+    },
+    computer: () => {
+      walker.x = bbc.group.position.x - 0.4 * worldUnitsPerMetre;
+      walker.z = bbc.group.position.z + 0.95 * worldUnitsPerMetre;
+      orbitYaw = 0.4;
+      orbitPitch = -0.65;
+      cameraZoom = 1.2;
+    },
+    xenon: () => {
+      walker.x = plantRoom.bank.x;
+      walker.z = plantRoom.bank.z + 1.65 * worldUnitsPerMetre;
+      orbitYaw = 0;
+      orbitPitch = -0.305;
+    },
+    recirculator: () => {
+      walker.x = recirculator.group.position.x;
+      walker.z = recirculator.group.position.z + 1.6 * worldUnitsPerMetre;
+      orbitYaw = 0;
+      orbitPitch = -0.2;
+    },
+    'plant-room': () => {
+      walker.x = plantRoom.doorway.x;
+      walker.z = room.maxZ + 2.25 * worldUnitsPerMetre;
+      orbitYaw = 0;
+      orbitPitch = -0.05;
+    },
+    printer: () => {
+      walker.x = room.maxX - 2.2 * metre;
+      walker.z = printerZ;
+      orbitYaw = Math.PI / 2;
+      orbitPitch = -0.35;
+    },
+    rectifier: () => {
+      walker.x = plantRoom.rectifierPosition.x - 1.45 * worldUnitsPerMetre;
+      walker.z = plantRoom.rectifierPosition.z + 0.75 * worldUnitsPerMetre;
+      orbitYaw = Math.PI / 2;
+      orbitPitch = -0.28;
+    },
+    'fire-call': () => {
+      walker.x = firePoint.position.x;
+      walker.z = firePoint.position.z - 1.55 * worldUnitsPerMetre;
+      orbitYaw = Math.PI;
+      orbitPitch = -0.23;
+    },
+    'fire-reset': () => {
+      walker.x = firePanel.position.x;
+      walker.z = firePanel.position.z + 1.55 * worldUnitsPerMetre;
+      orbitYaw = 0;
+      orbitPitch = -0.23;
+    },
+    corridor: () => {
+      walker.x = corridor.spawn.x;
+      walker.z = corridor.spawn.z;
+      orbitYaw = 0;
+      orbitPitch = 0;
+    },
+  };
+  /** Stand at a named viewpoint, as if teleported there. */
+  const goTo = (view: string) => {
+    const place = viewpoints[view];
+    if (!place) return false;
+    walker.crouched = false;
+    walker.lowCrouched = false;
+    cameraZoom = 1;
+    place();
+    return true;
+  };
+  if (inspectionView) goTo(inspectionView);
+
+  // A second testing board, right of the cheat board: teleports. Each
+  // button puts the visitor straight at a viewpoint; the last one used
+  // keeps its lamp lit. The developer room is another page.
+  const destinations: [string, string][] = [
+    ['LAB · RACK', 'rack'],
+    ['LAB · CONSOLE', 'control-panel'],
+    ['LAB · BENCH', 'workbench'],
+    ['LAB · BBC MICRO', 'computer'],
+    ['LAB · PRINTER', 'printer'],
+    ['XENON BANK', 'xenon'],
+    ['RECTIFIER', 'rectifier'],
+    ['RECIRCULATOR', 'recirculator'],
+    ['CORRIDOR', 'corridor'],
+    ['DEVELOPER ROOM', 'developer-room'],
+  ];
+  const teleports = createTestingBoard(
+    worldUnitsPerMetre,
+    destinations.map(([caption]) => caption),
+    {
+      title: 'TELEPORTS',
+      titleColour: '#2f5f9a',
+      footer: 'TESTING ONLY · MOVES YOU',
+      rowHeight: 40,
+      buttonColour: '#d9a02a',
+    },
+  );
+  teleports.group.name = 'TeleportBoard';
+  teleports.group.position.set(
+    labRoom.door.handle.x + labRoom.door.width / 2 + 1.7 * worldUnitsPerMetre,
+    floorY + 1.4 * worldUnitsPerMetre,
+    room.maxZ + wallThickness + 0.035,
+  );
+  lab.add(teleports.group);
+  destinations.forEach(([caption, view], index) => {
+    teleports.show(index, false);
+    fixture(teleports.buttons[index], `Teleport: ${caption}`, () => {
+      audio.play('selector');
+      if (view === 'developer-room') {
+        write('Teleport: to the developer room.');
+        window.location.assign('/?room=dev');
+        return;
+      }
+      destinations.forEach((_, i) => teleports.show(i, i === index));
+      goTo(view);
+      write(`Teleport: ${caption.toLowerCase()}.`);
+    });
+  });
   const keys = new Set<string>();
   const nudge = { forward: 0, right: 0 };
   // Development builds expose the walker so browser checks can place the
@@ -2656,6 +2735,16 @@ export function startScene(canvas: HTMLCanvasElement) {
     Object.assign(window, {
       vx3Walker: {
         walker,
+        /** Stand at a named viewpoint, as the teleport board does. */
+        goTo,
+        /** The last frame's draw calls and triangles, and what the GPU holds. */
+        stats: () => ({
+          calls: renderer.info.render.calls,
+          triangles: renderer.info.render.triangles,
+          geometries: renderer.info.memory.geometries,
+          textures: renderer.info.memory.textures,
+          programs: renderer.info.programs?.length ?? 0,
+        }),
         look(yaw: number, pitch = 0) {
           orbitYaw = yaw;
           orbitPitch = pitch;
@@ -3251,6 +3340,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     plantRoom.dispose();
     rectifier.dispose();
     cheats.dispose();
+    teleports.dispose();
     hotline.dispose();
     labRoom.dispose();
     corridor.dispose();
