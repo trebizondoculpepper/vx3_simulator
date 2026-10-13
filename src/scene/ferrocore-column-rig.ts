@@ -125,6 +125,12 @@ export interface FerrocoreColumnRig {
   clickables: RigClickable[];
   /** Whether the concept is shown running; the mains button switches it. */
   readonly running: boolean;
+  /**
+   * The rig's supply isolator and the plate it is mounted on (on the grey
+   * cabinet). An installation may move the isolator elsewhere, such as onto
+   * a wall, and drop the plate; it keeps working wherever it is.
+   */
+  readonly isolator: { switch: Object3D; plate: Object3D };
   /** Panel layout problems: parts too close to each other or to an edge. */
   layoutProblems(partClearance?: number, edgeClearance?: number): string[];
   /** How many parts are fitted to each panel, by panel name. */
@@ -281,7 +287,9 @@ export function createFerrocoreColumnRig(
   const updates: ((delta: number) => void)[] = [];
   const ticks: ((seconds: number, on: boolean) => void)[] = [];
   let running = true;
+  let selectedMains = () => true;
   const supply = createPowerIsolator(kit, { on: true });
+  let isolatorPlate: Object3D = supply.group;
   const prep = createColumnPrep();
   const drive: { hold: boolean; power: boolean | null } = {
     hold: false,
@@ -690,7 +698,7 @@ export function createFerrocoreColumnRig(
     // The rig's own supply isolator, on a plate over the front of the left
     // upright near the top, where it can be reached from the aisle: OFF
     // darkens everything whatever the NETZ button says.
-    box(g, 0.13, 0.19, 0.01, '#8f9483', -0.31, 1.76, 0.355);
+    isolatorPlate = box(g, 0.13, 0.19, 0.01, '#8f9483', -0.31, 1.76, 0.355);
     supply.group.position.set(-0.31, 1.76, 0.36);
     g.add(supply.group);
     worked(supply.group, 'supply isolator', supply.toggle, supply.update);
@@ -1012,6 +1020,7 @@ export function createFerrocoreColumnRig(
       ink: INK,
     });
     vents(p.group, 0.17, 0, 0.07, 7);
+    selectedMains = () => mains.lit;
     ticks.push(() => {
       running = mains.lit && supply.on;
     });
@@ -2685,8 +2694,11 @@ export function createFerrocoreColumnRig(
           (p.userData.parts as Object3D[]).length,
         ]),
       ),
+    get isolator() {
+      return { switch: supply.group, plate: isolatorPlate };
+    },
     get running() {
-      return running;
+      return selectedMains() && supply.on;
     },
     prep,
     drive,

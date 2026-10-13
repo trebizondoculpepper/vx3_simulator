@@ -174,6 +174,9 @@ export function createXenonRecirculator(m: number) {
   return {
     group,
     switchParts: [switchBody, switchLever],
+    get enabled() {
+      return enabled;
+    },
     get working() {
       return working;
     },

@@ -21,7 +21,7 @@ The application retains room instances and their settings, hides inactive room o
 
 ## Outcomes
 
-Automated tests verify reciprocal room links, clearance south of the archive cordon, solid masonry beside open gaps, lintels, shut-door collision, threshold-only travel, arrival orientation and repeated visits. Browser checks crossed the corridor/developer doorway in both directions, retained a 1600 K activation setting after a return visit, opened and crossed the dev2/archive doorway, returned to dev2 and travelled onward into dev1. Dev2 remains empty. Checks use a separate local server on port 5175; the owner's existing game tab was not reloaded.
+Automated tests verify reciprocal room links, clearance south of the archive cordon, solid masonry beside open gaps, lintels, shut-door collision, threshold-only travel, arrival orientation and repeated visits. Browser checks crossed the corridor/developer doorway in both directions, retained a 1600 K activation setting after a return visit, opened and crossed the dev2/archive doorway, returned to dev2 and travelled onward into dev1. The production preview also opened and crossed the dev1/dev doorway with no browser warnings or errors. All five required checks passed, including 198 tests across 35 files. Dev2 remains empty. Checks use a separate local server on port 5175; the owner's existing game tab was not reloaded.
 
 ## Next Steps
 

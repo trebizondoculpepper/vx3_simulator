@@ -124,6 +124,7 @@ if (import.meta.hot)
     }
     canvas.hidden = false;
     canvas.style.display = 'block';
+    canvas.id = 'scene';
     window.removeEventListener('vx3-room', travel);
     window.removeEventListener('popstate', popstate);
   });

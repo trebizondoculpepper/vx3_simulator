@@ -1,3 +1,4 @@
+import { createMachineActionLog } from '../game/machine-action-log';
 import { DEV_DOOR_WIDTH, DEV_DOOR_HEIGHT } from '../game/dev-room-links';
 import { createDevDoorways } from '../scene/dev-doorways';
 import { MAX_ZOOM, MIN_ZOOM, wheelZoom } from './first-person';
@@ -242,9 +243,31 @@ export function startScene(canvas: HTMLCanvasElement) {
     parent.add(mesh);
     return mesh;
   };
+  const machineActions = createMachineActionLog(
+    () =>
+      JSON.stringify({
+        column: gen2.prep,
+        columnPower: gen2.running,
+        rack: settings,
+        plantPower: plantRoom.powered,
+        xenonValve: xenon.setting,
+        recirculator: recirculator.enabled,
+        alarms: board.alarms,
+        fire,
+      }),
+    (line) => teleprinter.record(line),
+    (label) => write(`${label} operated.`),
+  );
   const bind = (object: Object3D, action: (hit: Intersection) => void) => {
     interactive.push(object);
-    actions.set(object.id, action);
+    actions.set(object.id, (hit) => {
+      const part = object.userData.machinePart as
+        { machine: string; name: string } | undefined;
+      const label = part
+        ? `${part.machine}: ${part.name}`
+        : String(object.userData.fixture ?? 'Machine control');
+      machineActions.run(label, () => action(hit));
+    });
   };
   // Everything fitted to a machine is an input (worked by the operator) or
   // an indicator (driven by the machine); see src/game/machine-parts.ts.
@@ -683,6 +706,63 @@ export function startScene(canvas: HTMLCanvasElement) {
   gen2.group.position.set(4.6, floorY, room.minZ + 0.52 * worldUnitsPerMetre);
   lab.add(gen2.group);
   let gen2On = false;
+  // The column's supply isolator is not on the machine here but on the west
+  // wall, at shoulder height between the Volt Xoccula advertisement and the
+  // computer desk, in PVC trunking: one run up to the ceiling for the
+  // incoming supply, one along the wall, down the corner and along the
+  // north skirting to the column's grey cabinet.
+  {
+    const M = worldUnitsPerMetre;
+    const wallX = room.minX;
+    const isolatorY = floorY + 1.45 * M;
+    const isolatorZ = room.minZ + 1.2 * M;
+    gen2.isolator.plate.removeFromParent();
+    const mount = new Group();
+    mount.position.set(wallX, isolatorY, isolatorZ);
+    mount.rotation.y = Math.PI / 2;
+    mount.scale.setScalar(M);
+    lab.add(mount);
+    cube(mount, 0.16, 0.22, 0.012, '#8f9483', 0, 0, 0.006);
+    gen2.isolator.switch.position.set(0, 0, 0.012);
+    gen2.isolator.switch.rotation.set(0, 0, 0);
+    mount.add(gen2.isolator.switch);
+    const trunking = '#cfcfc4';
+    /** A straight run of trunking between two points, 60 by 40 mm. */
+    const run = (
+      from: [number, number, number],
+      to: [number, number, number],
+    ) => {
+      const [x0, y0, z0] = from;
+      const [x1, y1, z1] = to;
+      cube(
+        lab,
+        Math.max(0.06 * M, Math.abs(x1 - x0)),
+        Math.max(0.06 * M, Math.abs(y1 - y0)),
+        Math.max(0.06 * M, Math.abs(z1 - z0)),
+        trunking,
+        (x0 + x1) / 2,
+        (y0 + y1) / 2,
+        (z0 + z1) / 2,
+      );
+    };
+    const onWall = wallX + 0.03 * M;
+    const top = isolatorY + 0.11 * M;
+    run([onWall, top, isolatorZ], [onWall, room.ceilingY, isolatorZ]);
+    // Out of the isolator's north side, along the wall to the corner.
+    const corner = room.minZ + 0.1 * M;
+    run([onWall, isolatorY, isolatorZ - 0.08 * M], [onWall, isolatorY, corner]);
+    const skirting = floorY + 0.12 * M;
+    run([onWall, isolatorY, corner], [onWall, skirting, corner]);
+    // Along the north skirting, behind the desk, to the grey cabinet.
+    const north = room.minZ + 0.03 * M;
+    const cabinetX = gen2.group.position.x - 0.66 * M;
+    run([onWall, skirting, north], [cabinetX, skirting, north]);
+    run([onWall, skirting, corner], [onWall, skirting, north]);
+    // Up the wall behind the cabinet, and a gland into its back.
+    const gland = floorY + 0.5 * M;
+    run([cabinetX, skirting, north], [cabinetX, gland, north]);
+    run([cabinetX, gland, north], [cabinetX, gland, room.minZ + 0.16 * M]);
+  }
   // The lab's own sound cues for each kind of control on the column.
   const gen2Cue = (object: Object3D): SoundCue => {
     for (let o: Object3D | null = object; o; o = o.parent) {
@@ -696,10 +776,17 @@ export function startScene(canvas: HTMLCanvasElement) {
     }
     return 'button';
   };
+  // The lab's pointer tests meshes, not groups, so every mesh of each
+  // control is registered with the control's action.
   for (const control of gen2.clickables)
-    input(control.object, 'VX3 gen2', control.name, (hit) => {
-      control.use(knobDirection(control.object, hit.point, perspectiveCamera));
-      audio.play(gen2Cue(hit.object));
+    control.object.traverse((part) => {
+      if (!(part instanceof Mesh)) return;
+      input(part, 'VX3 gen2', control.name, (hit) => {
+        control.use(
+          knobDirection(control.object, hit.point, perspectiveCamera),
+        );
+        audio.play(gen2Cue(hit.object));
+      });
     });
 
   // Switch actions shared by the rack and the east board, which works the
@@ -798,14 +885,9 @@ export function startScene(canvas: HTMLCanvasElement) {
         }
       });
   }
+  // The tap still drips, silently: the sound was too much.
   dynamic.push(() => {
-    const drip = workbench.update(
-      performance.now() / 1000,
-      reducedMotion.matches,
-    );
-    const listener = perspectiveCamera.getWorldPosition(new Vector3());
-    if (drip && roomAt(roomPlan, listener.x, listener.z) === 'lab')
-      audio.play('drip');
+    workbench.update(performance.now() / 1000, reducedMotion.matches);
   });
   for (const part of workbench.tapParts)
     fixture(part, 'Sink tap', () =>
@@ -1763,7 +1845,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     {
       title: 'OPERATING GUIDE / VX3 GEN. 2 COLD START',
       content:
-        'TECHNIKRAUM\n1  HAUPTSCHALTER closed.\n2  Xenon cage open; regulator to 2 SLPM or more.\nEAST BOARD\n3  NETZ handle on.\nCOLUMN\n4  Isolator (grey cabinet, top left) ON,\n   NETZ button (foot of grey cabinet) lit.\n5  SÄULE: SENKEN. Wait for UNTEN steady.\n6  SPANNEN. DICHT lamp lit.\n7  XE EIN, and open the outlet handwheel\n   (or SPÜLEN). Purge until O2 = 0 lights.\n8  Shut the outlet. KAMMERDRUCK above 1.2 bar.\n9  KERN: AKTIVIERUNG up. 800 K glow,\n   3200 K full power.\n\nNEVER heat an open or unpurged chamber.\nNEVER leave the outlet open on a hot core.\nQUITT or RÜCKS. fits a fresh core.',
+        'TECHNIKRAUM\n1  HAUPTSCHALTER closed.\n2  Xenon cage open; regulator to 2 SLPM or more.\nEAST BOARD\n3  NETZ handle on.\nCOLUMN\n4  Isolator (west wall, by the desk) ON,\n   NETZ button (foot of grey cabinet) lit.\n5  SÄULE: SENKEN. Wait for UNTEN steady.\n6  SPANNEN. DICHT lamp lit.\n7  XE EIN, and open the outlet handwheel\n   (or SPÜLEN). Purge until O2 = 0 lights.\n8  Shut the outlet. KAMMERDRUCK above 1.2 bar.\n9  KERN: AKTIVIERUNG up. 800 K glow,\n   3200 K full power.\n\nNEVER heat an open or unpurged chamber.\nNEVER leave the outlet open on a hot core.\nQUITT or RÜCKS. fits a fresh core.',
     },
     {
       title: 'INSTRUCTION MANUAL / CORE HANDLING',
@@ -1864,7 +1946,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     const item = document.createElement('li');
     item.textContent = `${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}  ${line}`;
     entries.prepend(item);
-    teleprinter.record(item.textContent);
+    machineActions.record(item.textContent);
     if (interacted) audio.play('pencil');
     while (entries.children.length > 25) entries.lastElementChild?.remove();
     if (!logOpen) {
@@ -2754,7 +2836,17 @@ export function startScene(canvas: HTMLCanvasElement) {
     for (const [source, sourceRoom] of soundRooms)
       audio.setTransmission(
         source,
-        transmission(sourceRoom, listenerRoom, doorOpenings, source === 'sink'),
+        // The teleprinter is heard only by someone in the lab with it.
+        source === 'printer'
+          ? listenerRoom === sourceRoom
+            ? 1
+            : 0
+          : transmission(
+              sourceRoom,
+              listenerRoom,
+              doorOpenings,
+              source === 'sink',
+            ),
       );
     renderer.render(scene, viewer);
   });

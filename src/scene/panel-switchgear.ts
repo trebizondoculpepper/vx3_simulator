@@ -769,8 +769,8 @@ export function createPowerIsolator(
   const face = 0.106;
   const hole = kitPaint(kit, '#3a3b3c');
   for (const [x, y] of [
-    [0.028, 0.06],
-    [0.028, -0.068],
+    [0.045, 0.071],
+    [0.045, -0.071],
   ])
     peg(group, hole, 0.004, 0.0008, face, 10).position.set(x, y, face + 0.0004);
   // Moulded maker's mark and rating.
@@ -781,6 +781,7 @@ export function createPowerIsolator(
     ink: string,
     px: number,
     tilt = 0,
+    z = face + 0.0004,
   ) => {
     const probe = createCanvasTexture(8, 8).context;
     probe.font = `bold ${px}px ${PANEL_FONT}`;
@@ -809,49 +810,54 @@ export function createPowerIsolator(
       material,
       x,
       y,
-      face + 0.0004,
+      z,
     );
     mesh.rotation.z = tilt;
     return mesh;
   };
-  printed(maker, -0.026, 0.058, '#b3261e', 22);
-  printed(rating, -0.02, -0.066, '#3a3b3c', 26, 0.06);
-  // The yellow plate and ring.
+  printed(maker, -0.026, 0.062, '#b3261e', 22);
+  printed(rating, -0.02, -0.068, '#3a3b3c', 26, 0.06);
+  // The yellow plate and ring, the plate wide enough that its position
+  // marks, I at twelve o'clock and O at nine, lie outside the handle's
+  // sweep: the handle points at the one in force.
   const yellow = kitPaint(kit, '#f2c418');
-  const plateY = -0.004;
+  const plateY = -0.006;
   add(
     group,
-    new BoxGeometry(0.078, 0.078, 0.005),
+    new BoxGeometry(0.096, 0.096, 0.005),
     yellow,
     0.004,
     plateY,
     face + 0.0025,
   );
+  printed('I', 0.004, plateY + 0.042, '#1b1b1c', 24, 0, face + 0.0054);
+  printed('O', 0.004 - 0.042, plateY, '#1b1b1c', 24, 0, face + 0.0054);
   const ring = peg(group, yellow, 0.037, 0.012, face + 0.005, 28, 0.039);
   ring.position.x = 0.004;
   ring.position.y = plateY;
-  // The state window at the top of the ring, redrawn when it changes.
-  const { context: wc, texture: windowTexture } = createCanvasTexture(48, 20);
+  // The state window, in the body above the plate where the handle never
+  // covers it, redrawn when it changes.
+  const { context: wc, texture: windowTexture } = createCanvasTexture(64, 24);
   kit.textures.push(windowTexture);
   const windowMaterial = createPs1Material({ map: windowTexture }, true);
   kit.materials.push(windowMaterial);
   const window = add(
     group,
-    new PlaneGeometry(0.013, 0.0055),
+    new PlaneGeometry(0.032, 0.012),
     windowMaterial,
-    0.004,
-    plateY + 0.031,
-    face + 0.0172,
+    0.022,
+    0.062,
+    face + 0.0004,
   );
   window.name = 'state window';
   const drawWindow = (value: boolean) => {
     wc.fillStyle = '#f4f2ea';
-    wc.fillRect(0, 0, 48, 20);
+    wc.fillRect(0, 0, 64, 24);
     wc.fillStyle = value ? '#1d6b2a' : '#c0261c';
-    wc.font = `bold 15px ${PANEL_FONT}`;
+    wc.font = `bold 20px ${PANEL_FONT}`;
     wc.textAlign = 'center';
     wc.textBaseline = 'middle';
-    wc.fillText(value ? 'ON' : 'OFF', 24, 11);
+    wc.fillText(value ? 'ON' : 'OFF', 32, 13);
     windowTexture.needsUpdate = true;
   };
   // The red handle: a disc with a bar across it.
