@@ -1,3 +1,4 @@
+import { createLightSwitch } from '../scene/light-switch';
 import { stepKnob } from '../scene/rotary-knob';
 import { BoxGeometry, Group, Mesh } from 'three';
 import type { Object3D } from 'three';
@@ -262,10 +263,25 @@ export function createPartsBoard(kit: PanelKit) {
   uses.set(isolator.group, isolator.toggle);
   updates.push(isolator.update);
   heavyCaption('POWER ISOLATOR', 0.09, -0.1);
+  // The same Bakelite wall switch as the lab, at twice life size.
+  const lightSwitch = createLightSwitch(1);
+  lightSwitch.group.name = 'LAB LIGHT SWITCH';
+  lightSwitch.group.position.set(0.29, -0.01, 0.02);
+  heavy.add(lightSwitch.group);
+  let lightOn = false;
+  lightSwitch.update(lightOn);
+  uses.set(lightSwitch.group, () => {
+    lightOn = !lightOn;
+    lightSwitch.update(lightOn);
+  });
+  heavyCaption('LAB LIGHT SWITCH', 0.29, -0.12);
 
   return {
     group,
     uses,
+    dispose() {
+      lightSwitch.dispose();
+    },
     update(seconds: number, delta: number) {
       for (const tick of ticks) tick(seconds);
       for (const step of updates) step(delta);

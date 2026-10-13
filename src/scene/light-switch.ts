@@ -7,6 +7,7 @@ export function createLightSwitch(worldUnitsPerMetre: number) {
   const m = worldUnitsPerMetre;
   const group = new Group();
   group.name = 'RoomLightSwitch';
+  group.userData.sound = 'rocker';
   const materials: Material[] = [];
   const part = (
     w: number,

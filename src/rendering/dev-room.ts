@@ -752,6 +752,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     sounds?.dispose();
     void audio?.close();
     rig.dispose();
+    board.dispose();
     disposeKit(kit, board.group);
     modelDrive.group.traverse((object) => {
       if (object instanceof Mesh) object.geometry.dispose();
