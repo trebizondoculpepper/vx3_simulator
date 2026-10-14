@@ -1,15 +1,18 @@
 import { Group, Sprite, SpriteMaterial } from 'three';
 import { createCanvasTexture } from './screens';
 
-/** Reusable low-resolution smoke plume for cigarettes and overheating gear. */
-export function createSmokeEmitter(puffCount = 14) {
+/**
+ * Reusable low-resolution smoke plume for cigarettes and overheating gear.
+ * `colour` is the smoke's, as r, g, b: pale for steam, dark for a fire.
+ */
+export function createSmokeEmitter(puffCount = 14, colour = '222, 222, 216') {
   const group = new Group();
   group.name = 'SmokeEmitter';
   group.userData.noCollision = true;
   const puff = createCanvasTexture(16, 16);
   const gradient = puff.context.createRadialGradient(8, 8, 0, 8, 8, 8);
-  gradient.addColorStop(0, 'rgba(222, 222, 216, 1)');
-  gradient.addColorStop(1, 'rgba(222, 222, 216, 0)');
+  gradient.addColorStop(0, `rgba(${colour}, 1)`);
+  gradient.addColorStop(1, `rgba(${colour}, 0)`);
   puff.context.fillStyle = gradient;
   puff.context.fillRect(0, 0, 16, 16);
   puff.texture.needsUpdate = true;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createWorld } from './world';
+import { CRITICAL_KELVIN, createWorld } from './world';
 import type { World, WorldEvent } from './world';
 import { warningConditions } from '../control-board';
 import { createRackControls } from '../rack-controls';
@@ -132,20 +132,79 @@ describe('the lab as a graph', () => {
     expect(lit(world)).toEqual([]);
   });
 
-  it('runs full spindle and field past their redlines, into smoke and fire', () => {
+  it('overheats past the redlines, then catches fire, which is terminal', () => {
     const world = prepareVessel();
-    lightFerrocore(world, 1, { tracksTrim: true });
-    // The condition, not the window: an unacknowledged window flashes.
+    world.work('board.NETZ');
+    run(world, 8, { tracksTrim: true });
+    world.work('drive.spindle', 1);
+    world.work('drive.field', 1);
+    run(world, 12, { tracksTrim: true });
+    // Overheating: past the redlines and smoking, not yet burning.
     expect(world.read('alarm.SPINDEL ROT')).toBe(true);
+    expect(world.read('fire.ruined')).toBeNull();
     const { events } = runUntil(
       world,
-      () => world.read('fire.alarm') === true,
-      300,
-      {
-        tracksTrim: true,
-      },
+      () => world.read('fire.ruined') !== null,
+      120,
+      { tracksTrim: true },
     );
-    expect(kinds(events)).toContain('fire:alarm');
+    // Fire: the breaker drops, the alarm sounds, and it is ruined at once.
+    expect(kinds(events)).toEqual(
+      expect.arrayContaining(['fire:fire', 'fire:alarm', 'fire:ruined-fire']),
+    );
+    expect(world.read('fire.ruined')).toBe('fire');
+    expect(world.read('drive.mains')).toBe(false);
+    expect(world.work('board.NETZ')).toBe(false);
+    const aftermath = run(world, 8.1);
+    expect(world.read('fire.phase')).toBe('extinguished');
+    expect(world.read('plant.powered')).toBe(false);
+    expect(lit(world)).toEqual([]);
+    expect(world.read('board.needle.spindle')).toBe(0);
+    expect(world.read('board.grid.spindle')).toBe(0);
+    expect(world.read('column.KAMMERDRUCK')).toBe(0);
+    expect(
+      world.read<{
+        burning: Record<string, boolean>;
+      }>('fire').burning,
+    ).toEqual({ spindle: false, field: false, load: false });
+    expect(kinds(aftermath)).toContain('fire:extinguished');
+    expect(kinds(run(world, 2))).not.toContain('fire:extinguished');
+  });
+
+  it('drives the core towards critical as it overheats, and fires there', () => {
+    const world = prepareVessel();
+    world.work('board.NETZ');
+    run(world, 8, { tracksTrim: true });
+    world.work('drive.spindle', 1);
+    world.work('drive.field', 1);
+    let peak = 0;
+    runUntil(
+      world,
+      () => {
+        peak = Math.max(peak, world.read<number>('vessel.temperature'));
+        return world.read('fire.ruined') !== null;
+      },
+      120,
+      { tracksTrim: true },
+    );
+    // Past full power's 4,000 K, up to critical, and then fire.
+    expect(peak).toBeGreaterThan(4500);
+    expect(peak).toBeGreaterThanOrEqual(CRITICAL_KELVIN - 50);
+    expect(world.read('fire.ruined')).toBe('fire');
+  });
+
+  it('recovers from overheating if the dials come down in time', () => {
+    const world = prepareVessel();
+    world.work('board.NETZ');
+    run(world, 8, { tracksTrim: true });
+    world.work('drive.spindle', 1);
+    world.work('drive.field', 1);
+    run(world, 12, { tracksTrim: true });
+    world.work('drive.spindle', 0.8);
+    world.work('drive.field', 0.8);
+    run(world, 120, { tracksTrim: true });
+    expect(world.read('fire.ruined')).toBeNull();
+    expect(world.read('plant.fullyOperational')).toBe(true);
   });
 
   it('agrees with the board model’s own alarm conditions all the way', () => {

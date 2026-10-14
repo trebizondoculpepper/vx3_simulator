@@ -69,7 +69,10 @@ const fragmentShader = `
     float r = texture2D(colour, place(1.0, nearness)).r;
     vec4 g = texture2D(colour, vUv);
     float b = texture2D(colour, place(-1.0, nearness)).b;
-    gl_FragColor = linearToOutputTexel(vec4(r, g.g, b, 1.0));
+    // Tone mapped and encoded as any frame drawn straight to the screen is.
+    gl_FragColor = vec4(r, g.g, b, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 

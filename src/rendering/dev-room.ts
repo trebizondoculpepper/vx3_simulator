@@ -1,9 +1,4 @@
-import {
-  createRenderer,
-  realistic,
-  renderScale,
-  useEnvironment,
-} from './render-style';
+import { createRenderer, useEnvironment } from './render-style';
 import { devDoors, devWallPieces } from '../game/dev-room-links';
 import { createDevDoorways } from '../scene/dev-doorways';
 import {
@@ -24,6 +19,11 @@ import { createFirstPerson } from './first-person';
 import type { Footprint } from '../game/walk-collision';
 import { createPs1Material, ps1Uniforms } from './ps1-material';
 import { createFerrocoreColumnRig } from '../scene/ferrocore-column-rig';
+import type {
+  ColumnDriveHookup,
+  DriveDial,
+  RigClickable,
+} from '../scene/ferrocore-column-rig';
 import type { CoreVoiceScene } from '../audio/core-voice-render';
 import { createSoundEngine } from '../audio/sound-engine';
 import type { SoundCue } from '../audio/sound-engine';
@@ -43,13 +43,39 @@ import {
   disposeKit,
 } from '../scene/eighties-controls';
 import { createColdStartBoard } from './dev-cold-start-board';
+import { createCircuitBoard } from '../scene/circuit-board';
+import { createSmokeEmitter } from '../scene/smoke-emitter';
+import { createEmbers } from '../scene/embers';
+import { createElectricArcs } from '../scene/electric-arcs';
+import { createSmokeStains } from '../scene/smoke-stains';
+import {
+  coldStart as coldStartSteps,
+  overdrive,
+  play,
+  prepareVessel,
+} from '../game/world/scenarios';
+import { createMomentary } from '../game/world/components';
+import { createEightiesButton } from '../scene/eighties-controls';
+import type { CapColour } from '../scene/eighties-controls';
+import { createPartSoundHub } from './part-sound-hub';
+import {
+  divergencePulse,
+  effectFrame,
+  settingsForMachine,
+} from '../game/effect-settings';
+import {
+  applyEffectFrame,
+  clearEffects,
+  exemptFromEffects,
+  stillFrame,
+} from './apply-effects';
+import { createChromaticDivergence } from './chromatic-divergence';
 
 /**
  * The developer room: not part of the game. A plain, evenly lit room
  * reached at `/?room=dev0`, where new apparatus and parts are built and
  * looked at before they go into the lab. Drag to orbit, scroll to zoom,
- * right-drag to pan, click a button cap to press it. P switches between the
- * game's low PS1 resolution and the screen's own, for reading small print.
+ * right-drag to pan, click a button cap to press it.
  */
 /** The lab's sound cues a part may name for itself. */
 const SOUND_CUES = [
@@ -183,11 +209,44 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   // drives the concept rig, which only shows it; the cold-start board
   // below works it.
   let world = createWorld();
+  // The column's panels work the world model, as they work the lab's
+  // machine: its dials, heater switches, ZÜND, band selector, trips and
+  // XE-REGLER buttons through this hook-up.
+  const dial = (id: string): DriveDial => ({
+    get: () => world.read<number>(id),
+    set: (value) => void world.work(id, value),
+  });
+  const hookup: ColumnDriveHookup = {
+    dials: {
+      spindle: dial('drive.spindle'),
+      field: dial('drive.field'),
+      trim: dial('drive.trim'),
+      ratio: dial('drive.ratio'),
+    },
+    heaters: {
+      get: (id) => world.read<boolean>(`drive.${id}`),
+      flip: (id) => void world.work(`drive.${id}`),
+    },
+    ignite: () => void world.work('column.ZÜND'),
+    band: dial('drive.insulationBand'),
+    trip: (source) => {
+      world.work(
+        source === 'STRAHL STOP' ? 'column.STRAHL STOP' : 'column.AUS',
+      );
+      note(`${source}: drive tripped.`);
+    },
+    regulator: (direction) => {
+      const now = world.read<number>('xenon.regulator');
+      const next = Math.round((now + Math.sign(direction) / 10) * 10) / 10;
+      world.work('xenon.regulator', Math.max(0, Math.min(1, next)));
+    },
+  };
   const rig = createFerrocoreColumnRig({
     // As in the lab: its own switches start off, and it is dead without
     // the plant room's supply.
     switchedOn: false,
     supplied: () => world.read<boolean>('plant.powered'),
+    drive: hookup,
     log(text) {
       columnLog.unshift(text);
       columnLog.length = Math.min(columnLog.length, 4);
@@ -197,6 +256,61 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   scene.add(rig.group);
   // The rig's own physics are held: the world model moves it.
   rig.drive.hold = true;
+  // Overheating: pale steam from the pressure vessel and a slow seep of
+  // it from the cabinets. On fire, and ruined after: thick dark smoke from
+  // all three and sputtering embers. Placed on the rig, in its metres.
+  // The vessel's from its top; the cabinets' from their fronts, out of
+  // the instruments, rising up the panels.
+  const fireEffects = [
+    { at: [0, 1.0, 0.06], scale: 0.9, steamShare: 1, front: false },
+    { at: [-0.66, 1.45, 0.36], scale: 0.6, steamShare: 0.4, front: true },
+    { at: [-0.66, 0.85, 0.36], scale: 0.6, steamShare: 0.4, front: true },
+    { at: [0.69, 1.5, 0.39], scale: 0.6, steamShare: 0.4, front: true },
+    { at: [0.69, 0.9, 0.39], scale: 0.6, steamShare: 0.4, front: true },
+  ].map(({ at, scale, steamShare, front }) => {
+    const steam = createSmokeEmitter(20, '232, 234, 232');
+    const smoke = createSmokeEmitter(30, '58, 56, 52');
+    // Embers spit out of the panels' fronts; the vessel only smokes.
+    const sparks = createEmbers(front ? 48 : 0, { spray: true });
+    const plume = new Group();
+    plume.position.set(at[0], at[1], at[2]);
+    plume.scale.setScalar(scale);
+    plume.add(steam.group, smoke.group, sparks.group);
+    rig.group.add(plume);
+    return { steam, smoke, sparks, steamShare };
+  });
+  // Electrical discharge across both cabinets' fronts as it nears critical,
+  // a burst as it catches fire, then nothing: the power is gone.
+  const discharges = [
+    { x: -0.66, y: 1.1, z: 0.318, width: 0.44 },
+    { x: 0.69, y: 1.15, z: 0.348, width: 0.5 },
+  ].map(({ x, y, z, width }, i) => {
+    const arcs = createElectricArcs({
+      width,
+      height: 1.3,
+      arcs: 5,
+      seed: i + 3,
+    });
+    arcs.group.position.set(x, y, z);
+    rig.group.add(arcs.group);
+    return arcs;
+  });
+  let arcStrikes = 0;
+  // Soot on the cabinets' panel faces, darkening as it nears critical and
+  // never cleaning itself: only a new world brings clean panels.
+  const stains = [
+    { x: -0.66, y: 1.04, z: 0.315, width: 0.483, height: 1.74, seed: 2 },
+    { x: 0.69, y: 1.1, z: 0.345, width: 0.54, height: 1.84, seed: 5 },
+  ].map(({ x, y, z, width, height, seed }) => {
+    const stain = createSmokeStains({ width, height, seed });
+    stain.mesh.position.set(x, y, z);
+    rig.group.add(stain.mesh);
+    return stain;
+  });
+  let soot = 0;
+  let sootWorld = world;
+  let steamLevel = 0;
+  let smokeLevel = 0;
   // Audit the panels: parts must clear each other and the panel edges.
   for (const problem of rig.layoutProblems())
     console.warn(`Panel layout: ${problem}`);
@@ -216,6 +330,16 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     columnLog.length = Math.min(columnLog.length, 4);
     console.debug(text);
   };
+  /** Swap in another world; every board and part reads the new one. */
+  const replaceWorld = (next: ReturnType<typeof createWorld>) => {
+    world = next;
+    coldStart.restarted();
+    circuitBoard.restarted();
+  };
+  // The cheats' parts, wired up once the room's sounds and clicks exist.
+  const cheatParts = createPartSoundHub();
+  const cheatUses = new Map<Object3D, (direction?: number) => void>();
+  const cheatUpdates: ((delta: number) => void)[] = [];
   // The cold-start board: the procedure as two rows of steps, working the
   // world model. The rig's own panels are not clickable here, because the
   // world, not the rig, holds the machine's state.
@@ -225,6 +349,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     note,
     () => {
       world = createWorld();
+      circuitBoard.restarted();
       note('World model restarted: everything cold and off.');
     },
     { post: false },
@@ -258,23 +383,129 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       -depth / 2 - 0.016,
       desk,
     );
+    // CHEATS, on the cabinet's green front: each replaces the world with
+    // one that has played the designed steps up to that point, instantly.
+    const cheats: [string, string, CapColour, () => void][] = [
+      ['KALT', 'COLD · ALL OFF', 'grey', () => replaceWorld(createWorld())],
+      [
+        'KESSEL',
+        'VESSEL READY',
+        'amber',
+        () => replaceWorld(play(prepareVessel).world),
+      ],
+      [
+        'VOLL',
+        'FULL OPERATION',
+        'blue',
+        () => {
+          replaceWorld(play(coldStartSteps).world);
+          // Keep the field on SOLL, so drift does not trip it.
+          coldStart.track(true);
+        },
+      ],
+      [
+        'HEISS',
+        'OVERHEATING',
+        'amber',
+        () => {
+          // Overdriven past the redlines and smoking, about ten seconds
+          // from catching fire: turn DREHZAHL and FELD down to save it.
+          replaceWorld(
+            play([...coldStartSteps, ...overdrive, { id: 'wait', setting: 10 }])
+              .world,
+          );
+          coldStart.track(true);
+        },
+      ],
+      [
+        'BRAND',
+        'FIRE · RUINED',
+        'red',
+        () => {
+          // Overdriven until it catches fire: terminal, and smouldering.
+          replaceWorld(
+            play([...coldStartSteps, ...overdrive, { id: 'wait', setting: 40 }])
+              .world,
+          );
+        },
+      ],
+    ];
+    const plate = new Group();
+    plate.position.set(0, front * 0.55, depth / 2 + 0.002);
+    desk.add(plate);
+    const title = createMicroLabel(kit, 'CHEATS · NICHT IM SPIEL', {
+      height: 0.028,
+      plate: '#e8e2cc',
+      ink: '#1f2622',
+    });
+    title.position.set(0, 0.13, 0.001);
+    plate.add(title);
+    cheats.forEach(([legend, hint, colour, act], i) => {
+      const x = (i - (cheats.length - 1) / 2) * 0.36;
+      const made = createEightiesButton(kit, legend, colour, {
+        latching: false,
+        size: 0.024,
+      });
+      made.group.scale.setScalar(4);
+      made.group.position.set(x, 0, 0);
+      made.cap.name = `CHEAT ${legend}`;
+      plate.add(made.group);
+      const part = createMomentary({
+        action: () => {
+          act();
+          note(`Cheat: ${hint.toLowerCase()}.`);
+        },
+      });
+      cheatParts.add(part, made.group, 'button', () => made.press());
+      cheatUses.set(made.cap, () => part.press());
+      cheatUpdates.push(made.update);
+      const caption = createMicroLabel(kit, hint, {
+        height: 0.018,
+        ink: '#ece6d2',
+      });
+      caption.position.set(x, -0.085, 0.001);
+      plate.add(caption);
+    });
   }
 
   // The desk's parts make their own sounds, played here: a part's own
   // sound for a transition if it names one, else the usual sound for
   // that kind of part; and the state sounds the parts hold.
-  coldStart.onSound((event, sound, part) => {
+  // The redesigned wall board, one bay per circuit, on the west wall.
+  const circuitBoard = createCircuitBoard(kit, () => world, { log: note });
+  circuitBoard.group.position.set(-4.75, 0, 0);
+  circuitBoard.group.rotation.y = Math.PI / 2;
+  scene.add(circuitBoard.group);
+  // The machine bends the room as it warms and runs; the desk and the
+  // board are tools, and stay whole so they can still be read and worked.
+  exemptFromEffects(desk);
+  exemptFromEffects(circuitBoard.group);
+  const divergence = createChromaticDivergence(renderer, 1);
+  let effectSeconds = 0;
+  let fullActivation = 0;
+
+  const playPart = (
+    event: PartEvent,
+    sound: string | null | undefined,
+    part: string,
+  ) => {
     if (sound === null) return;
     const cue =
       sound && (SOUND_CUES as readonly string[]).includes(sound)
         ? (sound as SoundCue)
         : defaultCue(part, event);
     if (cue) audio.play(cue);
-  });
+  };
+  coldStart.onSound(playPart);
+  circuitBoard.onSound(playPart);
+  cheatParts.onSound(playPart);
   coldStart.onHeld((sound, from) => loops.hold(from.uuid, sound));
+  circuitBoard.onHeld((sound, from) => loops.hold(from.uuid, sound));
 
   const uses = new Map<Object3D, (direction?: number) => void>([
     ...coldStart.uses,
+    ...circuitBoard.uses,
+    ...cheatUses,
     ...passages.uses,
   ]);
 
@@ -300,8 +531,56 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     mains: 'column.netz',
     cabinet: 'column.rocker',
   };
+  /**
+   * The column's other controls (the head, clamps, XE EIN, the outlet
+   * handwheel, QUITT and its three supply switches) change the column's
+   * own state when worked. Here that is only the shown state, so each use
+   * is watched: whatever it changed is put back, and the same change asked
+   * of the world, whose rules then decide, as the desk's controls do. The
+   * next frame shows the world's answer on the column.
+   */
+  const workedOnColumn = (control: RigClickable) => (direction?: number) => {
+    const prep = rig.prep;
+    const read = () => ({
+      liftTarget: prep.liftTarget,
+      clamped: prep.clamped,
+      inletOpen: prep.inletOpen,
+      outletOpen: prep.outletOpen,
+      failure: prep.failure,
+      supply: prep.supply,
+      ...rig.powerSelections,
+    });
+    const before = read();
+    control.use(direction);
+    const after = read();
+    Object.assign(prep, {
+      liftTarget: before.liftTarget,
+      clamped: before.clamped,
+      inletOpen: before.inletOpen,
+      outletOpen: before.outletOpen,
+      failure: before.failure,
+      supply: before.supply,
+    });
+    if (after.liftTarget !== before.liftTarget)
+      world.work(after.liftTarget === 0 ? 'column.SENKEN' : 'column.HEBEN');
+    if (after.clamped !== before.clamped) world.work('column.SPANNEN');
+    if (after.inletOpen !== before.inletOpen) world.work('column.XE EIN');
+    if (after.outletOpen !== before.outletOpen) world.work('column.outlet');
+    // QUITT: a fresh core, and a fresh bottle.
+    if (after.failure !== before.failure || after.supply > before.supply)
+      world.work('column.QUITT');
+    for (const [key, id] of Object.entries(worldSelections) as [
+      Selection,
+      string,
+    ][])
+      if (after[key] !== before[key]) world.work(id);
+  };
+  for (const control of rig.clickables)
+    uses.set(control.object, workedOnColumn(control));
+
   /** Put the world's state on the rig, which only shows it. */
   const showWorldOnRig = () => {
+    const extinguished = world.read('fire.phase') === 'extinguished';
     for (const [key, id] of Object.entries(worldSelections) as [
       Selection,
       string,
@@ -320,21 +599,21 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     prep.clamped = world.read('vessel.clamped');
     prep.inletOpen = world.read('vessel.inletOpen');
     prep.outletOpen = world.read('vessel.outletOpen');
-    prep.air = world.read('vessel.air');
-    prep.xenon = world.read('vessel.xenon');
-    prep.supply = world.read('vessel.supply');
-    prep.temperature = world.read('vessel.temperature');
+    prep.air = extinguished ? 0 : world.read('vessel.air');
+    prep.xenon = extinguished ? 0 : world.read('vessel.xenon');
+    prep.supply = extinguished ? 0 : world.read('vessel.supply');
+    prep.temperature = extinguished ? 0 : world.read('vessel.temperature');
     prep.failure = world.read<Catastrophe | null>('vessel.failure');
-    prep.spinRate = world.read('vessel.spinRate');
+    prep.spinRate = extinguished ? 0 : world.read('vessel.spinRate');
     prep.spinAngle = world.read('vessel.spinAngle');
     const drive = {
       heater: world.read<number>('rig.heater'),
       spindle: world.read<number>('rig.spindle'),
       field: world.read<number>('rig.field'),
     } as RigState;
-    prep.setpoint = Math.min(4000, driveTemperature(drive));
-    prep.brightness = driveBrightness(drive);
-    rig.drive.power = world.read('drive.mains');
+    prep.setpoint = extinguished ? 0 : Math.min(4000, driveTemperature(drive));
+    prep.brightness = extinguished ? 0 : driveBrightness(drive);
+    rig.drive.power = !extinguished && world.read('drive.mains');
   };
   const describeEvent = (e: WorldEvent): string | null => {
     if (e.source === 'fire') return `Fire circuit: ${e.event}.`;
@@ -395,7 +674,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     '<strong>Developer room</strong> · not part of the game<br>' +
     'Click: mouse look · WASD: walk · Shift: run · C: crouch · V: lower crouch<br>' +
     'Click / E: work the control under the crosshair · wheel: zoom · Alt+wheel: height · Esc: cursor<br>' +
-    'Doors: corridor north · dev1 east · <kbd>P</kbd> toggles PS1 resolution · <a href="/">back to the lab</a><br>' +
+    'Doors: corridor north · dev1 east · <a href="/">back to the lab</a><br>' +
     'The column is driven by the graph world model: work the KALTSTART board, row 1 then row 2';
   Object.assign(notes.style, {
     position: 'absolute',
@@ -536,7 +815,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       `line ${world.read<number>('line.flowSlpm').toFixed(1)} SLPM · permit ${world.read('drive.permit') ? 'yes' : 'no'}<br>` +
       `Drive ${world.read('drive.mains') ? 'on' : 'off'} · heaters ${Math.round(world.read<number>('rig.heater') * 100)}% · ` +
       `core ${Math.round(world.read<number>('vessel.temperature'))} K ${world.read('vessel.stage')}<br>` +
-      `Tempo ×${coldStart.tempo} · alarms: ${lit.length ? lit.join(', ') : 'none'}`;
+      `Tempo ×${coldStart.tempo} · fire: ${world.read('fire.phase')} · alarms: ${lit.length ? lit.join(', ') : 'none'}`;
     const shown = text + columnLog.join('<br>');
     if (shown === lastStatus) return;
     lastStatus = shown;
@@ -549,31 +828,20 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       .filter((v) => v.id.startsWith('alarm.') && world.read<boolean>(v.id))
       .map((v) => v.id.slice('alarm.'.length));
 
-  // The PS1 resolution, on P; the realistic style starts without it.
-  let ps1 = !realistic;
   const resize = () => {
     const { width, height } = canvas.getBoundingClientRect();
     if (!width || !height) return;
-    const scale = ps1 ? renderScale(width, height, true) : 1;
-    const w = Math.max(1, Math.round(width * scale));
-    const h = Math.max(1, Math.round(height * scale));
+    const w = Math.max(1, Math.round(width));
+    const h = Math.max(1, Math.round(height));
     renderer.setSize(w, h, false);
     ps1Uniforms.resolution.value.set(w, h);
-    ps1Uniforms.snapStrength.value = ps1 ? 0.35 : 0;
+    ps1Uniforms.snapStrength.value = 0;
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
   };
   const observer = new ResizeObserver(resize);
   observer.observe(canvas);
   resize();
-  const onKey = (event: KeyboardEvent) => {
-    if (canvas.parentElement?.hidden) return;
-    if (event.key === 'p' || event.key === 'P') {
-      ps1 = !ps1;
-      resize();
-    }
-  };
-  window.addEventListener('keydown', onKey);
 
   // A handle for scripted views: place the camera and its target.
   (window as unknown as { vx3Dev: unknown }).vx3Dev = {
@@ -592,10 +860,6 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     /** Set the zoom: 1 is normal, up to 4 times closer. */
     zoom(value: number) {
       walk.walker.zoom = value;
-    },
-    setPs1(value: boolean) {
-      ps1 = value;
-      resize();
     },
     /** The column's model, as the rig shows it. */
     prep: rig.prep,
@@ -657,11 +921,28 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       return { total: rig.clickables.length, still };
     },
     /** Work a rig control by its name, as a click would. */
-    work(name: string) {
+    work(name: string, direction?: number) {
       const control = rig.clickables.find((c) => c.name === name);
-      control?.use();
+      if (control) uses.get(control.object)?.(direction);
       return Boolean(control);
     },
+    /** Press a cheat by its legend (KALT, KESSEL, VOLL), as a click would. */
+    cheat(legend: string) {
+      for (const [object, use] of cheatUses)
+        if (object.name === `CHEAT ${legend}`) {
+          use();
+          return true;
+        }
+      return false;
+    },
+    /** The discharge arcs, for checking them in scripts. */
+    arcs: () =>
+      discharges.map((d) => ({
+        strikes: d.strikes,
+        visible: d.group.children.filter((c) => c.visible).length,
+      })),
+    /** The names of the column's controls, for scripts. */
+    controls: () => rig.clickables.map((c) => c.name),
     /** Render the rig's mechanical sounds as one clip, WAV bytes in base64. */
     async renderRigSounds() {
       const { renderRigSounds } = await import('../audio/core-voice-render');
@@ -731,9 +1012,14 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       parent = parent.parent
     )
       name = parent.name;
+    // A component's view says its kind; a door handle says nothing.
+    let partKind: string | undefined;
+    for (let o: Object3D | null = found.object; o && !partKind; o = o.parent)
+      partKind = o.userData.partKind as string | undefined;
+    const named = kind ?? (partKind as ControlSound | undefined);
     reportControl(
       name || 'Unnamed control',
-      kind ? (typeNames[kind] ?? kind) : 'door handle',
+      named ? (typeNames[named] ?? named) : 'door handle',
     );
     // Knobs and selectors turn by the side clicked, as everywhere in the game.
     found.use(knobDirection(found.object, found.point, camera));
@@ -757,7 +1043,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   // Walk the room as in the lab. The walls, the open front and the three
   // exhibits are solid.
   const solids: Footprint[] = walls.filter((wall) => wall.bottom === 0);
-  for (const exhibit of [rig.group, desk]) {
+  for (const exhibit of [rig.group, desk, circuitBoard.group]) {
     const bounds = new Box3().setFromObject(exhibit);
     if (bounds.isEmpty()) continue;
     solids.push({
@@ -813,17 +1099,115 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       }
     }
     showWorldOnRig();
+    // Steam while it overheats; once it is on fire, and ruined after,
+    // thick smoke and sputtering embers until the world is replaced.
+    const fire = world.read<{
+      burning: Record<string, boolean>;
+      ruinCause: string | null;
+    }>('fire');
+    const heat = world.read<{ smoke: Record<string, number> }>('overheat');
+    const ruined = fire.ruinCause !== null;
+    const extinguished = world.read('fire.phase') === 'extinguished';
+    const overheating = Math.max(0, ...Object.values(heat.smoke));
+    const ease = Math.min(1, delta / 2);
+    steamLevel +=
+      ((ruined ? 0 : Math.min(1, overheating * 1.5)) - steamLevel) * ease;
+    smokeLevel += ((ruined && !extinguished ? 1 : 0) - smokeLevel) * ease;
+    // Sputtering: bursts of sparks, then lulls.
+    const sputter = Math.max(
+      0,
+      Math.min(1, Math.sin(seconds * 5.3) + Math.sin(seconds * 2.1) * 0.9),
+    );
+    // Arcs from about halfway to critical, and a burst as it catches fire.
+    const hot = Math.max(...Object.values(heat.smoke));
+    const ruinAge = world.read<{ ruinAge: number }>('fire').ruinAge;
+    const arcing = ruined
+      ? fire.ruinCause === 'fire' && !extinguished
+        ? Math.max(0, 1 - ruinAge / 3)
+        : 0
+      : Math.max(0, Math.min(1, (hot - 0.3) / 0.5));
+    // Soot builds from the first smoke to critical, and stays.
+    if (world !== sootWorld) {
+      sootWorld = world;
+      soot = 0;
+    }
+    soot = Math.max(soot, ruined ? 1 : Math.min(1, hot / 0.8));
+    for (const stain of stains) stain.set(soot * 0.9);
+    let strikes = 0;
+    for (const arcs of discharges) {
+      arcs.update(delta, arcing, reducedMotion.matches);
+      strikes += arcs.strikes;
+    }
+    if (strikes > arcStrikes) audio.play('spark');
+    arcStrikes = strikes;
+    const preFireSparks = ruined
+      ? extinguished
+        ? 0
+        : 1
+      : Math.max(0, Math.min(1, (hot - 0.4) / 0.4));
+    for (const { steam, smoke, sparks, steamShare } of fireEffects) {
+      steam.update(seconds, steamLevel * steamShare, reducedMotion.matches);
+      smoke.update(seconds, smokeLevel, reducedMotion.matches);
+      sparks.update(
+        seconds,
+        preFireSparks * (reducedMotion.matches ? 0.6 : 0.65 + 0.35 * sputter),
+        reducedMotion.matches,
+      );
+    }
     rig.update(seconds, delta, reducedMotion.matches);
     coldStart.update(delta);
+    circuitBoard.update(delta);
+    for (const step of cheatUpdates) step(delta);
     showStatus();
     soundFrame();
-    renderer.render(scene, camera);
+    // The machine's effects on the room, from the world model.
+    effectSeconds += delta;
+    // Full activation eases in and out over a few seconds. A fire ends
+    // it at once: the machine is ruined and the room is itself again.
+    const wrecked = world.read('fire.ruined') !== null;
+    const target = world.read<boolean>('plant.fullyOperational') ? 1 : 0;
+    fullActivation = wrecked
+      ? 0
+      : fullActivation + (target - fullActivation) * Math.min(1, delta / 3);
+    const settings = settingsForMachine({
+      activity: wrecked ? 0 : world.read<number>('ferrocore.activity'),
+      // From the redline to critical: how hot the drive has got.
+      overheat: wrecked
+        ? 0
+        : Math.min(
+            1,
+            Math.max(
+              ...Object.values(
+                world.read<{ heat: Record<string, number> }>('overheat').heat,
+              ),
+            ) / 0.9,
+          ),
+      full: fullActivation,
+      instability: world.read<number>('rig.instability'),
+      centreX: rig.group.position.x,
+      centreZ: rig.group.position.z,
+    });
+    let frame = effectFrame(settings, effectSeconds);
+    if (reducedMotion.matches) frame = stillFrame(frame);
+    applyEffectFrame(frame, 1, effectSeconds);
+    // Divergence is set in PS1 pixels; scale it to what is drawn. Its
+    // amount swells up to the full setting and falls away again.
+    const scale =
+      (renderer.domElement.width / 640) * divergencePulse(effectSeconds);
+    const split = {
+      ...frame.divergence,
+      horizontalPx: frame.divergence.horizontalPx * scale,
+      verticalPx: frame.divergence.verticalPx * scale,
+      parallax: frame.divergence.parallax * scale,
+    };
+    if (divergence.active(split))
+      divergence.render(scene, camera, split, effectSeconds);
+    else renderer.render(scene, camera);
   });
 
   const dispose = () => {
     renderer.setAnimationLoop(null);
     observer.disconnect();
-    window.removeEventListener('keydown', onKey);
     walk.dispose();
     passages.dispose();
     notes.remove();
@@ -834,6 +1218,15 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     audio.dispose();
     loops.dispose();
     coldStart.dispose();
+    circuitBoard.dispose();
+    cheatParts.dispose();
+    for (const { steam, smoke, sparks } of fireEffects) {
+      steam.dispose();
+      smoke.dispose();
+      sparks.dispose();
+    }
+    for (const arcs of discharges) arcs.dispose();
+    for (const stain of stains) stain.dispose();
     rig.dispose();
     disposeKit(kit, coldStart.group);
     coldStart.group.traverse((object) => {
@@ -845,6 +1238,8 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     for (const material of materials) material.dispose();
 
     freeEnvironment();
+    divergence.dispose();
+    clearEffects();
     renderer.dispose();
   };
   return Object.assign(dispose, {

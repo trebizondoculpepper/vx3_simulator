@@ -20,6 +20,8 @@ export interface FireIncident {
   sprinklerSpent: boolean;
   liveWater: number;
   burning: Record<RedlineChannel, boolean>;
+  /** The ruined machine has burned out and can no longer flame. */
+  extinguished: boolean;
   burnTime: number;
   puddle: number;
   ruinCause: RuinCause;
@@ -41,6 +43,7 @@ export function createFireIncident(): FireIncident {
     sprinklerSpent: false,
     liveWater: 0,
     burning: { spindle: false, field: false, load: false },
+    extinguished: false,
     burnTime: 0,
     puddle: 0,
     ruinCause: null,

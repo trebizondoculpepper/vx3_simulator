@@ -43,6 +43,8 @@ export function createPartSoundHub() {
       also?: (event: PartEvent) => void,
     ) {
       delete view.userData.sound;
+      // Still say what kind of part it is, for logs and tooltips.
+      view.userData.partKind = part;
       component.onEvent((event, sound) => {
         also?.(event);
         for (const listener of transitions) listener(event, sound, part, view);

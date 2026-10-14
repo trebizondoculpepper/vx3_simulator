@@ -210,16 +210,18 @@ export function createColdStartBoard(
     },
     {
       legend: 'DREHZAHL',
-      hint: 'SPINDLE · 8 IS SAFE',
+      hint: 'SPINDLE · TO 8 FOR FULL',
       control: {
         kind: 'knob',
         get: () => read('drive.spindle'),
         set: (value) => work('drive.spindle', value),
         steps: 20,
       },
+      // Lit once the spindle has settled fast enough for full operation:
+      // the cores need about seven tenths to run strongly.
       done: () => {
         const set = read<number>('drive.spindle');
-        return set > 0.1 && Math.abs(read<number>('rig.spindle') - set) < 0.03;
+        return set >= 0.7 && Math.abs(read<number>('rig.spindle') - set) < 0.03;
       },
     },
     {
@@ -582,6 +584,14 @@ export function createColdStartBoard(
     /** Whether TRIMM is kept on SOLL by the board. */
     get tracking() {
       return tracker.state.value;
+    },
+    /** Switch NACHFÜHREN on or off, as the model would: silently. */
+    track(on: boolean) {
+      tracker.set(on);
+    },
+    /** The world was replaced: bound parts read the new one. */
+    restarted() {
+      generation.value++;
     },
     /** Hear the sounds the board's components make, and where. */
     /** Hear the transition sounds of the board's parts. */

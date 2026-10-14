@@ -18,7 +18,7 @@ import {
 } from 'three';
 import type { Material, MeshStandardMaterial, Object3D } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
-import { brushedAluminium } from '../rendering/metal-finish';
+import { brushedAluminium, wornPaint } from '../rendering/metal-finish';
 import { createCanvasTexture } from './screens';
 import { createGasVent } from './gas-vent';
 import { createSealPuff } from './seal-puff';
@@ -822,6 +822,27 @@ export function createFerrocoreColumnRig(
     box(group, 0.05, 0.02, 0.035, '#9da09c', x, 0.1, 0.46);
   }
 
+  /**
+   * The cabinets' sheet steel: in the realistic style, rough matt paint,
+   * worn at its edges and corners by decades of use. `aspect` is the
+   * height over the width of the faces, so the wear sits on their edges.
+   */
+  const worn = (colour: string, aspect = 1) => {
+    const material = wornPaint(
+      createPs1Material({ color: colour }) as MeshStandardMaterial,
+      colour,
+      { aspect },
+    );
+    kit.materials.push(material);
+    return material;
+  };
+  const greySide = worn('#a6a9a7', 2.5);
+  const blueTrim = worn(BLUE_TRIM);
+  const blueUpright = worn(BLUE_TRIM, 6);
+  const back = worn('#1a1b1d', 3.5);
+  const oliveSide = worn(OLIVE, 2.5);
+  const oliveTrim = worn(OLIVE);
+
   // ---- Left rack: grey-blue 19-inch ---------------------------------------
   const left: Rack = {
     name: 'grey rack',
@@ -838,12 +859,12 @@ export function createFerrocoreColumnRig(
     const H = 1.84;
     const y = skidTop + H / 2;
     for (const sx of [-1, 1]) {
-      box(g, 0.025, H, 0.7, '#a6a9a7', sx * 0.29, y, 0);
-      box(g, 0.04, H, 0.03, BLUE_TRIM, sx * 0.262, y, 0.335);
+      box(g, 0.025, H, 0.7, greySide, sx * 0.29, y, 0);
+      box(g, 0.04, H, 0.03, blueUpright, sx * 0.262, y, 0.335);
     }
-    box(g, 0.6, 0.03, 0.72, BLUE_TRIM, 0, skidTop + H - 0.015, 0);
-    box(g, 0.6, 0.03, 0.72, BLUE_TRIM, 0, skidTop + 0.015, 0);
-    box(g, 0.56, H, 0.02, '#1a1b1d', 0, y, -0.34);
+    box(g, 0.6, 0.03, 0.72, blueTrim, 0, skidTop + H - 0.015, 0);
+    box(g, 0.6, 0.03, 0.72, blueTrim, 0, skidTop + 0.015, 0);
+    box(g, 0.56, H, 0.02, back, 0, y, -0.34);
     // The rig's own supply isolator, on a plate over the front of the left
     // upright near the top, where it can be reached from the aisle: OFF
     // darkens everything whatever the NETZ button says.
@@ -1229,10 +1250,10 @@ export function createFerrocoreColumnRig(
     const g = right.group;
     const H = 1.94;
     const y = skidTop + H / 2;
-    for (const sx of [-1, 1]) box(g, 0.06, H, 0.76, OLIVE, sx * 0.3, y, 0);
-    box(g, 0.66, 0.05, 0.76, OLIVE, 0, skidTop + H - 0.025, 0);
-    box(g, 0.66, 0.06, 0.76, OLIVE, 0, skidTop + 0.03, 0);
-    box(g, 0.56, H, 0.02, '#1a1b1d', 0, y, -0.37);
+    for (const sx of [-1, 1]) box(g, 0.06, H, 0.76, oliveSide, sx * 0.3, y, 0);
+    box(g, 0.66, 0.05, 0.76, oliveTrim, 0, skidTop + H - 0.025, 0);
+    box(g, 0.66, 0.06, 0.76, oliveTrim, 0, skidTop + 0.03, 0);
+    box(g, 0.56, H, 0.02, back, 0, y, -0.37);
     box(g, 0.02, 0.12, 0.03, '#8f9483', 0.335, 1.15, 0.2);
     box(g, 0.1, 0.022, 0.003, '#d0d0c4', -0.2, skidTop + H - 0.025, 0.382);
   }

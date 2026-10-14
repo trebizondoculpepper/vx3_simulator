@@ -6,7 +6,16 @@ import { createCanvasTexture } from './screens';
  * sideways, flicker, cool to red and go out. Built in the same units as
  * the smoke emitter, with the source at the origin.
  */
-export function createEmbers(count = 24) {
+export function createEmbers(
+  count = 24,
+  {
+    /**
+     * Spat out of a face rather than rising off something hot: each spark
+     * flies out along +z, arcs up a little and falls away.
+     */
+    spray = false,
+  } = {},
+) {
   const group = new Group();
   group.name = 'Embers';
   group.userData.noCollision = true;
@@ -48,12 +57,22 @@ export function createEmbers(count = 24) {
           rate: number;
         };
         const age = (time * rate + i / count) % 1;
-        const drift = age * 0.25 + Math.sin(time * 3 + i) * 0.03 * age;
-        sprite.position.set(
-          Math.cos(heading) * drift,
-          age * 1.4,
-          Math.sin(heading) * drift,
-        );
+        if (spray) {
+          // Out of the face, spreading, then falling.
+          const spread = Math.cos(heading) * 0.35 * age;
+          sprite.position.set(
+            spread,
+            0.35 * age - 1.1 * age * age,
+            (0.25 + 0.2 * Math.abs(Math.sin(heading))) * age,
+          );
+        } else {
+          const drift = age * 0.25 + Math.sin(time * 3 + i) * 0.03 * age;
+          sprite.position.set(
+            Math.cos(heading) * drift,
+            age * 1.4,
+            Math.sin(heading) * drift,
+          );
+        }
         sprite.scale.setScalar(0.04 * (1 - age * 0.6));
         const flicker = reducedMotion
           ? 1

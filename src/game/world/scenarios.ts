@@ -43,7 +43,7 @@ const switchOn = [
 ].map((id) => work(id));
 
 /** Group 1 of the cold start: seal, purge and charge the vessel. */
-const prepareVessel: Move[] = [
+export const prepareVessel: Move[] = [
   ...switchOn,
   work('column.SENKEN'),
   wait(6.5),
@@ -75,7 +75,7 @@ const lightFerrocore: Move[] = [
 export const coldStart: Move[] = [...prepareVessel, ...lightFerrocore];
 
 /** Both dials to ten, past their redlines, TRIMM to SOLL, and AUX 1 in. */
-const overdrive: Move[] = [
+export const overdrive: Move[] = [
   work('drive.aux1'),
   work('drive.trim', 0.85),
   work('drive.spindle', 1),
@@ -147,35 +147,31 @@ export const scenarios: Scenario[] = [
     reaches: ['alarm.INSTAB', 'alarm.STÖRUNG', 'alarm.DEHNUNG', 'rig:incident'],
   },
   {
-    name: 'Overdriven',
+    name: 'Overheating',
     cause:
-      'DREHZAHL and FELD at ten, past their redlines, with AUX 1 in: the load passes 6.5 kW, the drive and coils overheat, smoke and catch fire, the smoke sets off the fire alarm, and the sprinklers then soak the live drive, which shorts and wrecks the lab.',
-    steps: [...coldStart, ...overdrive, wait(60)],
+      'DREHZAHL and FELD at ten, past their redlines, with AUX 1 in: the load passes 6.5 kW and the drive and coils overheat and smoke. Turned down in time, they cool and nothing is lost.',
+    steps: [...coldStart, ...overdrive, wait(12)],
+    reaches: ['alarm.SPINDEL ROT', 'alarm.FELD ROT', 'alarm.LAST'],
+  },
+  {
+    name: 'Overdriven to fire',
+    cause:
+      'Left overdriven, the smoke fills the room and the overheated drive catches fire. Fire is terminal: the breaker drops, the fire alarm sounds and the machine is ruined, smouldering.',
+    steps: [...coldStart, ...overdrive, wait(40)],
     reaches: [
-      'alarm.SPINDEL ROT',
-      'alarm.FELD ROT',
-      'alarm.LAST',
       'alarm.RAUCH',
       'alarm.BRAND',
       'fire:fire',
       'fire:alarm',
-      'fire:water',
-      'fire:ruined-short',
+      'fire:ruined-fire',
     ],
   },
   {
-    name: 'Burnt down',
+    name: 'Fire call point',
     cause:
-      'The sprinklers have already been spent (the call point was pressed with the drive off and the alarm never reset), so when the overdriven machine catches fire nothing puts it out, and after 45 s of fire the lab is lost.',
-    steps: [
-      ...prepareVessel,
-      work('fire.Handfeuermelder'),
-      wait(50),
-      ...lightFerrocore,
-      ...overdrive,
-      wait(120),
-    ],
-    reaches: ['fire:ruined-fire'],
+      'The call point pressed with the drive off: the alarm sounds and, three seconds later, the sprinklers open, with nothing live for the water to short.',
+    steps: [work('fire.Handfeuermelder'), wait(5)],
+    reaches: ['alarm.BRAND', 'fire:water'],
   },
   {
     name: 'Sprinklers on a live drive',

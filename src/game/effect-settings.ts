@@ -307,3 +307,85 @@ export function printRecording(recording: EffectRecording) {
     '-'.repeat(48),
   ].join('\n');
 }
+
+/** What the effects follow on a running machine. */
+export interface MachineEffectInputs {
+  /** The ferrocores' activity, 0 to 1. */
+  activity: number;
+  /**
+   * How fully activated the machine is, 0 to 1: 1 while it is fully
+   * operational, eased in and out over a few seconds by the caller.
+   */
+  full: number;
+  /** How far the machine has overheated, 0 (not at all) to 1 (critical). */
+  overheat: number;
+  /** How far the field is from equilibrium, 0 to 1. */
+  instability: number;
+  /** Where the machine stands, metres on the floor plan. */
+  centreX: number;
+  centreZ: number;
+}
+
+const smoothstep = (from: number, to: number, value: number) => {
+  const t = Math.max(0, Math.min(1, (value - from) / (to - from)));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * The effects a running machine has on the room around it.
+ *
+ * Nothing much happens until the machine is close to activation. As the
+ * cores' activity climbs to where full operation begins, lost precision
+ * and colour divergence fade in together, mildly: everything trembling a
+ * little, red and blue disagreeing at the edges. Running normally, even
+ * fully, that is all.
+ *
+ * Overheating, it gets steadily worse: the walls start to breathe, a slow
+ * swell of distances in long waves about every six seconds, stronger as
+ * the core nears critical; the trembling and the divergence double; π
+ * comes loose and the colours breathe with it. An unstable field quickens
+ * the breathing. Centred on the machine, so walking away helps.
+ */
+export function settingsForMachine(
+  machine: MachineEffectInputs,
+): EffectSettings {
+  const a = Math.max(0, Math.min(1, machine.activity));
+  const full = Math.max(0, Math.min(1, machine.full));
+  const hot = Math.max(0, Math.min(1, machine.overheat));
+  const unsettled = Math.max(0, Math.min(1, machine.instability));
+  const settings = settingsForActivity(0);
+  // Mild, near activation; doubled by the time it is critical.
+  const near = smoothstep(0.6, 0.85, a);
+  const mild = Math.min(1, near + hot);
+  const worse = 1 + hot;
+  if (mild > 0) {
+    settings.precision.grid = (0.0004 + 0.0016 * mild) * worse;
+    settings.precision.tremble = 0.3 + 0.4 * mild;
+    settings.precision.flickerHz = 12;
+  }
+  settings.divergence.horizontalPx = 3 * mild * worse;
+  settings.divergence.verticalPx = 1.2 * mild * worse;
+  settings.divergence.parallax = 5 * mild * worse;
+  // Overheating only: the room breathes.
+  settings.warp.amount = 0.12 * hot;
+  settings.warp.centreX = machine.centreX;
+  settings.warp.centreZ = machine.centreZ;
+  settings.warp.radius = hot > 0 ? 3 + 5 * hot : 0;
+  settings.warp.twist = 0.04;
+  settings.warp.twistSpeed = 0.3 * (1 + unsettled * 2);
+  settings.warp.swell = 0.1;
+  settings.warp.swellFrequency = 0.12;
+  settings.warp.swellSpeed = ((Math.PI * 2) / 6) * (1 + unsettled);
+  settings.pi.wander = 0.3 * hot;
+  settings.phaser.depth = 0.03 * near + 0.03 * full + 0.1 * hot;
+  return settings;
+}
+
+/**
+ * How much of its divergence the machine shows at a moment, 0 to 1: it
+ * swells up to its full amount and falls away again, smoothly, once every
+ * `period` seconds, so red and blue drift apart and come back together.
+ */
+export function divergencePulse(seconds: number, period = 7) {
+  return 0.5 - 0.5 * Math.cos((seconds / period) * Math.PI * 2);
+}

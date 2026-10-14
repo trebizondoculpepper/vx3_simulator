@@ -89,6 +89,20 @@ import { coreProjection } from '../core-projection';
  * Pure logic, no DOM or Three.js. Not yet wired into the scene.
  */
 
+/** The core's critical temperature: reached, it catches fire, kelvin. */
+export const CRITICAL_KELVIN = 5500;
+/** How far past its set point an overheating drive takes the core, kelvin. */
+const OVERHEAT_KELVIN = 2600;
+
+/**
+ * How far the drive has overheated, 0 to 1: from when it starts to smoke
+ * to when it would ignite by its own heat.
+ */
+export function overheatShare(state: OverheatState) {
+  const hottest = Math.max(...Object.values(state.heat));
+  return Math.max(0, Math.min(1, (hottest - 0.35) / (0.9 - 0.35)));
+}
+
 export type WorldEvent =
   | { source: 'vessel'; event: ColumnPrepEvent }
   | { source: 'rig'; event: RigEvent }
@@ -460,6 +474,17 @@ export function createWorld() {
   const roomSmoke = g.derive('room.smokeLevel', [overheat], (o) => o.roomSmoke);
   const fireAlarm = g.derive('fire.alarm', [fire], (f) => f.alarm);
   const ruined = g.derive('fire.ruined', [fire], (f) => f.ruinCause);
+  g.output(
+    'fire.phase',
+    [fire],
+    (f) =>
+      f.extinguished
+        ? 'extinguished'
+        : Object.values(f.burning).some(Boolean)
+          ? 'burning'
+          : 'normal',
+    { where: 'Developer room: fire condition and aftermath' },
+  );
 
   // ---- The east board's alarm windows ------------------------------------
 
@@ -641,6 +666,7 @@ export function createWorld() {
       heater,
       activity,
       field,
+      overheat,
     ],
     [...vesselStates, mains],
     (dt) => {
@@ -652,6 +678,8 @@ export function createWorld() {
         field: field.peek(),
       });
       setActivation(state, driveTemperature(rig));
+      // Overheating drives the core past full power towards critical.
+      state.setpoint += OVERHEAT_KELVIN * overheatShare(overheat.peek());
       state.brightness = driveBrightness(rig);
       for (const event of stepColumnPrep(state, dt, {
         powered: mains.peek(),
@@ -751,20 +779,70 @@ export function createWorld() {
     },
   );
 
-  g.process('fire', [fire, overheat, mains], [fire, mains, alarms], (dt) => {
-    const state = structuredClone(fire.peek());
-    for (const event of stepFireIncident(
-      state,
-      overheat.peek(),
-      mains.peek(),
-      dt,
-    )) {
-      events.push({ source: 'fire', event });
-      if (event === 'alarm') latchFault();
-      if (event === 'ruined-fire' || event === 'ruined-short') mains.set(false);
+  /** Fire is terminal: the breaker drops, the alarm sounds, it is ruined. */
+  const igniteRuin = (state: FireIncident) => {
+    if (state.ruinCause !== null) return;
+    if (!state.alarm) {
+      state.alarm = true;
+      events.push({ source: 'fire', event: 'alarm' });
+      latchFault();
     }
-    fire.set(state);
-  });
+    state.ruinCause = 'fire';
+    events.push({ source: 'fire', event: 'ruined-fire' });
+    mains.set(false);
+  };
+  // Overheating is recoverable; fire is not. The moment the machine
+  // catches fire its breaker drops, the fire alarm sounds and the lab is
+  // ruined: it smoulders on, and nothing can be worked again.
+  g.process(
+    'fire',
+    [fire, overheat, mains, temperature],
+    [fire, mains, alarms, master, isolator, columnNetz, rocker, ht, lt],
+    (dt) => {
+      const state = structuredClone(fire.peek());
+      // A core driven to its critical temperature catches fire, whatever
+      // the drive's own heat says.
+      if (
+        state.ruinCause === null &&
+        temperature.peek() >= CRITICAL_KELVIN &&
+        !Object.values(state.burning).some(Boolean)
+      ) {
+        state.burning.spindle = true;
+        events.push({ source: 'fire', event: 'fire' });
+        igniteRuin(state);
+      }
+      for (const event of stepFireIncident(
+        state,
+        overheat.peek(),
+        mains.peek(),
+        dt,
+      )) {
+        events.push({ source: 'fire', event });
+        if (event === 'alarm') latchFault();
+        if (event === 'ruined-fire' || event === 'ruined-short')
+          mains.set(false);
+        if (event === 'fire') igniteRuin(state);
+      }
+      if (
+        state.ruinCause !== null &&
+        !state.extinguished &&
+        state.ruinAge >= 8
+      ) {
+        state.extinguished = true;
+        state.burning.spindle = false;
+        state.burning.field = false;
+        state.burning.load = false;
+        master.set(false);
+        isolator.set(false);
+        columnNetz.set(false);
+        rocker.set(false);
+        ht.set(false);
+        lt.set(false);
+        events.push({ source: 'fire', event: 'extinguished' });
+      }
+      fire.set(state);
+    },
+  );
 
   g.process(
     'board',
@@ -1070,11 +1148,12 @@ export function createWorld() {
   const windows = annunciators.map((a, i) =>
     g.output(
       `board.window.${a.label}`,
-      [alarms, flashOn, testing],
-      (phases, flash, test) =>
-        test ||
-        phases[i] === 'acknowledged' ||
-        (phases[i] === 'unacknowledged' && flash),
+      [alarms, flashOn, testing, fire],
+      (phases, flash, test, incident) =>
+        !incident.extinguished &&
+        (test ||
+          phases[i] === 'acknowledged' ||
+          (phases[i] === 'unacknowledged' && flash)),
       { where: `East board bay ${Math.floor(i / 6) + 1}: ${a.label} window` },
     ),
   );
@@ -1105,25 +1184,32 @@ export function createWorld() {
     const reading = readings[channel];
     g.output(
       `board.grid.${channel}`,
-      [reading, testing],
+      [reading, testing, fire],
       // How many of the row's eight lamps are lit.
-      (r, test) =>
-        test
-          ? 8
-          : Array.from({ length: 8 }, (_, c) => r > c / 8).filter(Boolean)
-              .length,
+      (r, test, incident) =>
+        incident.extinguished
+          ? 0
+          : test
+            ? 8
+            : Array.from({ length: 8 }, (_, c) => r > c / 8).filter(Boolean)
+                .length,
       { where: `East board bay 2: grid row ${channel}` },
     );
-    g.output(`board.needle.${channel}`, [reading], needle, {
-      where: `East board: ${channel} meter`,
-    });
+    g.output(
+      `board.needle.${channel}`,
+      [reading, fire],
+      (r, incident) => (incident.extinguished ? 0 : needle(r)),
+      {
+        where: `East board: ${channel} meter`,
+      },
+    );
   }
   for (const bay of [0, 1, 2]) {
     const where = `East board under bay ${bay + 1}`;
     g.output(
       `board.status.${bay + 1}.BEREIT`,
-      [mains, testing],
-      (m, t) => t || m,
+      [mains, testing, fire],
+      (m, t, incident) => !incident.extinguished && (t || m),
       {
         where: `${where}: BEREIT lamp`,
       },
@@ -1137,8 +1223,8 @@ export function createWorld() {
       );
     g.output(
       `board.status.${bay + 1}.EIN`,
-      [...bayToggles, testing],
-      (...v) => v.some(Boolean),
+      [...bayToggles, testing, fire],
+      (...v) => !fire.value.extinguished && v.slice(0, -1).some(Boolean),
       { where: `${where}: EIN lamp` },
     );
     g.output(
@@ -1162,12 +1248,22 @@ export function createWorld() {
       { where: `East board: ${h.label} handle position` },
     );
   });
-  g.output('board.pointer.IST', [trim], needle, {
-    where: 'East board bay 1: trim IST pointer',
-  });
-  g.output('board.pointer.SOLL', [ideal], needle, {
-    where: 'East board bay 1: trim SOLL pointer',
-  });
+  g.output(
+    'board.pointer.IST',
+    [trim, fire],
+    (value, incident) => (incident.extinguished ? 0 : needle(value)),
+    {
+      where: 'East board bay 1: trim IST pointer',
+    },
+  );
+  g.output(
+    'board.pointer.SOLL',
+    [ideal, fire],
+    (value, incident) => (incident.extinguished ? 0 : needle(value)),
+    {
+      where: 'East board bay 1: trim SOLL pointer',
+    },
+  );
   g.output('board.readout.kW', [powerKw], (kw) => kw.toFixed(1), {
     where: 'East board bay 3: LEISTUNG kW readout',
   });
@@ -1266,9 +1362,14 @@ export function createWorld() {
     () => failure.value !== null || exposed.value,
   );
   // The chamber gauge is mechanical: it reads with the power off.
-  g.output('column.KAMMERDRUCK', [chamber], (p) => needle(p / 2.5), {
-    where: 'Column B11 SÄULE: KAMMERDRUCK gauge',
-  });
+  g.output(
+    'column.KAMMERDRUCK',
+    [chamber, fire],
+    (p, incident) => (incident.extinguished ? 0 : needle(p / 2.5)),
+    {
+      where: 'Column B11 SÄULE: KAMMERDRUCK gauge',
+    },
+  );
   g.output('column.LAMBDA', [on, lambda], (o, v) => needle(o ? v : 0), {
     where: 'Column B11 SÄULE: LAMBDA-SONDE meter',
   });

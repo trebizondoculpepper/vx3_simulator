@@ -34,7 +34,9 @@ const tone = params.get('tone') ?? 'neutral';
 const exposure = Number(params.get('exposure') ?? 1.0);
 const environmentScale = Number(params.get('env') ?? 1);
 
-export const renderStyle: RenderStyle = asked === 'ps1' ? 'ps1' : 'realistic';
+// dev0 is the realistic workshop; its former low-resolution toggle is retired.
+export const renderStyle: RenderStyle =
+  asked === 'ps1' && params.get('room') !== 'dev0' ? 'ps1' : 'realistic';
 export const realistic = renderStyle === 'realistic';
 
 /** The most pixels per CSS pixel drawn: sharp on a Retina screen, not wasteful. */
