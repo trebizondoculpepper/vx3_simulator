@@ -18,6 +18,7 @@ import {
 } from 'three';
 import type { Material, MeshStandardMaterial, Object3D } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import { brushedAluminium } from '../rendering/metal-finish';
 import { createCanvasTexture } from './screens';
 import { createGasVent } from './gas-vent';
 import { createSealPuff } from './seal-puff';
@@ -1763,7 +1764,14 @@ export function createFerrocoreColumnRig(
   const column = new Group();
   column.position.set(0, 0, 0.06);
   group.add(column);
-  const steel = paint(STEEL, 0.55);
+  // The vessel's own metal: brushed aluminium in the realistic style.
+  const steel = brushedAluminium(
+    createPs1Material({
+      color: STEEL,
+      metalness: 0.55,
+    }) as MeshStandardMaterial,
+  );
+  kit.materials.push(steel);
   const flange = (
     y: number,
     r: number,
@@ -1927,12 +1935,16 @@ export function createFerrocoreColumnRig(
     }
   }
   holes.texture.needsUpdate = true;
-  const shellSteel = createPs1Material({
-    color: STEEL,
-    metalness: 0.55,
-    alphaMap: holes.texture,
-    alphaTest: 0.5,
-  });
+  // The shell's grain runs round it, three times over its circumference.
+  const shellSteel = brushedAluminium(
+    createPs1Material({
+      color: STEEL,
+      metalness: 0.55,
+      alphaMap: holes.texture,
+      alphaTest: 0.5,
+    }) as MeshStandardMaterial,
+    { repeat: [3, 1] },
+  );
   const insideSteel = createPs1Material({
     color: '#5d6264',
     metalness: 0.4,
@@ -1955,11 +1967,13 @@ export function createFerrocoreColumnRig(
     side: DoubleSide,
   }) as MeshStandardMaterial;
   const floorSteel = createPs1Material({ color: '#4c5153', metalness: 0.3 });
-  const rimSteel = createPs1Material({
-    color: STEEL,
-    metalness: 0.55,
-    side: DoubleSide,
-  });
+  const rimSteel = brushedAluminium(
+    createPs1Material({
+      color: STEEL,
+      metalness: 0.55,
+      side: DoubleSide,
+    }) as MeshStandardMaterial,
+  );
   kit.materials.push(
     shellSteel,
     insideSteel,
