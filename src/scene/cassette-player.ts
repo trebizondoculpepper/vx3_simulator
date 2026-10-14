@@ -8,6 +8,7 @@ import {
 } from 'three';
 import type { Material, Object3D, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import { drawButtonFinish } from './button-finish';
 import { createCanvasTexture, createLabelTexture } from './screens';
 
 export type CassetteTransport = 'play' | 'stop' | 'fast-forward';
@@ -192,6 +193,16 @@ export function createCassettePlayer(worldUnitsPerMetre: number) {
     const x = -0.15 + index * 0.15;
     box(0.085, 0.008, 0.045, '#171d1e', x, 0.312, 0.025);
     const button = box(0.078, 0.016, 0.038, '#919a97', x, 0.324, 0.025);
+    const finish = createCanvasTexture(96, 48);
+    drawButtonFinish(finish.context, 96, 48, '#a9b1ae', 200 + index);
+    finish.texture.needsUpdate = true;
+    textures.push(finish.texture);
+    const buttonMaterial = createPs1Material({
+      map: finish.texture,
+      roughness: 0.62,
+    });
+    materials.push(buttonMaterial);
+    button.material = buttonMaterial;
     buttons[name] = [button];
     controls.push({ name, parts: [button] });
     label(symbol, 0.032, x, 0.282, 0.091);
