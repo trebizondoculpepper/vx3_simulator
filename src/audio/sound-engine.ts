@@ -4,6 +4,7 @@ import type { RackControls } from '../game/rack-controls';
 import type { RigState } from '../game/rig';
 import { writeSoundParameters } from './sound-parameters';
 import type { SoundParameters } from './sound-parameters';
+import { renderFireAlarm } from './fire-alarm';
 import { createSpatialMix } from './spatial-mix';
 import type { Emitter, SpatialMix, SpatialOptions } from './spatial-mix';
 import type { ZZFXSound } from 'zzfx';
@@ -60,6 +61,7 @@ export type SoundSource =
   | 'cassette'
   | 'sink'
   | 'sprinkler'
+  | 'sounder'
   | 'rectifier'
   | 'recirculator';
 
@@ -82,6 +84,7 @@ type Channel =
   | 'strain'
   | 'rectifier'
   | 'sprinkler'
+  | 'alarm'
   | 'recirculator';
 
 const channelSources: Record<Channel, SoundSource> = {
@@ -92,6 +95,7 @@ const channelSources: Record<Channel, SoundSource> = {
   strain: 'monitor',
   rectifier: 'rectifier',
   sprinkler: 'sprinkler',
+  alarm: 'sounder',
   recirculator: 'recirculator',
 };
 
@@ -122,6 +126,7 @@ interface AudioGraph {
   strain: GainNode;
   rectifier: GainNode;
   sprinkler: GainNode;
+  alarm: GainNode;
   recirculator: GainNode;
   fluorescent: GainNode;
   panners: Record<Channel, StereoPannerNode>;
@@ -184,6 +189,15 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
   const strain = gain(0.15, 'strain');
   const rectifier = gain(0, 'rectifier');
   const sprinkler = gain(0, 'sprinkler');
+  const alarm = gain(0, 'alarm');
+  // The fire alarm's sounders, rendered once and looped (fire-alarm.ts).
+  const alarmSamples = renderFireAlarm(context.sampleRate);
+  const alarmBuffer = context.createBuffer(
+    1,
+    alarmSamples.length,
+    context.sampleRate,
+  );
+  alarmBuffer.getChannelData(0).set(alarmSamples);
   const recirculator = gain(0, 'recirculator');
   const fluorescent = gain(0);
   const sources: Array<OscillatorNode | AudioBufferSourceNode> = [];
@@ -245,6 +259,12 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
   fanFilter.type = 'lowpass';
   fanFilter.frequency.value = 750;
   noise.connect(fanFilter).connect(recirculator);
+  const alarmLoop = context.createBufferSource();
+  alarmLoop.buffer = alarmBuffer;
+  alarmLoop.loop = true;
+  alarmLoop.connect(alarm);
+  alarmLoop.start();
+  sources.push(alarmLoop);
   noise.connect(roomFilter).connect(room);
   noise.connect(heaterFilter).connect(heater);
   const bearingFilter = context.createBiquadFilter();
@@ -340,6 +360,7 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
     strain,
     rectifier,
     sprinkler,
+    alarm,
     recirculator,
     fluorescent,
     panners,
@@ -374,6 +395,7 @@ export function createSoundEngine() {
   let cassetteRequest = 0;
   let plantPowered = false;
   let sprinklersActive = false;
+  let fireAlarmActive = false;
   let recirculatorWorking = false;
   let graph: AudioGraph | null = null;
   let loading: Promise<void> | null = null;
@@ -653,6 +675,11 @@ export function createSoundEngine() {
       sprinklersActive ? 0.32 * distanceGain('sprinkler') : 0,
       now,
     );
+    ramp(
+      graph.alarm.gain,
+      fireAlarmActive ? 0.3 * distanceGain('sounder') : 0,
+      now,
+    );
     ramp(graph.hum.gain, parameters.humGain * distanceGain('supply'), now);
     ramp(
       graph.heater.gain,
@@ -770,6 +797,10 @@ export function createSoundEngine() {
     },
     setSprinklers(on: boolean) {
       sprinklersActive = on;
+    },
+    /** The fire alarm's sounders, while the panel is in alarm. */
+    setFireAlarm(on: boolean) {
+      fireAlarmActive = on;
     },
     unlock,
     playComputerBoot,

@@ -2061,6 +2061,13 @@ export function startScene(canvas: HTMLCanvasElement) {
       z: room.maxZ - 0.395 * worldUnitsPerMetre,
     },
     {
+      // The lab's alarm sounder, beside its beacon over the door.
+      id: 'sounder',
+      x: 0,
+      y: room.ceilingY - 0.65,
+      z: room.maxZ - 1.1,
+    },
+    {
       id: 'sprinkler',
       x: 0,
       y: room.ceilingY - 0.5 * worldUnitsPerMetre,
@@ -3292,8 +3299,8 @@ export function startScene(canvas: HTMLCanvasElement) {
       Math.sin(time * 0.035) > 0.7
         ? 30
         : 0;
+    audio.setFireAlarm(fire.alarm && !extinguished);
     if (fire.alarm && !extinguished && time >= nextFireCue) {
-      audio.play('warning');
       if (fire.water && (rig.controls.mains || fire.ruinCause === 'short'))
         audio.play('spark');
       nextFireCue = time + 1500;

@@ -6,7 +6,11 @@ import {
   Vector3,
   Vector4,
 } from 'three';
-import type { MeshStandardMaterialParameters, Object3D } from 'three';
+import type {
+  MeshStandardMaterialParameters,
+  MeshBasicMaterialParameters,
+  Object3D,
+} from 'three';
 import { realistic } from './render-style';
 
 // Quantize projected coordinates, preserving clip-space depth and the original w.
@@ -74,8 +78,12 @@ export function createPs1Material(
   unlit = false,
   glow = false,
 ) {
+  // An unlit material takes no light, so it has no roughness or metalness.
+  const basic: MeshBasicMaterialParameters = { ...options };
+  delete (basic as MeshStandardMaterialParameters).roughness;
+  delete (basic as MeshStandardMaterialParameters).metalness;
   const material = unlit
-    ? new MeshBasicMaterial(options)
+    ? new MeshBasicMaterial(basic)
     : new MeshStandardMaterial({
         ...options,
         // Realistic: smooth, with a sheen; metal polished. PS1: flat, matt.

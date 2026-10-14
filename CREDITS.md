@@ -19,6 +19,8 @@ The [audio asset record](src/audio/assets/README.md) lists encoding, exact excer
 
 Control clicks, electrical hum, rectifier buzz, hydraulic head movement, clamp and end-stop impacts, purge hiss, the ferrocore's temperature/spin-dependent voice and its burnout/flux-collapse sounds are original procedural patches in the [VX3 Simulator source](src/audio/). They use Web Audio and [ZzFX](https://github.com/KilledByAPixel/ZzFX), by [Frank Force](https://github.com/KilledByAPixel), MIT. They contain no external apparatus recording.
 
+The fire alarm (`src/audio/fire-alarm.ts`) is synthesised from scratch. Its arrangement was taken, by measurement only, from [Hausalarm Auslösen German fire alarm](https://www.youtube.com/watch?v=B7Mqzvsw7iU) by [USfireFan](https://www.youtube.com/@USfireFan), supplied by the owner: a ~3.1 kHz piezo pulsing half a second on and off, a two-note buzzer in its gaps, and a far sounder sweeping down from ~3.25 to ~2.1 kHz. Pitches and timings were read from a spectrogram; no audio from the video is included or played, and our pitches differ.
+
 ## Cassette music
 
 Morgenstrom, Fernverbindung, Leichte Arbeit and Offener Horizont are original tracks generated locally for this project with [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5). The [cassette record](public/music/README.md) documents the exact prompts, model/checkpoint, seeds, generation date, measured loop points, audio processing and licence information found for the generator. Stylistic references were not sampled or fed to the generator.
