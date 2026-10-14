@@ -150,7 +150,12 @@ describe('the lab as a graph', () => {
     );
     // Fire: the breaker drops, the alarm sounds, and it is ruined at once.
     expect(kinds(events)).toEqual(
-      expect.arrayContaining(['fire:fire', 'fire:alarm', 'fire:ruined-fire']),
+      expect.arrayContaining([
+        'fire:fire',
+        'fire:alarm',
+        'fire:water',
+        'fire:ruined-fire',
+      ]),
     );
     expect(world.read('fire.ruined')).toBe('fire');
     expect(world.read('drive.mains')).toBe(false);

@@ -528,6 +528,7 @@ export function createCircuitBoard(
     void generation.value;
     return world().read<T>(id);
   };
+  const wrecked = () => world().read<string>('fire.phase') === 'extinguished';
 
   const paint = (colour: string) => {
     const material = wornPaint(
@@ -894,7 +895,7 @@ export function createCircuitBoard(
         0.003,
       );
       face.add(lamp.group);
-      follow.push(() => lamp.set(node.lit(world())));
+      follow.push(() => lamp.set(!wrecked() && node.lit(world())));
     }
 
     // Instruments.
@@ -908,7 +909,9 @@ export function createCircuitBoard(
         });
         made.group.position.set(x, instrumentsY, 0.004);
         face.add(made.group);
-        follow.push(() => made.show(String(inst.read(world()))));
+        follow.push(() =>
+          made.show(wrecked() ? '0' : String(inst.read(world()))),
+        );
       } else {
         const made =
           inst.kind === 'gauge'
@@ -926,7 +929,7 @@ export function createCircuitBoard(
               });
         made.group.position.set(x, instrumentsY, 0.004);
         face.add(made.group);
-        follow.push(() => made.set(Number(inst.read(world()))));
+        follow.push(() => made.set(wrecked() ? 0 : Number(inst.read(world()))));
         updates.push(made.update);
       }
       label(face, inst.label, x, instrumentsY - 0.095, 0.014);
@@ -1139,8 +1142,8 @@ export function createCircuitBoard(
         hub.add(part, made.group, 'button', () => made.press());
         uses.set(made.cap, () => part.press());
         follow.push(() => {
-          made.lit = part.state.value;
-          made.glow = part.lit.value;
+          made.lit = !wrecked() && part.state.value;
+          made.glow = !wrecked() && part.lit.value;
         });
       } else {
         const part = createMomentary({
@@ -1173,8 +1176,8 @@ export function createCircuitBoard(
     }
     follow.push(() => {
       const any = windowLit.some((lit) => lit());
-      fault.set(any);
-      ready.set(!any);
+      fault.set(!wrecked() && any);
+      ready.set(!wrecked() && !any);
     });
   });
 

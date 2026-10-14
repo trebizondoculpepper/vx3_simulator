@@ -788,6 +788,11 @@ export function createWorld() {
       latchFault();
     }
     state.ruinCause = 'fire';
+    if (!state.water && !state.sprinklerSpent) {
+      state.water = true;
+      state.waterAge = 0;
+      events.push({ source: 'fire', event: 'water' });
+    }
     events.push({ source: 'fire', event: 'ruined-fire' });
     mains.set(false);
   };

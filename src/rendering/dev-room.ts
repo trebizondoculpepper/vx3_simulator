@@ -54,6 +54,7 @@ import {
   play,
   prepareVessel,
 } from '../game/world/scenarios';
+import type { Move } from '../game/world/scenarios';
 import { createMomentary } from '../game/world/components';
 import { createEightiesButton } from '../scene/eighties-controls';
 import type { CapColour } from '../scene/eighties-controls';
@@ -209,6 +210,13 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   // drives the concept rig, which only shows it; the cold-start board
   // below works it.
   let world = createWorld();
+  let autoStart: {
+    steps: Move[];
+    index: number;
+    pause: number;
+    wait: number;
+    waitTime: number;
+  } | null = null;
   // The column's panels work the world model, as they work the lab's
   // machine: its dials, heater switches, ZÜND, band selector, trips and
   // XE-REGLER buttons through this hook-up.
@@ -332,6 +340,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   };
   /** Swap in another world; every board and part reads the new one. */
   const replaceWorld = (next: ReturnType<typeof createWorld>) => {
+    autoStart = null;
     world = next;
     coldStart.restarted();
     circuitBoard.restarted();
@@ -388,6 +397,22 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     const cheats: [string, string, CapColour, () => void][] = [
       ['KALT', 'COLD · ALL OFF', 'grey', () => replaceWorld(createWorld())],
       [
+        'AUTO',
+        'SLOW START',
+        'green',
+        () => {
+          replaceWorld(createWorld());
+          autoStart = {
+            steps: coldStartSteps,
+            index: 0,
+            pause: 0.8,
+            wait: 0,
+            waitTime: 0,
+          };
+          note('Automatic cold start: one control at a time.');
+        },
+      ],
+      [
         'KESSEL',
         'VESSEL READY',
         'amber',
@@ -441,7 +466,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     title.position.set(0, 0.13, 0.001);
     plate.add(title);
     cheats.forEach(([legend, hint, colour, act], i) => {
-      const x = (i - (cheats.length - 1) / 2) * 0.36;
+      const x = (i - (cheats.length - 1) / 2) * 0.32;
       const made = createEightiesButton(kit, legend, colour, {
         latching: false,
         size: 0.024,
@@ -1081,6 +1106,50 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     ps1Uniforms.time.value = seconds;
     walk.update(delta);
     passages.update(delta, walk.walker.x, walk.walker.z);
+    if (autoStart) {
+      if (autoStart.wait > 0) {
+        // The long vessel purge and heater warm-up remain visible, but do
+        // not make a developer wait a full minute between controls.
+        const advance = Math.min(
+          autoStart.wait,
+          (autoStart.steps[autoStart.index - 1].setting ?? 0) *
+            (delta / autoStart.waitTime),
+        );
+        autoStart.wait -= advance;
+        let left = advance;
+        while (left > 1e-6) {
+          const dt = Math.min(0.1, left);
+          left -= dt;
+          for (const event of world.tick(dt)) {
+            const line = describeEvent(event);
+            if (line) note(line);
+            const cue = cueFor(event);
+            if (cue) audio.play(cue);
+          }
+        }
+        if (autoStart.wait <= 1e-6) autoStart.pause = 1.8;
+      } else {
+        autoStart.pause -= delta;
+        if (autoStart.pause <= 0) {
+          const move = autoStart.steps[autoStart.index++];
+          if (!move) {
+            coldStart.track(true);
+            autoStart = null;
+            note('Automatic cold start complete.');
+          } else if (move.id === 'wait') {
+            autoStart.wait = move.setting ?? 0;
+            autoStart.waitTime = Math.max(2, Math.min(6, autoStart.wait / 10));
+            note(`Automatic start: wait ${autoStart.wait}s.`);
+          } else {
+            world.work(move.id, move.setting);
+            note(
+              `Automatic start: ${move.id}${move.setting === undefined ? '' : ` → ${move.setting}`}.`,
+            );
+            autoStart.pause = 2.5;
+          }
+        }
+      }
+    }
     // The world runs at the board's tempo, in steps of a tenth of a second.
     let remaining = delta * coldStart.tempo;
     while (remaining > 1e-6) {
