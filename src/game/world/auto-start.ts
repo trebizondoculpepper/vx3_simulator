@@ -9,6 +9,21 @@ import type { World, WorldEvent } from './world';
  * the extra time a fast-forwarded wait needs, and returns what that time
  * did, so its events can be heard and logged like any others.
  */
+/** A worked control as the operator would name it, with what it now reads. */
+function describe(world: World, move: Move) {
+  const control = world.controls.find((c) => c.id === move.id);
+  if (!control) return move.id;
+  // A control worked from two places is named at the first.
+  const where = control.where.split(';')[0];
+  if (control.kind === 'knob')
+    return `${where} to ${Number(((move.setting ?? 0) * 10).toFixed(1))}`;
+  if (control.kind === 'switch')
+    return `${where} ${world.read<boolean>(move.id) ? 'on' : 'off'}`;
+  if (where.endsWith('handwheel')) return `${where} turned`;
+  if (where.endsWith('handle')) return `${where} thrown`;
+  return `${where} pressed`;
+}
+
 export function createAutoStart(
   steps: readonly Move[],
   { pause = 2.5, firstPause = 0.8 } = {},
@@ -61,10 +76,7 @@ export function createAutoStart(
       }
       world.work(move.id, move.setting);
       rest = pause;
-      return {
-        events,
-        line: `Automatic start: ${move.id}${move.setting === undefined ? '' : ` → ${move.setting}`}.`,
-      };
+      return { events, line: `Automatic start: ${describe(world, move)}.` };
     },
   };
 }

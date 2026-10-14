@@ -211,13 +211,12 @@ export function createMuseumGallery(
     return open;
   };
 
-  const lockedDoor = (side: 'north' | 'east' | 'west') => {
+  const lockedDoor = (side: 'east' | 'west') => {
     const door = new Group();
-    const x = side === 'north' ? 2.65 : side === 'east' ? 4.3 : -4.3;
-    const z = side === 'north' ? 0.2 : 3.85;
+    const x = side === 'east' ? 4.3 : -4.3;
+    const z = 3.85;
     door.position.set(x * m, 0, z * m);
-    door.rotation.y =
-      side === 'north' ? 0 : side === 'east' ? -Math.PI / 2 : Math.PI / 2;
+    door.rotation.y = side === 'east' ? -Math.PI / 2 : Math.PI / 2;
     group.add(door);
     box(door, 1.12, 2.32, 0.08, '#27382f', 0, 1.16, 0);
     const lockedLeaf = box(door, 0.94, 2.18, 0.06, '#765c3e', 0, 1.1, 0.055);
@@ -227,11 +226,12 @@ export function createMuseumGallery(
     actions.set(lockedLeaf, () => undefined);
     actions.set(lock, () => undefined);
   };
-  lockedDoor('north');
   lockedDoor('east');
   lockedDoor('west');
   const lightSwitch = createLightSwitch(m);
-  lightSwitch.group.position.set(-3.55 * m, 1.35 * m, 0.24 * m);
+  // On the latch side of the door (it hinges on the west), where a hand
+  // finds it as the door opens.
+  lightSwitch.group.position.set(-1.6 * m, 1.35 * m, 0.24 * m);
   group.add(lightSwitch.group);
   let lightsOn = false;
   let lightLevel = 0;

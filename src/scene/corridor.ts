@@ -10,7 +10,6 @@ import {
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { createCeilingServices } from './ceiling-services';
-import { createCorridorBlueprints } from './corridor-blueprints';
 import { createCanvasTexture, createLabelTexture } from './screens';
 
 export interface CorridorOptions {
@@ -344,13 +343,50 @@ export function createCorridor(options: CorridorOptions) {
   });
   group.add(services.group);
 
-  const blueprints = createCorridorBlueprints({
-    doorX,
-    southZ,
-    floorY,
-    worldUnitsPerMetre: m,
-  });
-  group.add(blueprints.group);
+  // A small building-PA cabinet high behind the cable trays. Its acoustic
+  // origin is returned to the scene, independent of the lab's alarm sounder.
+  const paPosition = {
+    x: doorX - 1.25 * m,
+    y: floorY + 2.86 * m,
+    z: northZ + 0.4 * m,
+  };
+  const speaker = new Group();
+  speaker.name = 'Corridor PA loudspeaker above cable trays';
+  speaker.position.set(paPosition.x, paPosition.y, paPosition.z);
+  group.add(speaker);
+  mesh(
+    new BoxGeometry(0.24 * m, 0.15 * m, 0.1 * m),
+    '#8d9081',
+    0,
+    0,
+    0,
+    speaker,
+  );
+  mesh(
+    new BoxGeometry(0.2 * m, 0.115 * m, 0.005 * m),
+    '#282f29',
+    0,
+    0,
+    0.052 * m,
+    speaker,
+  );
+  for (let row = -4; row <= 4; row++)
+    mesh(
+      new BoxGeometry(0.19 * m, 0.004 * m, 0.006 * m),
+      '#777e70',
+      0,
+      row * 0.011 * m,
+      0.057 * m,
+      speaker,
+    );
+  mesh(
+    new BoxGeometry(0.035 * m, 0.035 * m, 0.35 * m),
+    '#50594d',
+    0,
+    -0.04 * m,
+    -0.2 * m,
+    speaker,
+  );
 
   // The lab's name over its door.
   sign(
@@ -529,6 +565,7 @@ export function createCorridor(options: CorridorOptions) {
 
   return {
     group,
+    paPosition,
     /** Where a visitor stands to face the lab door: on the corridor's centre line. */
     spawn: { x: doorX, z: southZ - 0.45 * m },
     update(seconds: number, reducedMotion: boolean) {
@@ -556,7 +593,6 @@ export function createCorridor(options: CorridorOptions) {
     },
     dispose() {
       services.dispose();
-      blueprints.dispose();
       group.traverse((object) => {
         if (object instanceof Mesh) object.geometry.dispose();
       });

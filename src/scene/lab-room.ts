@@ -14,6 +14,10 @@ import { createLabSurfaceMap } from '../rendering/lab-surface';
 import { createCeilingServices } from './ceiling-services';
 import { createLightSwitch } from './light-switch';
 import { createLabelTexture } from './screens';
+import {
+  createLabDoorTexture,
+  createLabDoorWarning,
+} from './lab-door-textures';
 
 export interface LabRoomOptions {
   floorY: number;
@@ -325,8 +329,24 @@ export function createLabRoom(options: LabRoomOptions) {
   // Each leaf hangs on its outer jamb and swings into the room. The centre
   // astragal rides on the right leaf so the opening is clear when both swing.
   const leafWidth = (doorWidth - 0.12) / 2;
+  const leafThickness = 0.05 * worldUnitsPerMetre;
+  const doorFaceZ = leafThickness / 2;
   const glassY = floorY + doorHeight * 0.67;
   const handleY = floorY + doorHeight * 0.45;
+  const enamel = createLabDoorTexture('enamel', 714);
+  const brass = createLabDoorTexture('brass', 715);
+  const wiredGlass = createLabDoorTexture('glass', 716);
+  const voltageWarning = createLabDoorWarning('voltage');
+  const fieldWarning = createLabDoorWarning('field');
+  textures.push(enamel, brass, wiredGlass, voltageWarning, fieldWarning);
+  const doorFinish = (map: Texture, metalness: number, roughness: number) => {
+    const material = createPs1Material({ map, metalness, roughness });
+    materials.push(material);
+    return material;
+  };
+  const enamelFinish = doorFinish(enamel, 0.15, 0.73);
+  const brassFinish = doorFinish(brass, 0.68, 0.4);
+  const glassFinish = doorFinish(wiredGlass, 0.2, 0.24);
   const leaves: Group[] = [];
   const doorParts: Mesh[] = [];
   for (const side of [-1, 1]) {
@@ -362,58 +382,137 @@ export function createLabRoom(options: LabRoomOptions) {
     for (const face of [-1, 1]) {
       faceOwner = face < 0 ? 'lab' : 'corridor';
       // Each half of the leaf is owned by the room it faces.
-      part(
+      const paintedLeaf = part(
         leafWidth,
         doorHeight - 0.05,
-        0.04,
+        leafThickness / 2,
         '#55665f',
         leafX,
         floorY + doorHeight / 2,
-        doorZ + face * 0.02,
+        doorZ + face * (leafThickness / 4),
       );
-      const glassZ = doorZ + face * 0.05;
-      part(2.05, 4.2, 0.02, '#1c2724', leafX, glassY, glassZ);
-      for (let i = 0; i < 5; i++) {
-        part(
-          2.05,
-          0.012,
-          0.01,
-          '#8b958e',
-          leafX,
-          glassY - 1.68 + i * 0.84,
-          glassZ + face * 0.015,
+      paintedLeaf.material = enamelFinish;
+      const glassZ = doorZ + face * (doorFaceZ + 0.015);
+      const glassWidth = 0.16 * worldUnitsPerMetre;
+      const glassHeight = 0.62 * worldUnitsPerMetre;
+      part(
+        glassWidth + 0.12,
+        glassHeight + 0.12,
+        0.035,
+        '#a6aaa0',
+        leafX,
+        glassY,
+        glassZ,
+      );
+      part(
+        glassWidth + 0.04,
+        glassHeight + 0.04,
+        0.04,
+        '#1c2924',
+        leafX,
+        glassY,
+        glassZ + face * 0.015,
+      );
+      const glass = part(
+        glassWidth,
+        glassHeight,
+        0.018,
+        '#ffffff',
+        leafX,
+        glassY,
+        glassZ + face * 0.04,
+      );
+      glass.material = glassFinish;
+      // A recessed lower panel and substantial edge rails give each steel
+      // leaf a pressed profile instead of a featureless slab.
+      part(
+        leafWidth - 0.42,
+        0.37 * worldUnitsPerMetre,
+        0.015,
+        '#465a52',
+        leafX,
+        floorY + 0.44 * worldUnitsPerMetre,
+        doorZ + face * (doorFaceZ + 0.004),
+      );
+      if (face > 0) {
+        const warningMaterial = createPs1Material(
+          { map: side < 0 ? voltageWarning : fieldWarning },
+          true,
         );
-        part(
-          0.012,
-          4.2,
-          0.01,
-          '#8b958e',
-          leafX - 0.82 + i * 0.41,
-          glassY,
-          glassZ + face * 0.015,
+        materials.push(warningMaterial);
+        const notice = new Mesh(
+          new PlaneGeometry(
+            0.37 * worldUnitsPerMetre,
+            0.23125 * worldUnitsPerMetre,
+          ),
+          warningMaterial,
         );
+        notice.position.set(
+          leafX - hingeX,
+          floorY + 1.88 * worldUnitsPerMetre,
+          doorFaceZ + 0.012,
+        );
+        notice.userData.roomId = 'corridor';
+        notice.name =
+          side < 0
+            ? 'Lab door high voltage notice'
+            : 'Lab door magnetic field notice';
+        leaf.add(notice);
+        doorParts.push(notice);
       }
-      // Push plate on the lab side, a pull handle on the corridor side.
-      if (face < 0)
-        part(
-          0.85,
-          0.22,
-          0.025,
-          '#b9b6aa',
-          doorX + side * 0.62,
+      // The leaves open into the lab: push from the corridor, pull from inside.
+      if (face > 0) {
+        const padX = doorX + side * 0.075 * worldUnitsPerMetre;
+        const pad = part(
+          0.1 * worldUnitsPerMetre,
+          0.32 * worldUnitsPerMetre,
+          0.03,
+          '#b89a59',
+          padX,
           handleY,
-          doorZ - 0.06,
+          doorZ + doorFaceZ + 0.025,
         );
-      else {
-        part(
+        pad.material = brassFinish;
+        // A separate printed face keeps the brass grain and instruction
+        // aligned on the corridor side.
+        const padFace = new Mesh(
+          new PlaneGeometry(
+            0.1 * worldUnitsPerMetre,
+            0.32 * worldUnitsPerMetre,
+          ),
+          brassFinish,
+        );
+        padFace.position.set(padX - hingeX, handleY, doorFaceZ + 0.042);
+        padFace.userData.roomId = 'corridor';
+        padFace.name = 'Brass push plate DRÜCKEN';
+        leaf.add(padFace);
+        doorParts.push(padFace);
+        for (const dx of [-0.035, 0.035])
+          for (const dy of [-0.14, 0.14]) {
+            const screw = mesh(
+              new CylinderGeometry(0.022, 0.022, 0.012, 10),
+              '#76633d',
+              padX - hingeX + dx * worldUnitsPerMetre,
+              handleY + dy * worldUnitsPerMetre,
+              doorFaceZ + 0.055,
+              leaf,
+            );
+            screw.rotation.x = Math.PI / 2;
+            screw.userData.roomId = 'corridor';
+            doorParts.push(screw);
+          }
+      } else {
+        const pull = part(
           0.08,
           1.3,
           0.08,
           '#c9c6ba',
           doorX + side * 0.5,
           handleY,
-          doorZ + 0.17,
+          doorZ - doorFaceZ - 0.17,
         );
+        pull.geometry.dispose();
+        pull.geometry = new CylinderGeometry(0.05, 0.05, 1.3, 12);
         for (const dy of [-0.55, 0.55])
           part(
             0.06,
@@ -422,7 +521,7 @@ export function createLabRoom(options: LabRoomOptions) {
             '#c9c6ba',
             doorX + side * 0.5,
             handleY + dy,
-            doorZ + 0.1,
+            doorZ - doorFaceZ - 0.1,
           );
       }
       part(
@@ -432,15 +531,33 @@ export function createLabRoom(options: LabRoomOptions) {
         '#8a8a80',
         leafX,
         floorY + 0.85,
-        doorZ + face * 0.05,
+        doorZ + face * (doorFaceZ + 0.012),
       );
+    }
+    // Three visible hinge barrels on each solid leaf.
+    for (const height of [0.25, 1.05, 1.85]) {
+      const hinge = mesh(
+        new CylinderGeometry(
+          0.012 * worldUnitsPerMetre,
+          0.012 * worldUnitsPerMetre,
+          0.1 * worldUnitsPerMetre,
+          12,
+        ),
+        '#6c7569',
+        0,
+        floorY + height * worldUnitsPerMetre,
+        0,
+        leaf,
+      );
+      hinge.userData.roomId = 'lab';
+      doorParts.push(hinge);
     }
     faceOwner = undefined;
     if (side > 0)
       part(
         0.12,
         doorHeight - 0.05,
-        0.1,
+        leafThickness + 0.035,
         '#2c302c',
         doorX,
         floorY + doorHeight / 2,
@@ -505,11 +622,11 @@ export function createLabRoom(options: LabRoomOptions) {
     minX: doorX - doorWidth / 2,
     maxX: doorX + doorWidth / 2,
     minZ: doorZ - 0.1,
-    maxZ: doorZ + 0.1,
+    maxZ: doorZ - doorFaceZ - 0.1,
   };
   let doorOpen = false;
   let doorAmount = 0;
-  const sign = createLabelTexture('VX LAB  ·  AUTHORISED PERSONNEL ONLY', {
+  const sign = createLabelTexture('VX-LABOR  ·  ZUTRITT NUR FÜR BEFUGTE', {
     ink: '#151511',
     plate: '#f2c230',
     size: 11,

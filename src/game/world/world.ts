@@ -1092,7 +1092,8 @@ export function createWorld() {
     [fire, roomSmoke],
     [fire],
     () => {
-      if (refused()) return false;
+      // The fire panel is the building's, not the machine's: it still
+      // works in a ruined lab, to silence the alarm.
       const state = structuredClone(fire.peek());
       if (!resetFirePanel(state, roomSmoke.peek())) return false;
       fire.set(state);

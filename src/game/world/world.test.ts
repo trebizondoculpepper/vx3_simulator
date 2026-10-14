@@ -176,6 +176,29 @@ describe('the lab as a graph', () => {
     expect(kinds(run(world, 2))).not.toContain('fire:extinguished');
   });
 
+  it('keeps the fire alarm sounding until the fire panel resets it', () => {
+    const world = prepareVessel();
+    world.work('board.NETZ');
+    run(world, 8, { tracksTrim: true });
+    world.work('drive.spindle', 1);
+    world.work('drive.field', 1);
+    runUntil(world, () => world.read('fire.ruined') !== null, 120, {
+      tracksTrim: true,
+    });
+    // Burned out and left alone, the alarm keeps sounding.
+    run(world, 8.1);
+    expect(world.read('fire.phase')).toBe('extinguished');
+    run(world, 300);
+    expect(world.read('fire.alarm')).toBe(true);
+    expect(world.read<{ water: boolean }>('fire').water).toBe(true);
+    // Reset silences it; the lab stays ruined.
+    expect(world.work('fire.RÜCKSTELLEN')).toBe(true);
+    expect(world.read('fire.alarm')).toBe(false);
+    expect(world.read<{ water: boolean }>('fire').water).toBe(false);
+    expect(world.read('fire.ruined')).toBe('fire');
+    expect(world.work('board.NETZ')).toBe(false);
+  });
+
   it('drives the core towards critical as it overheats, and fires there', () => {
     const world = prepareVessel();
     world.work('board.NETZ');

@@ -13,6 +13,7 @@ import type { BufferGeometry, Material, MeshStandardMaterial } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { wornPaint } from '../rendering/metal-finish';
 import {
+  createEightiesButton,
   createMicroLabel,
   createPanelKit,
   createPanelLed,
@@ -25,8 +26,8 @@ import {
  * hinged door and a key lock, knockouts in its side, a pale grey inset
  * plate with rounded corners carrying the model and the maker, and in it a
  * deep black moulded window whose walls slope in to the display: a green
- * LCD, three status lamps (BETRIEB, ALARM, STÖRUNG) and a row of membrane
- * keys, one of which, RÜCKSTELLEN, resets the panel.
+ * LCD, three status lamps (BETRIEB, ALARM, STÖRUNG) and a row of mechanical
+ * pushbuttons, one of which, RÜCKSTELLEN, resets the panel.
  *
  * Built in metres, about 0.42 wide, 0.48 high and 0.12 deep, its back on
  * the wall at z = 0 and facing +z, centred on the origin.
@@ -287,57 +288,43 @@ export function createFirePanel() {
     const lamp = createPanelLed(kit, colour);
     lamp.group.scale.setScalar(0.9);
     lamp.group.position.set(
-      winX - lcdW / 2 + 0.012 + i * (lcdW / 3),
+      winX + (i - 1) * (lcdW / 3),
       plateY + backH * 0.02,
       backZ + 0.002,
     );
     door.add(lamp.group);
     const caption = createMicroLabel(kit, ['BETRIEB', 'ALARM', 'STÖRUNG'][i], {
-      height: 0.0042,
+      height: 0.003,
       ink: '#e6e4da',
     });
     caption.position.set(
-      winX - lcdW / 2 + 0.03 + i * (lcdW / 3),
-      plateY + backH * 0.02,
+      winX + (i - 1) * (lcdW / 3),
+      plateY + backH * 0.02 - 0.01,
       backZ + 0.0025,
     );
     door.add(caption);
     return lamp;
   });
 
-  // Membrane keys in a row: printed legends on raised grey pads.
-  const keyPaint = paint('#c9c9c1', 0, 0.7);
-  const keys = ['QUITT', 'SUMMER AB', 'RÜCKSTELLEN'].map((legend, i) => {
-    const kw = lcdW / 3 - 0.004;
-    const kx = winX - lcdW / 2 + kw / 2 + 0.002 + i * (lcdW / 3);
-    const ky = plateY - backH * 0.25;
-    const key = add(
-      new BoxGeometry(kw, 0.018, 0.003),
-      keyPaint,
-      kx,
-      ky,
-      backZ + 0.0025,
-      door,
-    );
-    key.name = `Fire panel ${legend} key`;
-    const text = createMicroLabel(kit, legend, {
-      height: 0.0042,
-      ink: '#1a1b19',
+  // Standard compact pushbuttons: legends are baked into each cap texture,
+  // so even the longer German words stay within their own button face.
+  const keys = ['QUITT', 'SUMMER\nAB', 'RÜCK-\nSTELLEN'].map((legend, i) => {
+    const key = createEightiesButton(kit, legend, i === 2 ? 'red' : 'grey', {
+      size: 0.024,
+      latching: false,
+      illuminated: false,
     });
-    text.position.set(kx, ky, backZ + 0.0042);
-    door.add(text);
+    key.group.position.set(
+      winX + (i - 1) * (lcdW / 3),
+      plateY - backH * 0.28,
+      backZ + 0.002,
+    );
+    key.group.name = `Fire panel ${legend.replace('\n', ' ')} key`;
+    door.add(key.group);
     return key;
   });
-  // RÜCKSTELLEN is the one that does something: a red band marks it.
-  const resetKey = keys[2];
-  add(
-    new BoxGeometry(lcdW / 3 - 0.004, 0.0025, 0.0032),
-    paint('#b32a22'),
-    resetKey.position.x,
-    resetKey.position.y - 0.0105,
-    backZ + 0.0026,
-    door,
-  );
+  const resetKey = keys[2].cap;
+  resetKey.name = 'Fire panel RÜCKSTELLEN key';
 
   // The title above the plate.
   const title = createMicroLabel(kit, 'BRANDMELDERZENTRALE', {
@@ -360,6 +347,12 @@ export function createFirePanel() {
     screen,
     /** The reset key, to bind to the fire circuit's RÜCKSTELLEN. */
     resetKey,
+    pressReset() {
+      keys[2].press();
+    },
+    update(delta: number) {
+      for (const key of keys) key.update(delta);
+    },
     /** The status lamps: supply on, alarm, trouble. */
     setLamps(power: boolean, alarm: boolean, trouble: boolean) {
       lamps[0].set(power);

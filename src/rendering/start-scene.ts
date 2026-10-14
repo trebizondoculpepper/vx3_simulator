@@ -34,6 +34,8 @@ import { createAutoStart } from '../game/world/auto-start';
 import type { AutoStart } from '../game/world/auto-start';
 import { createCircuitBoard } from '../scene/circuit-board';
 import { createFirePanel } from '../scene/fire-panel';
+import { fireBeaconLit } from '../game/fire-sequence';
+import { createFireBeacon } from '../scene/fire-beacon';
 import {
   createEightiesButton,
   createMicroLabel,
@@ -161,6 +163,11 @@ export function startScene(canvas: HTMLCanvasElement) {
   // player (until they turn it themselves).
   let autoStart: AutoStart | null = null;
   let followTrim = false;
+  /**
+   * Whether the log has said the H-B field is locked. The field hovers at
+   * the lock's threshold, so it re-locks often; only the news is printed.
+   */
+  let fieldLockLogged = false;
   const rig = createRig();
   // The room's state near the ferrocores: colour, π, space and sparks.
   let anomaly = anomalyEffects(0, 0, false);
@@ -303,7 +310,9 @@ export function startScene(canvas: HTMLCanvasElement) {
   ) => {
     designate(object, { machine, name, role: 'input' });
     bind(object, (hit) => {
-      if (fire.ruinCause) return;
+      // A ruined lab's machines are dead, but the building's fire circuit
+      // still works, so its alarm can be reset.
+      if (fire.ruinCause && machine !== 'Fire circuit') return;
       // The operator's log names the control exactly, for debugging: the
       // first line the action writes is prefixed with it. Unlogged state
       // changes are described by the transaction fallback.
@@ -630,15 +639,29 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   showFireLcd('normal');
   input(firePanelModel.resetKey, 'Fire circuit', 'RÜCKSTELLEN', () => {
+    firePanelModel.pressReset();
     audio.play('button');
+    const wasAlarm = world.read<boolean>('fire.alarm');
+    const reset = world.work('fire.RÜCKSTELLEN');
+    if (reset && wasAlarm) audio.announceFireCancelled();
     write(
-      world.work('fire.RÜCKSTELLEN')
+      reset
         ? 'Fire panel: reset. Sprinklers shut.'
         : 'Fire panel: reset refused; fire or smoke still present.',
     );
   });
+  const alarmSounderModel = createFireBeacon(worldUnitsPerMetre);
+  const alarmSounder = alarmSounderModel.group;
+  alarmSounder.position.set(
+    labRoom.door.handle.x,
+    floorY + 2.47 * worldUnitsPerMetre,
+    room.maxZ - 0.1 * worldUnitsPerMetre,
+  );
+  alarmSounder.rotation.y = Math.PI;
+  lab.add(alarmSounder);
   const labBeacon = new PointLight('#ee3020', 0, 12, 2);
-  labBeacon.position.set(0, room.ceilingY - 0.65, room.maxZ - 1.1);
+  labBeacon.position.copy(alarmSounder.position);
+  labBeacon.position.z -= 0.12 * worldUnitsPerMetre;
   lab.add(labBeacon);
   const hallBeacon = new PointLight('#ee3020', 0, 12, 2);
   hallBeacon.position.set(
@@ -988,6 +1011,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   {
     const replaceWorld = (next: World) => {
       world = next;
+      fieldLockLogged = false;
       circuitBoard.restarted();
       autoStart = null;
       followTrim = false;
@@ -1123,9 +1147,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   }
   for (const part of museum.switchParts)
     fixture(part, 'Museum light switch', () => {
-      const on = museum.toggleLights();
+      museum.toggleLights();
       audio.play('bakelite-switch');
-      if (on) window.setTimeout(() => audio.play('ballast-start'), 90);
     });
   for (const [part, action] of museum.actions)
     fixture(part, 'Museum exhibit', () => {
@@ -1742,7 +1765,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   ashtray.group.scale.setScalar(0.375 * worldUnitsPerMetre);
   lab.add(ashtray.group);
   dynamic.push(() =>
-    ashtray.update(performance.now() / 1000, reducedMotion.matches),
+    ashtray.update(performance.now() / 1000, reducedMotion.matches, fire.water),
   );
   const heatSmoke = {
     spindle: createSmokeEmitter(),
@@ -2030,6 +2053,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     z: gen2.group.position.z + z * worldUnitsPerMetre,
   });
   const soundSources = [
+    { id: 'pa', ...corridor.paPosition },
     { id: 'supply', ...gen2At(-0.66, 0.4) },
     { id: 'valves', ...gen2At(-0.66, 1.2) },
     { id: 'spindle', ...gen2At(0, 1.0) },
@@ -2063,9 +2087,9 @@ export function startScene(canvas: HTMLCanvasElement) {
     {
       // The lab's alarm sounder, beside its beacon over the door.
       id: 'sounder',
-      x: 0,
-      y: room.ceilingY - 0.65,
-      z: room.maxZ - 1.1,
+      x: alarmSounder.position.x,
+      y: alarmSounder.position.y,
+      z: alarmSounder.position.z,
     },
     {
       id: 'sprinkler',
@@ -2122,22 +2146,13 @@ export function startScene(canvas: HTMLCanvasElement) {
   const overlay = document.createElement('div');
   overlay.className = 'rack-ui';
   overlay.innerHTML = `<div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"><button type="button" id="reset-simulation" class="reset-simulation" title="Start again: a fresh, cold lab">Reset Simulation</button></div><div class="rack-nav" role="group" aria-label="Movement and zoom"><button type="button" data-pan="left" aria-label="Step left">◀</button><button type="button" data-pan="up" aria-label="Step forward">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Step back">▼</button><button type="button" data-pan="right" aria-label="Step right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook" hidden><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log">▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: ZOOM · ALT+WHEEL: HEIGHT · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
-  const fireStatus = document.createElement('div');
-  fireStatus.style.cssText =
-    'position:absolute;left:50%;top:16%;transform:translateX(-50%);z-index:10;text-align:center;color:#ffd6b1;background:#420b08dd;padding:12px 20px;font:700 22px monospace;letter-spacing:2px;pointer-events:auto';
-  fireStatus.hidden = true;
-  const ruinTitle = document.createElement('div');
-  ruinTitle.textContent = 'FIRE OUT · VX3 DESTROYED';
-  const ruinHint = document.createElement('div');
-  ruinHint.textContent = 'Reset Simulation (top left) to start again.';
-  ruinHint.style.cssText =
-    'font:400 13px monospace;letter-spacing:1px;margin-top:6px';
-  fireStatus.append(ruinTitle, ruinHint);
-  overlay.append(fireStatus);
   // Resetting is always by hand: a ruined machine stays ruined until the
   // operator asks for a fresh, cold lab. The room's lights are left alone.
   const resetSimulation = () => {
+    ashtray.reset();
+    audio.resetFireAnnouncements();
     world = createWorld();
+    fieldLockLogged = false;
     circuitBoard.restarted();
     autoStart = null;
     followTrim = false;
@@ -2147,7 +2162,6 @@ export function startScene(canvas: HTMLCanvasElement) {
     Object.assign(board, createBoard());
     Object.assign(settings, createRackControls());
     Object.assign(rig, createRig());
-    fireStatus.hidden = true;
     write('Simulation reset. VX3 cold.');
     delayedPrinter.queue('SIMULATION RESET · VX3 COLD');
   };
@@ -2281,6 +2295,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       unread.textContent = String(unseen);
       tab.setAttribute('aria-label', `Open logbook, ${unseen} new entries`);
     }
+    return item.textContent;
   };
   write('Lab opened. VX3 cold. For educational use only.');
   overlay.querySelector('#close-log')!.addEventListener('click', () => {
@@ -2391,13 +2406,38 @@ export function startScene(canvas: HTMLCanvasElement) {
   // a time, as the AUTO cheat does, to watch the full cycle.
   if (inspectionParams.get('slowstart') === 'on') {
     autoStart = createAutoStart(coldStartSteps);
-    write('Automatic cold start: one control at a time.');
+    const line = write('Automatic cold start: one control at a time.');
+    if (line) delayedPrinter.queue(line);
   }
   if (inspectionParams.get('plant-lights') === 'on') plantRoom.toggleLights();
   if (inspectionParams.get('museum-lights') === 'on') museum.toggleLights();
   // Named viewpoints: shareable inspection links (?view=rack) and the
   // teleport board's destinations.
   const viewpoints: Record<string, () => void> = {
+    'pa-speaker': () => {
+      walker.x = corridor.paPosition.x;
+      walker.z = corridor.paPosition.z + 1.3 * metre;
+      orbitYaw = 0;
+      orbitPitch = Math.atan2(2.86 - 1.8034, 1.3);
+    },
+    'lab-sounder': () => {
+      walker.x = alarmSounder.position.x;
+      walker.z = room.maxZ - 1.8 * metre;
+      orbitYaw = Math.PI;
+      orbitPitch = Math.atan2(2.47 - 1.8034, 1.8);
+    },
+    'lab-doors': () => {
+      walker.x = labRoom.door.handle.x;
+      walker.z = room.maxZ - 1.8 * metre;
+      orbitYaw = Math.PI;
+      orbitPitch = -0.22;
+    },
+    'lab-doors-outside': () => {
+      walker.x = labRoom.door.handle.x;
+      walker.z = room.maxZ + 2.0 * metre;
+      orbitYaw = 0;
+      orbitPitch = -0.18;
+    },
     'museum-north': () => {
       walker.x = museum.group.position.x - 1.0 * metre;
       walker.z = museum.group.position.z + 2.4 * metre;
@@ -2405,7 +2445,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       orbitPitch = 0;
     },
     'museum-switch': () => {
-      walker.x = museum.group.position.x - 3.55 * metre;
+      walker.x = museum.group.position.x - 1.6 * metre;
       walker.z = museum.group.position.z + 1.2 * metre;
       orbitYaw = 0;
       orbitPitch = -0.32;
@@ -3112,7 +3152,12 @@ export function startScene(canvas: HTMLCanvasElement) {
     if (autoStart) {
       const step = autoStart.advance(world, delta);
       extra.push(...step.events);
-      if (step.line) write(step.line);
+      // Each step is a control worked, so the teletype prints it too, as it
+      // prints the operator's own.
+      if (step.line) {
+        const line = write(step.line);
+        if (line) delayedPrinter.queue(line);
+      }
       if (autoStart.done) {
         autoStart = null;
         followTrim = true;
@@ -3256,8 +3301,6 @@ export function startScene(canvas: HTMLCanvasElement) {
           status('Equipment fire detected. Sprinklers triggered.');
         } else if (event.event === 'extinguished') {
           status('FIRE OUT. Installation destroyed; instruments at zero.');
-        } else if (event.event === 'water-stopped') {
-          status('Sprinkler supply shut off automatically after 45 seconds.');
         }
       } else if (event.source === 'rig') {
         if (event.event.kind === 'incident') {
@@ -3265,9 +3308,13 @@ export function startScene(canvas: HTMLCanvasElement) {
           status(event.event.text);
         } else if (event.event.kind === 'warmed')
           status('Heaters at temperature.');
-        else if (event.event.kind === 'field-locked')
-          status('H-B field locked.');
-        else status('H-B field wandering. Strain rising.');
+        else if (event.event.kind === 'field-locked') {
+          if (!fieldLockLogged) status('H-B field locked.');
+          fieldLockLogged = true;
+        } else {
+          fieldLockLogged = false;
+          status('H-B field wandering. Strain rising.');
+        }
       } else if (
         event.source === 'vessel' &&
         event.event.kind === 'catastrophe'
@@ -3280,15 +3327,22 @@ export function startScene(canvas: HTMLCanvasElement) {
         status('VX3 fully operational.');
       }
     }
-    const beaconPulse =
-      fire.alarm && !extinguished && Math.sin(time * 0.006) > 0;
-    labRoom.setFireAlarm(fire.alarm && !extinguished);
-    showFireLcd(
-      extinguished ? 'extinguished' : fire.alarm ? 'alarm' : 'normal',
+    // The alarm sounds until the corridor panel's RÜCKSTELLEN resets it,
+    // even after the fire has burned out.
+    const beaconPulse = fireBeaconLit(
+      fire.alarm,
+      time / 1000,
+      reducedMotion.matches,
     );
+    alarmSounderModel.setLit(beaconPulse);
+    labRoom.setFireAlarm(fire.alarm);
+    showFireLcd(
+      fire.alarm ? 'alarm' : extinguished ? 'extinguished' : 'normal',
+    );
+    firePanelModel.update(delta);
     firePanelModel.setLamps(
       !extinguished,
-      fire.alarm && !extinguished && Math.sin(time * 0.009) > 0,
+      fire.alarm && Math.sin(time * 0.009) > 0,
       extinguished,
     );
     labBeacon.intensity = beaconPulse ? 20 : 0;
@@ -3299,8 +3353,8 @@ export function startScene(canvas: HTMLCanvasElement) {
       Math.sin(time * 0.035) > 0.7
         ? 30
         : 0;
-    audio.setFireAlarm(fire.alarm && !extinguished);
-    if (fire.alarm && !extinguished && time >= nextFireCue) {
+    audio.setFireAlarm(fire.alarm);
+    if (fire.alarm && time >= nextFireCue) {
       if (fire.water && (rig.controls.mains || fire.ruinCause === 'short'))
         audio.play('spark');
       nextFireCue = time + 1500;
@@ -3310,7 +3364,6 @@ export function startScene(canvas: HTMLCanvasElement) {
       spray.update(time / 1000, fire.water, reducedMotion.matches);
       puddle.scale.setScalar(Math.max(0.001, fire.puddle));
     }
-    fireStatus.hidden = !extinguished;
     // The machine's effects on the room, from the world model, as in dev0.
     const activity = ferrocoreActivity(rig);
     effectSeconds += delta;
@@ -3490,17 +3543,20 @@ export function startScene(canvas: HTMLCanvasElement) {
     for (const [source, sourceRoom] of soundRooms)
       audio.setTransmission(
         source,
-        // The teleprinter is heard only by someone in the lab with it.
-        source === 'printer'
-          ? listenerRoom === sourceRoom
-            ? 1
-            : 0
-          : transmission(
-              sourceRoom,
-              listenerRoom,
-              doorOpenings,
-              source === 'sink',
-            ),
+        // The PA carries through a closed door, quietly; ordinary equipment
+        // follows the openings, and the printer is confined to its room.
+        source === 'pa'
+          ? 0.35 + 0.65 * transmission(sourceRoom, listenerRoom, doorOpenings)
+          : source === 'printer'
+            ? listenerRoom === sourceRoom
+              ? 1
+              : 0
+            : transmission(
+                sourceRoom,
+                listenerRoom,
+                doorOpenings,
+                source === 'sink',
+              ),
       );
     // Red and blue disagree as the machine nears activation, swelling and
     // falling away; set in PS1 pixels, scaled to what is drawn.
@@ -3540,6 +3596,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     document.removeEventListener('visibilitychange', visibility);
     audio.dispose();
     ashtray.dispose();
+    alarmSounderModel.dispose();
     for (const plume of Object.values(heatSmoke)) plume.dispose();
     for (const { flame } of Object.values(flames)) flame.dispose();
     for (const effect of failureEmbers) effect.dispose();

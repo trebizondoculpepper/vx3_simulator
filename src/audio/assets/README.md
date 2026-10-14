@@ -21,3 +21,13 @@ Rotary detents share the crisp switch recording at gain 0.025; selectors use gai
 `bakelite-heavy-switch.wav` is a 0.42-second excerpt beginning at 1.70 seconds in the owner-supplied Stanwood Studios video. `fluorescent-ballast-start.wav` is a 1.38-second excerpt beginning at 2.17 seconds. Both are mono 22,050 Hz PCM16 WAV with short fades; the startup is raised 18 dB because it is quiet in the source. Their recording credit and source status are in CREDITS.md.
 
 `fluorescent-room-tone.wav` is an original four-second mono 22,050 Hz PCM16 loop rendered by `scripts/synthesize-fluorescent.py`. Analysis of the source video from 3.8 to 7.0 seconds found dominant 120, 240 and 360 Hz components and a smaller 258 Hz tone. The synthesized loop layers those tones with a faint 60 Hz fundamental and quiet shaped noise, and is heard only when the listener's room lights are on. No ambience from the video is sampled into this file.
+
+## German fire PA
+
+`fire-evacuate-de.mp3` (about 10.3 s) and `fire-cancelled-de.mp3` (about 5.8 s) are pre-rendered neural speech, not browser speech synthesis. Both are mono, 44.1 kHz, 128 kb/s MP3. Render again with `uv run scripts/render-fire-announcements.py` (requires FFmpeg); the script pins edge-tts 7.3.1, `de-DE-KatjaNeural`, −8% rate and the exact German text. Generation requires the online voice service; game playback uses only the bundled recordings. Credits are in `CREDITS.md`.
+
+Evacuation: “Achtung. Es wurde ein Brand festgestellt. Bitte verlassen Sie das Gebäude. Dies ist keine Übung.” Cancellation: “Der Brand wurde überprüft. Der Alarm ist aufgehoben.” The evacuation repeats with a 20-second quiet gap after each spoken message; successful cancellation interrupts it and plays the all-clear once after two seconds. A refused panel reset does not announce cancellation. The tonal alarm is ducked during speech, and the master mute/volume controls apply. Reset Simulation stops pending and playing announcements silently.
+
+The PA version uses a 350–3400 Hz band, a +4 dB presence peak at 1.6 kHz, 3:1 compression and tanh soft clipping, followed by faint 45/95/160 ms reflections before final loudness normalisation. It plays from the small corridor speaker above the cable trays, with distance, stereo direction and extra closed-door filtering. Closed doors pass 35% of the PA level before distance attenuation; open doors restore the direct level. The siren is a separate red sounder inside the lab.
+
+Fire timing is siren at alarm onset, sprinklers after 3 seconds, and first evacuation speech after 6 seconds. The red sounder-beacon above the lab door flashes twice per second while the alarm is active (steady with reduced motion). Sprinkler discharge permanently extinguishes the cigarette for the current run.

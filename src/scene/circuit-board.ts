@@ -26,6 +26,7 @@ import { createToggle } from './panel-switchgear';
 import { createCanvasTexture } from './screens';
 import { createPrintedImageTexture } from './printed-image';
 import { coreProjection } from '../game/core-projection';
+import { createCoreProjectionAnimation } from './core-projection-animation';
 import type { CoreProjection } from '../game/core-projection';
 import { FERROCORE_MAX_ANGULAR_VELOCITY } from '../game/ferrocore-anomaly';
 import type { Texture } from 'three';
@@ -1090,8 +1091,14 @@ export function createCircuitBoard(
         const frame = new Mesh(new ShapeGeometry(outer, 6), housing);
         frame.position.set(x, recorderY + 0.015, screenZ + bulge * 0.35);
         face.add(frame);
-        let shown: CoreProjection = 'basis';
-        follow.push(() => {
+        const animation = createCoreProjectionAnimation();
+        kit.textures.push(animation.texture);
+        const reducedMotion = window.matchMedia(
+          '(prefers-reduced-motion: reduce)',
+        );
+        let phase = 0;
+        let clock = 0;
+        updates.push((delta) => {
           glass.visible = !wrecked();
           skin.visible = !wrecked();
           if (wrecked()) return;
@@ -1099,9 +1106,22 @@ export function createCircuitBoard(
             read<number>('vessel.temperature'),
             read('vessel.failure') !== null,
           );
-          if (next === shown) return;
-          shown = next;
-          screen.map = projections().get(next)!;
+          const animate =
+            read<boolean>('plant.fullyOperational') &&
+            next !== 'fault' &&
+            !reducedMotion.matches;
+          if (!animate) {
+            screen.map = projections().get(next)!;
+            clock = 0;
+            return;
+          }
+          phase += delta;
+          clock += delta;
+          if (clock >= 0.1 || screen.map !== animation.texture) {
+            animation.draw(next, phase);
+            clock %= 0.1;
+          }
+          screen.map = animation.texture;
         });
         label(face, rec.label, x, recorderY - 0.145, 0.014);
         return;

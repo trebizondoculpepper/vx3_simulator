@@ -1,14 +1,9 @@
+import { SPRINKLER_DELAY } from './fire-sequence';
 import type { OverheatState } from './overheat';
 import type { RedlineChannel } from './redlines';
 
 export type FireEvent =
-  | 'alarm'
-  | 'water'
-  | 'water-stopped'
-  | 'fire'
-  | 'extinguished'
-  | 'ruined-fire'
-  | 'ruined-short';
+  'alarm' | 'water' | 'fire' | 'extinguished' | 'ruined-fire' | 'ruined-short';
 export type RuinCause = 'fire' | 'short' | null;
 
 export interface FireIncident {
@@ -31,7 +26,6 @@ export interface FireIncident {
 const channels: RedlineChannel[] = ['spindle', 'field', 'load'];
 export const DETECTOR_LEVEL = 0.25;
 export const IGNITION_HEAT = 0.9;
-export const SPRINKLER_RUN_SECONDS = 45;
 
 export function createFireIncident(): FireIncident {
   return {
@@ -58,13 +52,25 @@ export function pressFireCall(state: FireIncident): boolean {
   return true;
 }
 
+/**
+ * The fire panel's RÜCKSTELLEN. The alarm sounds until it is reset, and it
+ * resets only once nothing burns and the detectors are clear of smoke. A
+ * ruined lab stays ruined: reset silences its alarm and shuts its
+ * sprinklers once it has burned out, and that is all.
+ */
 export function resetFirePanel(state: FireIncident, smoke: number): boolean {
-  if (
-    state.ruinCause ||
-    smoke >= DETECTOR_LEVEL ||
-    channels.some((id) => state.burning[id])
-  )
+  if (smoke >= DETECTOR_LEVEL || channels.some((id) => state.burning[id]))
     return false;
+  if (state.ruinCause) {
+    if (!state.extinguished) return false;
+    state.alarm = false;
+    state.alarmAge = 0;
+    if (state.water) {
+      state.water = false;
+      state.sprinklerSpent = true;
+    }
+    return true;
+  }
   Object.assign(state, createFireIncident(), { puddle: state.puddle });
   return true;
 }
@@ -81,14 +87,8 @@ export function stepFireIncident(
   while (remaining > 0) {
     const dt = Math.min(0.05, remaining);
     remaining -= dt;
-    if (state.water) {
-      state.waterAge += dt;
-      if (state.waterAge >= SPRINKLER_RUN_SECONDS) {
-        state.water = false;
-        state.sprinklerSpent = true;
-        events.push('water-stopped');
-      }
-    }
+    // The sprinklers, like the alarm, run until the panel is reset.
+    if (state.water) state.waterAge += dt;
     if (state.ruinCause) {
       state.ruinAge += dt;
       state.puddle = state.water
@@ -106,7 +106,11 @@ export function stepFireIncident(
       }
     } else {
       state.alarmAge += dt;
-      if (!state.water && !state.sprinklerSpent && state.alarmAge >= 3) {
+      if (
+        !state.water &&
+        !state.sprinklerSpent &&
+        state.alarmAge >= SPRINKLER_DELAY
+      ) {
         state.water = true;
         state.waterAge = 0;
         events.push('water');

@@ -5,6 +5,7 @@ import type { RigState } from '../game/rig';
 import { writeSoundParameters } from './sound-parameters';
 import type { SoundParameters } from './sound-parameters';
 import { renderFireAlarm } from './fire-alarm';
+import { createFireAnnouncements } from './fire-announcements';
 import { createSpatialMix } from './spatial-mix';
 import type { Emitter, SpatialMix, SpatialOptions } from './spatial-mix';
 import type { ZZFXSound } from 'zzfx';
@@ -62,6 +63,7 @@ export type SoundSource =
   | 'sink'
   | 'sprinkler'
   | 'sounder'
+  | 'pa'
   | 'rectifier'
   | 'recirculator';
 
@@ -385,6 +387,7 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
 
 export function createSoundEngine() {
   let tapeMusic: ReturnType<typeof createTapeMusic> | null = null;
+  let announcements: ReturnType<typeof createFireAnnouncements> | null = null;
   let tapeRequest = 0;
   let bootBuffer: Promise<AudioBuffer> | null = null;
   let bootSource: AudioBufferSourceNode | null = null;
@@ -396,6 +399,10 @@ export function createSoundEngine() {
   let plantPowered = false;
   let sprinklersActive = false;
   let fireAlarmActive = false;
+  let pendingAllClear = false;
+  let paGain: GainNode | null = null;
+  let paPan: StereoPannerNode | null = null;
+  let paWall: BiquadFilterNode | null = null;
   let recirculatorWorking = false;
   let graph: AudioGraph | null = null;
   let loading: Promise<void> | null = null;
@@ -452,6 +459,21 @@ export function createSoundEngine() {
       if (!graph) {
         graph = createGraph(await import('zzfx'));
         const current = graph;
+        paGain = current.context.createGain();
+        paGain.gain.value = 0;
+        paPan = current.context.createStereoPanner();
+        paWall = current.context.createBiquadFilter();
+        paWall.type = 'lowpass';
+        paWall.frequency.value = 3400;
+        paGain.connect(paWall).connect(paPan).connect(current.master);
+        announcements = createFireAnnouncements(current.context, paGain);
+        void announcements
+          .preload()
+          .catch((error) => console.warn('Fire PA could not preload.', error));
+        if (pendingAllClear) {
+          pendingAllClear = false;
+          announcements.cancel();
+        } else announcements.setAlarm(fireAlarmActive);
         void graph.recordings
           .preload()
           .catch((error) =>
@@ -656,9 +678,16 @@ export function createSoundEngine() {
   ) => {
     if (!graph || !visible) return;
     tapeMusic?.update();
+    announcements?.update();
     const { context } = graph;
     writeSoundParameters(state, controls, parameters);
     const now = context.currentTime;
+    if (paGain && paPan && paWall) {
+      ramp(paGain.gain, 1.2 * distanceGain('pa'), now);
+      ramp(paPan.pan, spatial?.pan('pa') ?? 0, now);
+      const throughDoor = transmitted.get('pa') ?? 1;
+      ramp(paWall.frequency, 1500 + throughDoor * 1900, now);
+    }
     ramp(graph.room.gain, parameters.roomGain, now);
     ramp(
       graph.recirculator.gain,
@@ -677,7 +706,9 @@ export function createSoundEngine() {
     );
     ramp(
       graph.alarm.gain,
-      fireAlarmActive ? 0.3 * distanceGain('sounder') : 0,
+      fireAlarmActive
+        ? (announcements?.speaking ? 0.045 : 0.3) * distanceGain('sounder')
+        : 0,
       now,
     );
     ramp(graph.hum.gain, parameters.humGain * distanceGain('supply'), now);
@@ -767,6 +798,10 @@ export function createSoundEngine() {
     disposed = true;
     tapeRequest++;
     tapeMusic?.dispose();
+    announcements?.dispose();
+    paGain?.disconnect();
+    paWall?.disconnect();
+    paPan?.disconnect();
     bootRequest++;
     bootSource?.stop();
     cassetteRequest++;
@@ -801,6 +836,18 @@ export function createSoundEngine() {
     /** The fire alarm's sounders, while the panel is in alarm. */
     setFireAlarm(on: boolean) {
       fireAlarmActive = on;
+      if (on) pendingAllClear = false;
+      announcements?.setAlarm(on);
+    },
+    announceFireCancelled() {
+      fireAlarmActive = false;
+      pendingAllClear = !announcements;
+      announcements?.cancel();
+    },
+    resetFireAnnouncements() {
+      fireAlarmActive = false;
+      pendingAllClear = false;
+      announcements?.reset();
     },
     unlock,
     playComputerBoot,

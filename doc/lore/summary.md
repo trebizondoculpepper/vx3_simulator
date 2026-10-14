@@ -10,6 +10,8 @@ The community fan wiki places the VX3 in the early 1970s. Its readouts were larg
 
 In the game's fiction, the lab is real and still exists: Room −2.17, two floors below the Helmholtz-Bau at the University of Leipzig. The game is a recreation of that facility, not a historical reconstruction or a museum piece. Its VX3 rig and period apparatus are original and have been left largely untouched by years of progress, while the ducting, cable trays and safety features have been modernised around them. In-world text should never call the lab a reconstruction, an exhibit or historical; the University of Leipzig setting is our own invention, not community lore.
 
+The laboratory is where its namesake carried out much of his early pioneering work, which led to the development of the first working VX3. It remains a working laboratory within the university’s Institut für experimentelle Feldphysik in the present day. This laboratory history and its role in the VX3’s development are local game lore supplied by the owner; they are not claims about the real University of Leipzig or established community history.
+
 ## Core community vocabulary
 
 Delta (δ) is the headline performance score, and Yalgeth's Limit places its practical ceiling at 0.88 in four dimensions. Ferrocores are common consumables; a typical rig needs four to six. The Baltovsky chamber dissipates flux and can glow bright yellow when a ferrocore is dead. The main bus controller, betaform amplifier, isolated-frame flux emitter, varistance-isolator and ion insulation plates provide useful names and physical roles for a complete rack. [Delta](https://vxjunkies.fandom.com/wiki/Delta), [Getting Started](https://vxjunkies.fandom.com/wiki/Getting_Started)

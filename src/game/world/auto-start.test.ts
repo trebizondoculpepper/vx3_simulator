@@ -20,9 +20,18 @@ describe('the automatic cold start', () => {
     expect(auto.done).toBe(true);
     expect(world.read('plant.fullyOperational')).toBe(true);
     // Each control was worked in its own moment, and the waits were short.
-    expect(
-      lines.filter((l) => l.includes('→') || /: [a-z]/.test(l)).length,
-    ).toBeGreaterThan(10);
+    const worked = lines.filter(
+      (l) => l.startsWith('Automatic start:') && !l.includes(' wait '),
+    );
+    expect(worked.length).toBeGreaterThan(10);
+    // Each names the control where the operator finds it, and what it did.
+    expect(worked).toContain(
+      'Automatic start: Column B11 SÄULE: SENKEN button pressed.',
+    );
+    expect(worked).toContain(
+      'Automatic start: West wall: column supply isolator on.',
+    );
+    expect(worked.some((l) => / to \d/.test(l))).toBe(true);
     expect(seconds).toBeLessThan(120);
   });
 });

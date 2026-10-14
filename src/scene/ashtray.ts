@@ -81,6 +81,8 @@ export function createAshtray() {
   segment(0.12, '#ece6d6', -0.11); // paper
   segment(0.025, '#8e8a84', -0.1825); // ash
   const ember = segment(0.008, '#ff5a1a', -0.199, true);
+  ember.name = 'Cigarette ember';
+  let burning = true;
   const emberMaterial = ember.material as Material & { color: Color };
 
   // Smoke uses the same emitter as the cabinet, at cigarette scale.
@@ -93,12 +95,18 @@ export function createAshtray() {
   return {
     group,
     /** Advance the smoke and ember; `seconds` is wall-clock time. */
-    update(seconds: number, reducedMotion: boolean) {
+    update(seconds: number, reducedMotion: boolean, sprinklers = false) {
+      if (sprinklers) burning = false;
       const time = reducedMotion ? 7 : seconds;
       const flicker =
         0.5 + 0.3 * Math.sin(time * 2.3) + 0.2 * Math.sin(time * 7.1);
-      emberMaterial.color.copy(emberDim).lerp(emberBright, flicker);
-      smoke.update(seconds, 1, reducedMotion);
+      if (burning)
+        emberMaterial.color.copy(emberDim).lerp(emberBright, flicker);
+      else emberMaterial.color.set('#59534a');
+      smoke.update(seconds, burning ? 1 : 0, reducedMotion);
+    },
+    reset() {
+      burning = true;
     },
     dispose() {
       group.traverse((object) => {

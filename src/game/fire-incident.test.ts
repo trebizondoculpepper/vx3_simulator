@@ -46,6 +46,14 @@ describe('fire incident', () => {
     expect(events).toContain('ruined-short');
     expect(fire.ruinCause).toBe('short');
     expect(resetFirePanel(fire, 0)).toBe(false);
+    // Once it is out, reset silences the alarm and shuts the water, and
+    // the lab stays ruined.
+    fire.extinguished = true;
+    expect(resetFirePanel(fire, 0.3)).toBe(false);
+    expect(resetFirePanel(fire, 0)).toBe(true);
+    expect(fire.alarm).toBe(false);
+    expect(fire.water).toBe(false);
+    expect(fire.ruinCause).toBe('short');
   });
 
   it('counts sustained fire before the delayed smoke alarm', () => {
@@ -68,32 +76,34 @@ describe('fire incident', () => {
     expect(resetFirePanel(fire, 0)).toBe(true);
   });
 
-  it('stops sprinkler flow 45 seconds after it begins without restarting under a latched alarm', () => {
+  it('runs the sprinklers until the panel is reset, then can run them again', () => {
     const fire = createFireIncident();
     const heat = createOverheatState();
     pressFireCall(fire);
     stepFireIncident(fire, heat, false, 3.1);
     expect(fire.water).toBe(true);
-    const events = stepFireIncident(fire, heat, false, 45.1);
-    expect(events).toContain('water-stopped');
-    expect(fire.water).toBe(false);
-    expect(fire.sprinklerSpent).toBe(true);
-    stepFireIncident(fire, heat, false, 10);
-    expect(fire.water).toBe(false);
+    stepFireIncident(fire, heat, false, 600);
+    expect(fire.water).toBe(true);
+    expect(fire.alarm).toBe(true);
     expect(resetFirePanel(fire, 0)).toBe(true);
+    expect(fire.water).toBe(false);
+    expect(fire.alarm).toBe(false);
     expect(pressFireCall(fire)).toBe(true);
     stepFireIncident(fire, heat, false, 3.1);
     expect(fire.water).toBe(true);
   });
 
-  it('also shuts water off 45 seconds after an electrical ruin', () => {
+  it('keeps the water on after an electrical ruin until the panel is reset', () => {
     const fire = createFireIncident();
     const heat = createOverheatState();
     pressFireCall(fire);
     stepFireIncident(fire, heat, true, 8.1);
     expect(fire.ruinCause).toBe('short');
+    stepFireIncident(fire, heat, false, 600);
     expect(fire.water).toBe(true);
-    expect(stepFireIncident(fire, heat, false, 40)).toContain('water-stopped');
+    fire.extinguished = true;
+    expect(resetFirePanel(fire, 0)).toBe(true);
     expect(fire.water).toBe(false);
+    expect(fire.ruinCause).toBe('short');
   });
 });
