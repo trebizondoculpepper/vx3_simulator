@@ -1011,6 +1011,9 @@ export function createCircuitBoard(
         face.add(frame);
         let shown: CoreProjection = 'basis';
         follow.push(() => {
+          glass.visible = !wrecked();
+          skin.visible = !wrecked();
+          if (wrecked()) return;
           const next = coreProjection(
             read<number>('vessel.temperature'),
             read('vessel.failure') !== null,
@@ -1070,7 +1073,7 @@ export function createCircuitBoard(
         clock += delta;
         if (clock < 0.25) return;
         clock %= 0.25;
-        samples.unshift(rec.read(world()));
+        samples.unshift(wrecked() ? 0 : rec.read(world()));
         samples.length = paperH;
         draw();
       });

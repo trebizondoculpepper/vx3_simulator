@@ -21,8 +21,8 @@ Updated `src/rendering/start-scene.ts`, `src/scene/circuit-board.ts`, `src/game/
 
 ## Outcomes
 
-Typecheck, lint, format check, all 278 tests, and production build pass. The local Vite server responds. In the Chrome dev0 tab, AUTO reached full operation and the world-panel status showed no alarms.
+Typecheck, lint, format check, all 278 tests, and production build pass. The local Vite server responds. In the Chrome dev0 tab, AUTO reached full operation and the world-panel status showed no alarms. The main lab's three-bay board rendered at its east-wall inspection viewpoint. A follow-up pass darkened its CRT after extinguishment and stopped the repeating alarm sound in that state. Live inspection of the real lab's fire scenario showed sparks and sprinkler spray, followed by the extinguished overlay, stopped flames, and soot after roughly eight seconds. The old geometric flame at the previous rack position was replaced by animated flames attached to the new column.
 
 ## Next Steps
 
-Inspect the main lab visually in a browser, especially circuit-board placement and the fire sequence, then tune any presentation issues seen there.
+Exercise the full manual cold-start in the main lab during playtesting. The world-model test covers immediate sprinklers, the eight-second extinguished transition, zeroed gauges, and latched shutdown.

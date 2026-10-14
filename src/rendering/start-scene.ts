@@ -1,5 +1,10 @@
 import { createRenderer, renderScale, useEnvironment } from './render-style';
-import { play, prepareVessel } from '../game/world/scenarios';
+import {
+  coldStart as coldStartSteps,
+  overdrive,
+  play,
+  prepareVessel,
+} from '../game/world/scenarios';
 import { createPrintedImageTexture } from '../scene/printed-image';
 import { defaultControlRecording } from '../audio/control-sound-defaults';
 import type { ControlSound } from '../audio/rig-sounds';
@@ -17,6 +22,7 @@ import { createPanelKit, disposeKit } from '../scene/eighties-controls';
 import { createEmbers } from '../scene/embers';
 import { createElectricArcs } from '../scene/electric-arcs';
 import { createSmokeStains } from '../scene/smoke-stains';
+import { createFlamePlume } from '../scene/flame-plume';
 import {
   Box3,
   BoxGeometry,
@@ -88,11 +94,7 @@ import { createLabRoom } from '../scene/lab-room';
 import { createCorridor } from '../scene/corridor';
 import { createPlantRoom } from '../scene/plant-room';
 import { createMercuryRectifier } from '../scene/mercury-rectifier';
-import {
-  GEN1_RACK_Z,
-  GEN1_SIDE_CABINET,
-  GEN1_TOTAL_HEIGHT,
-} from '../scene/gen1-vx3';
+import { GEN1_RACK_Z, GEN1_TOTAL_HEIGHT } from '../scene/gen1-vx3';
 import { knobDirection } from '../scene/rotary-knob';
 import { xenonReady } from '../game/xenon-supply';
 import { benchScreen, createBenchComputer } from '../game/bench-monitor';
@@ -1622,28 +1624,23 @@ export function startScene(canvas: HTMLCanvasElement) {
   let arcStrikes = 0;
   const flames = {} as Record<
     'spindle' | 'field' | 'load',
-    { flame: Mesh; light: PointLight }
+    { flame: ReturnType<typeof createFlamePlume>; light: PointLight }
   >;
-  for (const [channel, x, z] of [
-    ['spindle', -1.1, GEN1_RACK_Z + 0.35],
-    ['field', 1.05, GEN1_RACK_Z + 0.35],
-    ['load', GEN1_SIDE_CABINET.x, GEN1_SIDE_CABINET.z + 0.45],
+  for (const [channel, x, y, z] of [
+    ['spindle', -0.66, 1.35, 0.38],
+    ['field', 0.69, 1.4, 0.41],
+    ['load', 0, 0.85, 0.66],
   ] as const) {
     const plume = heatSmoke[channel];
-    plume.group.position.set(x, floorY + 1.8 * worldUnitsPerMetre, z);
-    plume.group.scale.setScalar(0.65 * worldUnitsPerMetre);
-    scene.add(plume.group);
-    const flame = new Mesh(
-      new OctahedronGeometry(0.22 * worldUnitsPerMetre, 0),
-      material('#ff7519', true, true),
-    );
-    flame.position.copy(plume.group.position);
-    flame.visible = false;
-    flame.userData.noCollision = true;
-    scene.add(flame);
-    const light = new PointLight('#ff6a17', 0, 4 * worldUnitsPerMetre, 2);
-    light.position.copy(flame.position);
-    scene.add(light);
+    plume.group.position.set(x, y, z);
+    plume.group.scale.setScalar(0.65);
+    gen2.group.add(plume.group);
+    const flame = createFlamePlume();
+    flame.group.position.set(x, y, z + 0.04);
+    gen2.group.add(flame.group);
+    const light = new PointLight('#ff6a17', 0, 4, 2);
+    light.position.set(x, y + 0.15, z + 0.2);
+    gen2.group.add(light);
     flames[channel] = { flame, light };
   }
   const discharge = new PointLight('#78d7ff', 0, 5 * worldUnitsPerMetre, 2);
@@ -1930,12 +1927,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   // Rooms are culled whole: everything in the lab hangs under `lab`, and
   // the plant room is these four groups. The lab pieces placed straight in
   // the scene move under it, keeping their world positions.
-  for (const object of [
-    discharge,
-    ...Object.values(heatSmoke).map((plume) => plume.group),
-    ...Object.values(flames).flatMap(({ flame, light }) => [flame, light]),
-  ])
-    lab.attach(object);
+  for (const object of [discharge]) lab.attach(object);
   const plantGroups = [
     plantRoom.group,
     rectifier.group,
@@ -2198,6 +2190,15 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   // A shareable inspection view for the east-wall installation.
   const inspectionParams = new URLSearchParams(window.location.search);
+  // A repeatable development inspection of the real lab's fire effects.
+  // Enter the frame at ignition so the sprinklers and final transition can
+  // be watched at their actual pace, instead of waiting through cold start.
+  if (import.meta.env.DEV && inspectionParams.get('scenario') === 'fire') {
+    world = play([...coldStartSteps, ...overdrive]).world;
+    for (let i = 0; i < 1200 && !world.read('fire.ruined'); i++)
+      world.tick(0.1, () => 0.5);
+    circuitBoard.restarted();
+  }
   // Inspection views (?view=…), each standing the walker in front of one
   // installation in the game. Only views of dev-only spaces carry a dev_
   // prefix; these are all part of the real game, so none does.
@@ -2251,6 +2252,12 @@ export function startScene(canvas: HTMLCanvasElement) {
       walker.z = circuitBoard.group.position.z;
       orbitYaw = Math.PI / 2;
       orbitPitch = -0.16;
+    },
+    column: () => {
+      walker.x = gen2.group.position.x;
+      walker.z = gen2.group.position.z + 2.4 * metre;
+      orbitYaw = 0;
+      orbitPitch = -0.2;
     },
     rack: () => {
       walker.x = 0;
@@ -2984,11 +2991,9 @@ export function startScene(canvas: HTMLCanvasElement) {
       );
     for (const channel of ['spindle', 'field', 'load'] as const) {
       const { flame, light } = flames[channel];
-      flame.visible = fire.burning[channel] && !extinguished;
-      flame.scale.setScalar(
-        reducedMotion.matches ? 1 : 0.85 + 0.25 * Math.sin(time * 0.019),
-      );
-      light.intensity = flame.visible ? 9 + 3 * Math.sin(time * 0.013) : 0;
+      const burning = fire.burning[channel] && !extinguished;
+      flame.update(time / 1000, burning ? 1 : 0, reducedMotion.matches);
+      light.intensity = burning ? 9 + 3 * Math.sin(time * 0.013) : 0;
     }
     const hot = Math.max(...Object.values(overheat.smoke));
     const sparking = fire.ruinCause
@@ -3060,7 +3065,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       Math.sin(time * 0.035) > 0.7
         ? 30
         : 0;
-    if (fire.alarm && time >= nextFireCue) {
+    if (fire.alarm && !extinguished && time >= nextFireCue) {
       audio.play('warning');
       if (fire.water && (rig.controls.mains || fire.ruinCause === 'short'))
         audio.play('spark');
@@ -3261,6 +3266,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     audio.dispose();
     ashtray.dispose();
     for (const plume of Object.values(heatSmoke)) plume.dispose();
+    for (const { flame } of Object.values(flames)) flame.dispose();
     for (const effect of failureEmbers) effect.dispose();
     for (const effect of failureArcs) effect.dispose();
     for (const stain of failureStains) stain.dispose();
