@@ -9,7 +9,8 @@ export type EffectFrame = ReturnType<typeof effectFrame>;
 /**
  * Put an effect frame on the shaders every material shares: the colour
  * phaser, the warp and where it is centred, lost precision and π.
- * `metre` is scene units per metre, since the settings are in metres.
+ * `metre` is scene units per metre, since the settings are in metres:
+ * distances scale up by it, and the warp's waves (per metre) down by it.
  */
 export function applyEffectFrame(
   frame: EffectFrame,
@@ -19,8 +20,10 @@ export function applyEffectFrame(
   ps1Uniforms.time.value = seconds;
   ps1Uniforms.channels.value.set(...frame.channels);
   ps1Uniforms.warp.value = frame.warp;
-  ps1Uniforms.warpTwist.value.set(...frame.twist);
-  ps1Uniforms.warpSwell.value.set(...frame.swell);
+  const [twist, twistFrequency, twistSpeed] = frame.twist;
+  const [swell, swellFrequency, swellSpeed] = frame.swell;
+  ps1Uniforms.warpTwist.value.set(twist, twistFrequency / metre, twistSpeed);
+  ps1Uniforms.warpSwell.value.set(swell, swellFrequency / metre, swellSpeed);
   const [cx, cz, reach] = frame.field;
   ps1Uniforms.warpField.value.set(cx * metre, 0, cz * metre, reach * metre);
   const [grid, tremble, flicker] = frame.precision;

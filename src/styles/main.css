@@ -89,6 +89,21 @@ canvas {
   pointer-events: auto;
   cursor: pointer;
 }
+/* Discreet: a quiet way to start again, never in the way. */
+.sound-controls .reset-simulation {
+  margin-left: 4px;
+  padding: 4px 6px;
+  border-color: #5c604f;
+  background: transparent;
+  color: #9a9a86;
+  font-weight: normal;
+  cursor: pointer;
+}
+.sound-controls .reset-simulation:hover,
+.sound-controls .reset-simulation:focus-visible {
+  color: #e4d0a1;
+  border-color: #7f846e;
+}
 .rack-nav {
   position: absolute;
   left: 22px;

@@ -91,6 +91,8 @@ const SOUND_CUES = [
   'breaker-on',
   'breaker-off',
   'relay',
+  'door-open',
+  'door-close',
 ] as const satisfies readonly SoundCue[];
 
 /** The usual sound of a kind of part doing something, if it has one. */
@@ -530,6 +532,7 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
   const uses = new Map<Object3D, (direction?: number) => void>([
     ...coldStart.uses,
     ...circuitBoard.uses,
+    ...circuitBoard.hatches,
     ...cheatUses,
     ...passages.uses,
   ]);
@@ -955,6 +958,18 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
     cheat(legend: string) {
       for (const [object, use] of cheatUses)
         if (object.name === `CHEAT ${legend}`) {
+          use();
+          return true;
+        }
+      return false;
+    },
+    /** Work a circuit-board part by its name, as a click would. */
+    board(name: string) {
+      for (const [object, use] of [
+        ...circuitBoard.uses,
+        ...circuitBoard.hatches,
+      ])
+        if (object.name === name) {
           use();
           return true;
         }

@@ -103,6 +103,9 @@ export function overheatShare(state: OverheatState) {
   return Math.max(0, Math.min(1, (hottest - 0.35) / (0.9 - 0.35)));
 }
 
+/** How long the lamp test flashes every lamp, seconds. */
+export const LAMP_TEST_SECONDS = 10;
+
 export type WorldEvent =
   | { source: 'vessel'; event: ColumnPrepEvent }
   | { source: 'rig'; event: RigEvent }
@@ -1053,7 +1056,7 @@ export function createWorld() {
     () => {
       if (refused()) return false;
       press('L-TEST');
-      lampTest.set(3);
+      lampTest.set(LAMP_TEST_SECONDS);
       return true;
     },
     'East board bay 2: L-TEST handle',
@@ -1150,15 +1153,23 @@ export function createWorld() {
   const on = columnRunning;
   const testing = g.derive('board.testing', [lampTest], (t) => t > 0);
   const flashOn = g.derive('board.flashOn', [clock], (c) => c % 0.8 < 0.4);
+  // During the lamp test every lamp flashes together, on and off.
+  const testFlash = g.output(
+    'board.testFlash',
+    [testing, flashOn],
+    (t, f) => t && f,
+    { where: 'Every lamp on the boards, during the lamp test' },
+  );
   const windows = annunciators.map((a, i) =>
     g.output(
       `board.window.${a.label}`,
       [alarms, flashOn, testing, fire],
       (phases, flash, test, incident) =>
         !incident.extinguished &&
-        (test ||
-          phases[i] === 'acknowledged' ||
-          (phases[i] === 'unacknowledged' && flash)),
+        (test
+          ? flash
+          : phases[i] === 'acknowledged' ||
+            (phases[i] === 'unacknowledged' && flash)),
       { where: `East board bay ${Math.floor(i / 6) + 1}: ${a.label} window` },
     ),
   );
@@ -1189,13 +1200,15 @@ export function createWorld() {
     const reading = readings[channel];
     g.output(
       `board.grid.${channel}`,
-      [reading, testing, fire],
+      [reading, testing, testFlash, fire],
       // How many of the row's eight lamps are lit.
-      (r, test, incident) =>
+      (r, test, flash, incident) =>
         incident.extinguished
           ? 0
           : test
-            ? 8
+            ? flash
+              ? 8
+              : 0
             : Array.from({ length: 8 }, (_, c) => r > c / 8).filter(Boolean)
                 .length,
       { where: `East board bay 2: grid row ${channel}` },
@@ -1213,8 +1226,8 @@ export function createWorld() {
     const where = `East board under bay ${bay + 1}`;
     g.output(
       `board.status.${bay + 1}.BEREIT`,
-      [mains, testing, fire],
-      (m, t, incident) => !incident.extinguished && (t || m),
+      [mains, testing, testFlash, fire],
+      (m, t, flash, incident) => !incident.extinguished && (t ? flash : m),
       {
         where: `${where}: BEREIT lamp`,
       },

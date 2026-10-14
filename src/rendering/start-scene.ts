@@ -16,9 +16,30 @@ import { createDevDoorways } from '../scene/dev-doorways';
 import { createMuseumGallery } from '../scene/museum-gallery';
 import { MAX_ZOOM, MIN_ZOOM, wheelZoom } from './first-person';
 import { createRoomLighting } from './room-lighting';
+import { createAgedWallMap } from './aged-wall';
 import { createWorld } from '../game/world/world';
+import {
+  divergencePulse,
+  effectFrame,
+  settingsForMachine,
+} from '../game/effect-settings';
+import {
+  applyEffectFrame,
+  exemptFromEffects,
+  stillFrame,
+} from './apply-effects';
+import { createChromaticDivergence } from './chromatic-divergence';
+import type { World, WorldEvent } from '../game/world/world';
+import { createAutoStart } from '../game/world/auto-start';
+import type { AutoStart } from '../game/world/auto-start';
 import { createCircuitBoard } from '../scene/circuit-board';
-import { createPanelKit, disposeKit } from '../scene/eighties-controls';
+import {
+  createEightiesButton,
+  createMicroLabel,
+  createPanelKit,
+  disposeKit,
+} from '../scene/eighties-controls';
+import type { CapColour } from '../scene/eighties-controls';
 import { createEmbers } from '../scene/embers';
 import { createElectricArcs } from '../scene/electric-arcs';
 import { createSmokeStains } from '../scene/smoke-stains';
@@ -134,9 +155,18 @@ export function startScene(canvas: HTMLCanvasElement) {
   const actions = new Map<number, (hit: Intersection) => void>();
   const dynamic: Array<() => void> = [];
   let world = createWorld();
+  // The cheats in the circuit board's southern cupboard: an automatic
+  // cold start in progress, and whether TRIMM is kept on SOLL for the
+  // player (until they turn it themselves).
+  let autoStart: AutoStart | null = null;
+  let followTrim = false;
   const rig = createRig();
   // The room's state near the ferrocores: colour, π, space and sparks.
   let anomaly = anomalyEffects(0, 0, false);
+  // The machine's effects on the room, staged as in dev0: mild precision
+  // and divergence near activation, the walls breathing as it overheats.
+  let effectSeconds = 0;
+  let fullActivation = 0;
   let anomalyLevel = 0;
   const telltales = createSafetyTelltales();
   const overheat = createOverheatState();
@@ -212,12 +242,21 @@ export function startScene(canvas: HTMLCanvasElement) {
   let pressed: string | null = null;
   /** Set while a room fitting is worked: it writes nothing to the log. */
   let quiet = false;
-  const delayedPrinter = createDelayedPrinter((line) =>
-    teleprinter.record(line),
-  );
+  const teleprinterLines: string[] = [];
+  const delayedPrinter = createDelayedPrinter((line) => {
+    teleprinterLines.push(line);
+    teleprinter.record(line);
+  });
   const machineActions = createMachineActionLog(
     () =>
       JSON.stringify({
+        // The machine's state, without the board's own bookkeeping (alarm
+        // phases, handle springs, its clock), which is not the machine.
+        world: Object.fromEntries(
+          Object.entries(world.snapshot()).filter(
+            ([id]) => !id.startsWith('board.'),
+          ),
+        ),
         powerSelections: gen2.powerSelections,
         column: gen2.prep,
         columnPower: gen2.running,
@@ -232,9 +271,18 @@ export function startScene(canvas: HTMLCanvasElement) {
     (label, before, after) =>
       write(describeMachineChange(label, before, after)),
   );
-  const bind = (object: Object3D, action: (hit: Intersection) => void) => {
+  const bind = (
+    object: Object3D,
+    action: (hit: Intersection) => void,
+    /** A machine control, whose changes the teletype records. */
+    machine = true,
+  ) => {
     interactive.push(object);
     actions.set(object.id, (hit) => {
+      if (!machine) {
+        action(hit);
+        return;
+      }
       const part = object.userData.machinePart as
         { machine: string; name: string } | undefined;
       const label = part
@@ -273,22 +321,21 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   const fixture = (object: Object3D, name: string, action: () => void) => {
     markFixture(object, name);
-    bind(object, () => {
-      if (
-        !fire.ruinCause ||
-        name.includes('door') ||
-        name === 'Xenon cage gate'
-      ) {
-        // Room fittings (lights, doors, taps, drawers, the chair) are not
-        // the machine, and stay out of the operator's log.
+    bind(
+      object,
+      () => {
+        // Room fittings (lights, doors, taps, drawers, the chair, the
+        // cheats) are not the machine: they work even with it ruined, and
+        // stay out of the operator's log and off the teletype.
         quiet = true;
         try {
           action();
         } finally {
           quiet = false;
         }
-      }
-    });
+      },
+      false,
+    );
   };
 
   // The cabinet belongs to a room: painted masonry, benches and old test gear.
@@ -307,7 +354,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   const wallThickness = 0.3 * worldUnitsPerMetre;
   const backWallHeight = room.ceilingY - floorY;
-  cube(
+  const northWall = cube(
     lab,
     room.maxX - room.minX,
     backWallHeight,
@@ -317,7 +364,36 @@ export function startScene(canvas: HTMLCanvasElement) {
     floorY + backWallHeight / 2,
     room.minZ - wallThickness / 2,
   );
-  cube(lab, room.maxX - room.minX, 3.4, 0.2, '#3d5750', 0, floorY + 1.7, -3.79);
+  const northDado = cube(
+    lab,
+    room.maxX - room.minX,
+    3.4,
+    0.2,
+    '#3d5750',
+    0,
+    floorY + 1.7,
+    -3.79,
+  );
+  for (const [wall, height, base, seed, dado] of [
+    [northWall, backWallHeight, '#626f68', 810, false],
+    [northDado, 3.4, '#3d5750', 811, true],
+  ] as const) {
+    const map = createAgedWallMap({
+      width: (room.maxX - room.minX) / worldUnitsPerMetre,
+      height: height / worldUnitsPerMetre,
+      base,
+      seed,
+      dado,
+    });
+    textures.push(map);
+    const finish = createPs1Material({
+      color: '#ffffff',
+      map,
+      roughness: 0.96,
+    });
+    materials.push(finish);
+    wall.material = finish;
+  }
   cube(
     lab,
     room.maxX - room.minX,
@@ -494,7 +570,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     audio.play('fire-call');
     if (world.work('fire.Handfeuermelder')) {
       audio.play('warning');
-      write('FEUERALARM: Handmelder betätigt. Räumung einleiten.');
+      write('FIRE ALARM: call point pressed. Evacuate the lab.');
     }
   });
 
@@ -515,8 +591,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   fireBox(firePanel, 0.235, 0.2, 0.01, '#3b403c', 0, 0.04, 0.095, 0.72);
   const fireScreen = fireBox(
     firePanel,
-    0.14,
-    0.055,
+    0.19,
+    0.07,
     0.007,
     '#65a76b',
     0,
@@ -524,6 +600,48 @@ export function startScene(canvas: HTMLCanvasElement) {
     0.103,
     0.9,
   );
+  const fireLcd = createCanvasTexture(384, 128);
+  textures.push(fireLcd.texture);
+  fireScreen.material.map = fireLcd.texture;
+  fireScreen.material.color.set('#ffffff');
+  fireScreen.material.needsUpdate = true;
+  let fireLcdState = '';
+  const showFireLcd = (state: 'normal' | 'alarm' | 'extinguished') => {
+    if (state === fireLcdState) return;
+    fireLcdState = state;
+    const c = fireLcd.context;
+    c.fillStyle = state === 'alarm' ? '#4a2616' : '#243c2b';
+    c.fillRect(0, 0, 384, 128);
+    c.fillStyle = 'rgba(0,0,0,0.13)';
+    for (let y = 0; y < 128; y += 7) c.fillRect(0, y, 384, 2);
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillStyle = state === 'alarm' ? '#ffbd77' : '#a9e7a7';
+    c.font = 'bold 35px monospace';
+    c.fillText(
+      state === 'normal'
+        ? 'SYSTEM NORMAL'
+        : state === 'alarm'
+          ? 'FEUERALARM'
+          : 'BRAND GELÖSCHT',
+      192,
+      48,
+      370,
+    );
+    c.font = 'bold 24px monospace';
+    c.fillText(
+      state === 'normal'
+        ? 'KEIN ALARM'
+        : state === 'alarm'
+          ? 'LABOR RÄUMEN'
+          : 'ANLAGE AUS',
+      192,
+      91,
+      370,
+    );
+    fireLcd.texture.needsUpdate = true;
+  };
+  showFireLcd('normal');
   for (const x of [-0.055, 0, 0.055])
     fireBox(firePanel, 0.035, 0.013, 0.006, '#b5b6a9', x, -0.025, 0.105, 0.85);
   const panelTitle = label(
@@ -577,8 +695,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     audio.play('button');
     write(
       world.work('fire.RÜCKSTELLEN')
-        ? 'Brandmelderzentrale: zurückgestellt. Sprinkler geschlossen.'
-        : 'Brandmelderzentrale: Rückstellung verweigert; Brand oder Rauch vorhanden.',
+        ? 'Fire panel: reset. Sprinklers shut.'
+        : 'Fire panel: reset refused; fire or smoke still present.',
     );
   });
   const labBeacon = new PointLight('#ee3020', 0, 12, 2);
@@ -647,6 +765,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   const boardKit = createPanelKit();
   const circuitBoard = createCircuitBoard(boardKit, () => world, {
     log: (message) => write(message),
+    // The southern bay's cupboard holds the cheats, not relays.
+    emptyCompartments: ['XENON'],
   });
   circuitBoard.group.scale.setScalar(worldUnitsPerMetre);
   circuitBoard.group.position.set(
@@ -656,6 +776,9 @@ export function startScene(canvas: HTMLCanvasElement) {
   );
   circuitBoard.group.rotation.y = -Math.PI / 2;
   lab.add(circuitBoard.group);
+  // The board is a tool: it stays whole while the room around it bends.
+  exemptFromEffects(circuitBoard.group);
+  const divergence = createChromaticDivergence(renderer, worldUnitsPerMetre);
 
   // The VX3's ferrocore column and its two cabinets stand in the bay the
   // first rig left, its back to the north wall, beside the computer desk.
@@ -669,6 +792,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   const driveDial = (id: KnobId) => ({
     get: () => world.read<number>(`drive.${id}`),
     set: (value: number) => {
+      // Turning TRIMM by hand takes it back from the cheats.
+      if (id === 'trim') followTrim = false;
       world.work(`drive.${id}`, value);
       write(knobLine(id, value));
     },
@@ -892,6 +1017,8 @@ export function startScene(canvas: HTMLCanvasElement) {
         'rocker',
         'breaker-on',
         'breaker-off',
+        'door-open',
+        'door-close',
       ].includes(sound)
         ? (sound as SoundCue)
         : kind === 'switch' || kind === 'toggle'
@@ -909,10 +1036,110 @@ export function startScene(canvas: HTMLCanvasElement) {
       input(
         part,
         'Circuit board',
-        String(object.userData.label ?? 'Control'),
+        String(object.name || object.userData.label || 'Control'),
         (hit) => use(knobDirection(object, hit.point, perspectiveCamera)),
       );
     });
+  // The board's cupboard doors are fittings, not machine controls.
+  for (const [leaf, open] of circuitBoard.hatches)
+    fixture(leaf, String(leaf.name), open);
+
+  // CHEATS, inside the southern (XENON) bay's cupboard: open its door.
+  // Each replaces the world with one that has played the designed steps
+  // up to that point; AUTO plays them one control at a time.
+  {
+    const replaceWorld = (next: World) => {
+      world = next;
+      circuitBoard.restarted();
+      autoStart = null;
+      followTrim = false;
+    };
+    const cheats: [string, string, CapColour, () => void][] = [
+      ['KALT', 'COLD · ALL OFF', 'grey', () => replaceWorld(createWorld())],
+      [
+        'AUTO',
+        'SLOW START',
+        'green',
+        () => {
+          replaceWorld(createWorld());
+          autoStart = createAutoStart(coldStartSteps);
+        },
+      ],
+      [
+        'KESSEL',
+        'VESSEL READY',
+        'amber',
+        () => replaceWorld(play(prepareVessel).world),
+      ],
+      [
+        'VOLL',
+        'FULL OPERATION',
+        'blue',
+        () => {
+          replaceWorld(play(coldStartSteps).world);
+          followTrim = true;
+        },
+      ],
+      [
+        'HEISS',
+        'OVERHEATING',
+        'amber',
+        () => {
+          replaceWorld(
+            play([...coldStartSteps, ...overdrive, { id: 'wait', setting: 10 }])
+              .world,
+          );
+          followTrim = true;
+        },
+      ],
+      [
+        'BRAND',
+        'FIRE · RUINED',
+        'red',
+        () =>
+          replaceWorld(
+            play([...coldStartSteps, ...overdrive, { id: 'wait', setting: 40 }])
+              .world,
+          ),
+      ],
+    ];
+    const plate = circuitBoard.compartment('XENON');
+    if (plate) {
+      const title = createMicroLabel(boardKit, 'CHEATS · NICHT IM SPIEL', {
+        height: 0.018,
+        plate: '#e8e2cc',
+        ink: '#1f2622',
+      });
+      title.position.set(0, 0.17, 0.001);
+      plate.add(title);
+      cheats.forEach(([legend, hint, colour, act], i) => {
+        // Two rows of three, to fit the cupboard.
+        const x = ((i % 3) - 1) * 0.2;
+        const y = i < 3 ? 0.05 : -0.11;
+        const made = createEightiesButton(boardKit, legend, colour, {
+          latching: false,
+          size: 0.024,
+        });
+        made.group.scale.setScalar(2.4);
+        made.group.position.set(x, y, 0);
+        made.cap.name = `Cheat: ${hint.toLowerCase()}`;
+        plate.add(made.group);
+        const caption = createMicroLabel(boardKit, hint, {
+          height: 0.011,
+          ink: '#ece6d2',
+        });
+        caption.position.set(x, y - 0.048, 0.001);
+        plate.add(caption);
+        fixture(made.cap, made.cap.name, () => {
+          made.press();
+          audio.play('button', 'monitor');
+          act();
+          delayedPrinter.queue(`${made.cap.name.toUpperCase()}`);
+        });
+        dynamic.push(() => made.update(1 / 60));
+      });
+    }
+  }
   // The tap still drips, silently: the sound was too much.
   dynamic.push(() => {
     workbench.update(performance.now() / 1000, reducedMotion.matches);
@@ -977,7 +1204,6 @@ export function startScene(canvas: HTMLCanvasElement) {
   ]);
   for (const part of labRoom.lights.switchParts)
     fixture(part, 'Light switch', () => {
-      if (fire.ruinCause) return;
       const on = labRoom.lights.toggle();
       audio.play('bakelite-switch');
       if (on) window.setTimeout(() => audio.play('ballast-start'), 90);
@@ -1364,7 +1590,9 @@ export function startScene(canvas: HTMLCanvasElement) {
   crystal.rotation.z = 0.24;
   crystal.position.set(0, -0.11, 0.37);
   crystalUnit.add(indicator(crystal, 'Time Dilation tell-tale', 'Crystal'));
-  const sparkles = createCrystalSparkles();
+  // About 2 cm motes once the unit is hung: big enough to see across the
+  // room at full resolution.
+  const sparkles = createCrystalSparkles(0.11);
   sparkles.group.position.copy(crystal.position);
   crystalUnit.add(sparkles.group);
   const crystalLamp = indicator(
@@ -1948,35 +2176,39 @@ export function startScene(canvas: HTMLCanvasElement) {
 
   const overlay = document.createElement('div');
   overlay.className = 'rack-ui';
-  overlay.innerHTML = `<div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"></div><div class="rack-nav" role="group" aria-label="Movement and zoom"><button type="button" data-pan="left" aria-label="Step left">◀</button><button type="button" data-pan="up" aria-label="Step forward">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Step back">▼</button><button type="button" data-pan="right" aria-label="Step right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook" hidden><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log">▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: ZOOM · ALT+WHEEL: HEIGHT · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
+  overlay.innerHTML = `<div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"><button type="button" id="reset-simulation" class="reset-simulation" title="Start again: a fresh, cold lab">Reset Simulation</button></div><div class="rack-nav" role="group" aria-label="Movement and zoom"><button type="button" data-pan="left" aria-label="Step left">◀</button><button type="button" data-pan="up" aria-label="Step forward">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Step back">▼</button><button type="button" data-pan="right" aria-label="Step right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook" hidden><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log">▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: ZOOM · ALT+WHEEL: HEIGHT · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
   const fireStatus = document.createElement('div');
   fireStatus.style.cssText =
     'position:absolute;left:50%;top:16%;transform:translateX(-50%);z-index:10;text-align:center;color:#ffd6b1;background:#420b08dd;padding:12px 20px;font:700 22px monospace;letter-spacing:2px;pointer-events:auto';
   fireStatus.hidden = true;
   const ruinTitle = document.createElement('div');
-  ruinTitle.textContent = 'BRAND GELÖSCHT · VX3 ZERSTÖRT';
-  const freshRun = document.createElement('button');
-  freshRun.textContent = 'RESET';
-  freshRun.hidden = true;
-  fireStatus.append(ruinTitle, freshRun);
+  ruinTitle.textContent = 'FIRE OUT · VX3 DESTROYED';
+  const ruinHint = document.createElement('div');
+  ruinHint.textContent = 'Reset Simulation (top left) to start again.';
+  ruinHint.style.cssText =
+    'font:400 13px monospace;letter-spacing:1px;margin-top:6px';
+  fireStatus.append(ruinTitle, ruinHint);
   overlay.append(fireStatus);
-  freshRun.addEventListener('click', () =>
-    machineActions.run('Incident reset', () => {
-      if (!fire.ruinCause || fire.ruinAge < 20) return;
-      world = createWorld();
-      circuitBoard.restarted();
-      Object.assign(fire, createFireIncident());
-      Object.assign(overheat, createOverheatState());
-      Object.assign(telltales, createSafetyTelltales());
-      Object.assign(board, createBoard());
-      Object.assign(settings, createRackControls());
-      Object.assign(rig, createRig());
-      if (labRoom.lights.on) labRoom.lights.toggle();
-      fireStatus.hidden = true;
-      freshRun.hidden = true;
-      write('Incident cleared. New cold run authorised.');
-    }),
-  );
+  // Resetting is always by hand: a ruined machine stays ruined until the
+  // operator asks for a fresh, cold lab. The room's lights are left alone.
+  const resetSimulation = () => {
+    world = createWorld();
+    circuitBoard.restarted();
+    autoStart = null;
+    followTrim = false;
+    Object.assign(fire, createFireIncident());
+    Object.assign(overheat, createOverheatState());
+    Object.assign(telltales, createSafetyTelltales());
+    Object.assign(board, createBoard());
+    Object.assign(settings, createRackControls());
+    Object.assign(rig, createRig());
+    fireStatus.hidden = true;
+    write('Simulation reset. VX3 cold.');
+    delayedPrinter.queue('SIMULATION RESET · VX3 COLD');
+  };
+  overlay
+    .querySelector<HTMLButtonElement>('#reset-simulation')!
+    .addEventListener('click', resetSimulation);
   const manualSheet = document.createElement('aside');
   manualSheet.className = 'manual-sheet';
   manualSheet.hidden = true;
@@ -2203,8 +2435,18 @@ export function startScene(canvas: HTMLCanvasElement) {
   // installation in the game. Only views of dev-only spaces carry a dev_
   // prefix; these are all part of the real game, so none does.
   const inspectionView = inspectionParams.get('view');
-  if (inspectionParams.get('lights') === 'on') {
+  // `lighs` too: an easy slip, and the link still works.
+  if (
+    inspectionParams.get('lights') === 'on' ||
+    inspectionParams.get('lighs') === 'on'
+  ) {
     labRoom.lights.toggle();
+  }
+  // ?slowstart=on: the whole cold start played from cold, one control at
+  // a time, as the AUTO cheat does, to watch the full cycle.
+  if (inspectionParams.get('slowstart') === 'on') {
+    autoStart = createAutoStart(coldStartSteps);
+    write('Automatic cold start: one control at a time.');
   }
   if (inspectionParams.get('plant-lights') === 'on') plantRoom.toggleLights();
   if (inspectionParams.get('museum-lights') === 'on') museum.toggleLights();
@@ -2283,6 +2525,12 @@ export function startScene(canvas: HTMLCanvasElement) {
       orbitYaw = 0.4;
       orbitPitch = -0.65;
       cameraZoom = 1.2;
+    },
+    chair: () => {
+      walker.x = chair.group.position.x + 0.55 * worldUnitsPerMetre;
+      walker.z = chair.group.position.z + 1.25 * worldUnitsPerMetre;
+      orbitYaw = -0.42;
+      orbitPitch = -0.72;
     },
     xenon: () => {
       walker.x = plantRoom.bank.x;
@@ -2445,6 +2693,13 @@ export function startScene(canvas: HTMLCanvasElement) {
     Object.assign(window, {
       vx3Walker: {
         walker,
+        /** What the teletype has printed, oldest first. */
+        printed: () => [...teleprinterLines],
+        /** The world model the lab runs on, for scripts. */
+        world: () => world,
+        /** How many of the time-dilation crystal's sparks are in the air. */
+        sparks: () =>
+          sparkles.group.children.filter((child) => child.visible).length,
         /** Stand at a named viewpoint, as the teleport board does. */
         goTo,
         /** The last frame's draw calls and triangles, and what the GPU holds. */
@@ -2907,7 +3162,22 @@ export function startScene(canvas: HTMLCanvasElement) {
     last = time;
     // One graph tick is the machine's only simulation step. The room's
     // objects below are views of its outputs, including the old room fittings.
-    const events = world.tick(delta);
+    // The cheats' automatic start, and TRIMM kept on SOLL after a cheat.
+    const extra: WorldEvent[] = [];
+    if (autoStart) {
+      const step = autoStart.advance(world, delta);
+      extra.push(...step.events);
+      if (step.line) write(step.line);
+      if (autoStart.done) {
+        autoStart = null;
+        followTrim = true;
+      }
+    }
+    if (followTrim) {
+      const want = Math.round(world.read<number>('drive.idealTrim') * 20) / 20;
+      if (world.read('drive.trim') !== want) world.work('drive.trim', want);
+    }
+    const events = [...extra, ...world.tick(delta)];
     const extinguished = world.read<string>('fire.phase') === 'extinguished';
     for (const [key, id] of Object.entries(worldSelections) as [
       Selection,
@@ -3021,41 +3291,55 @@ export function startScene(canvas: HTMLCanvasElement) {
     }
     soot = Math.max(soot, fire.ruinCause ? 1 : Math.min(1, hot / 0.8));
     for (const stain of failureStains) stain.set(soot * 0.9);
+    // A change in the machine's status: in the log, and on the teletype.
+    const status = (text: string) => {
+      write(text);
+      delayedPrinter.queue(
+        `${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}  ${text}`,
+      );
+    };
     for (const event of events) {
       if (event.source === 'fire') {
         if (event.event === 'alarm') {
           audio.play('warning');
-          write('Rauchmelder: FEUERALARM. Labor räumen.');
+          status('Smoke detector: FIRE ALARM. Evacuate the lab.');
         } else if (event.event === 'water') {
           audio.play('relay', 'sprinkler');
-          write('Sprinkler geöffnet. Wasser auf dem Laborboden.');
+          status('Sprinklers open. Water on the lab floor.');
         } else if (event.event === 'fire') {
           audio.play('incident');
-          write('Gerätebrand festgestellt. Sprinkler ausgelöst.');
+          status('Equipment fire detected. Sprinklers triggered.');
         } else if (event.event === 'extinguished') {
-          if (labRoom.lights.on) labRoom.lights.toggle();
-          write('BRAND GELÖSCHT. Anlage zerstört; Messgeräte auf Null.');
+          status('FIRE OUT. Installation destroyed; instruments at zero.');
         } else if (event.event === 'water-stopped') {
-          write('Sprinklerzufuhr nach 45 Sekunden automatisch geschlossen.');
+          status('Sprinkler supply shut off automatically after 45 seconds.');
         }
-      } else if (event.source === 'rig' && event.event.kind === 'incident') {
-        audio.play('incident');
-        write(event.event.text);
+      } else if (event.source === 'rig') {
+        if (event.event.kind === 'incident') {
+          audio.play('incident');
+          status(event.event.text);
+        } else if (event.event.kind === 'warmed')
+          status('Heaters at temperature.');
+        else if (event.event.kind === 'field-locked')
+          status('H-B field locked.');
+        else status('H-B field wandering. Strain rising.');
       } else if (
         event.source === 'vessel' &&
         event.event.kind === 'catastrophe'
       ) {
         audio.play('incident');
-        write(`Core catastrophe: ${event.event.cause}.`);
+        status(`Core catastrophe: ${event.event.cause}.`);
+      } else if (event.source === 'breaker') {
+        status(`Drive breaker dropped: ${event.event.cause} supply off.`);
       } else if (event.source === 'plant') {
-        write('VX3 fully operational.');
+        status('VX3 fully operational.');
       }
     }
     const beaconPulse =
       fire.alarm && !extinguished && Math.sin(time * 0.006) > 0;
     labRoom.setFireAlarm(fire.alarm && !extinguished);
-    fireScreen.material.color.set(
-      extinguished ? '#282c28' : fire.alarm ? '#df552f' : '#65a76b',
+    showFireLcd(
+      extinguished ? 'extinguished' : fire.alarm ? 'alarm' : 'normal',
     );
     labBeacon.intensity = beaconPulse ? 20 : 0;
     hallBeacon.intensity = beaconPulse ? 14 : 0;
@@ -3077,21 +3361,49 @@ export function startScene(canvas: HTMLCanvasElement) {
       puddle.scale.setScalar(Math.max(0.001, fire.puddle));
     }
     fireStatus.hidden = !extinguished;
-    ruinTitle.hidden = !extinguished;
-    freshRun.hidden = !extinguished || fire.ruinAge < 20;
-    // Running ferrocores bend the room: colour, π, space and sparks.
+    // The machine's effects on the room, from the world model, as in dev0.
     const activity = ferrocoreActivity(rig);
-    anomaly = anomalyEffects(activity, time / 1000, reducedMotion.matches);
-    ps1Uniforms.channels.value.set(...anomaly.channels);
-    ps1Uniforms.warp.value = anomaly.warp;
-    ps1Uniforms.time.value = time / 1000;
+    effectSeconds += delta;
+    const wreckedRun = world.read('fire.ruined') !== null;
+    fullActivation = wreckedRun
+      ? 0
+      : fullActivation +
+        ((world.read<boolean>('plant.fullyOperational') ? 1 : 0) -
+          fullActivation) *
+          Math.min(1, delta / 3);
+    let effects = effectFrame(
+      settingsForMachine({
+        activity: wreckedRun ? 0 : world.read<number>('ferrocore.activity'),
+        // From the redline to critical: how hot the drive has got.
+        overheat: wreckedRun
+          ? 0
+          : Math.min(
+              1,
+              Math.max(
+                ...Object.values(
+                  world.read<{ heat: Record<string, number> }>('overheat').heat,
+                ),
+              ) / 0.9,
+            ),
+        full: fullActivation,
+        instability: world.read<number>('rig.instability'),
+        // Centred on the column, in metres.
+        centreX: gen2.group.position.x / worldUnitsPerMetre,
+        centreZ: gen2.group.position.z / worldUnitsPerMetre,
+      }),
+      effectSeconds,
+    );
+    if (reducedMotion.matches) effects = stillFrame(effects);
+    applyEffectFrame(effects, worldUnitsPerMetre, effectSeconds);
+    ps1Uniforms.time.value = effectSeconds;
+    anomaly = { ...anomaly, channels: effects.channels, pi: effects.pi };
     sparkles.group.visible = !reducedMotion.matches;
     sparkles.update(
       delta,
       reducedMotion.matches || telltales.dilationActivity === 0
         ? 0
         : 6 + telltales.dilationActivity * 30,
-      1.2,
+      2.6,
     );
     const level = anomalyStage(activity);
     if (level > anomalyLevel)
@@ -3240,10 +3552,23 @@ export function startScene(canvas: HTMLCanvasElement) {
               source === 'sink',
             ),
       );
-    renderer.render(scene, viewer);
+    // Red and blue disagree as the machine nears activation, swelling and
+    // falling away; set in PS1 pixels, scaled to what is drawn.
+    const split =
+      (renderer.domElement.width / 640) * divergencePulse(effectSeconds);
+    const diverged = {
+      ...effects.divergence,
+      horizontalPx: effects.divergence.horizontalPx * split,
+      verticalPx: effects.divergence.verticalPx * split,
+      parallax: effects.divergence.parallax * split,
+    };
+    if (divergence.active(diverged))
+      divergence.render(scene, viewer, diverged, effectSeconds);
+    else renderer.render(scene, viewer);
   });
   const dispose = () => {
     renderer.setAnimationLoop(null);
+    divergence.dispose();
     observer.disconnect();
     canvas.removeEventListener('wheel', wheel);
     canvas.removeEventListener('pointerdown', down);

@@ -9,6 +9,7 @@ import {
 } from 'three';
 import type { BufferGeometry, Material, Object3D } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import { drawButtonFinish } from './button-finish';
 import { PANEL_FONT, kitGlow, kitPaint } from './eighties-controls';
 import type { PanelKit } from './eighties-controls';
 import { createCanvasTexture } from './screens';
@@ -413,8 +414,13 @@ export function createKeycap(
     px,
   );
   kit.textures.push(texture);
-  c.fillStyle = colour;
-  c.fillRect(0, 0, c.canvas.width, px);
+  drawButtonFinish(
+    c,
+    c.canvas.width,
+    px,
+    colour,
+    [...legend].reduce((n, letter) => n * 31 + letter.charCodeAt(0), 311),
+  );
   c.fillStyle = 'rgba(255,255,255,0.18)';
   c.fillRect(0, 0, c.canvas.width, 4);
   c.fillStyle = 'rgba(0,0,0,0.2)';

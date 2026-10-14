@@ -12,6 +12,7 @@ import {
 } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import { createGalvanizedZincMap } from '../rendering/galvanized-zinc';
 import { createCanvasTexture, createLabelTexture } from './screens';
 
 export type ServiceKind =
@@ -139,6 +140,27 @@ export function createCeilingServices(run: ServiceRun) {
       palette.set(color, material);
     }
     return material;
+  };
+  const zinc = new Map<'box' | 'round', Material>();
+  const galvanized = (shape: 'box' | 'round') => {
+    const existing = zinc.get(shape);
+    if (existing) return existing;
+    const repeats = Math.max(1, (to - from) / m / 0.65);
+    const map = createGalvanizedZincMap(
+      shape === 'box' ? 791 : 1249,
+      shape === 'box' ? repeats : 1,
+      shape === 'round' ? repeats : 1,
+    );
+    textures.push(map);
+    const finish = createPs1Material({
+      color: '#ffffff',
+      map,
+      metalness: 0.58,
+      roughness: 0.63,
+    });
+    extras.push(finish);
+    zinc.set(shape, finish);
+    return finish;
   };
   const length = to - from;
   const middle = (from + to) / 2;
@@ -480,7 +502,7 @@ export function createCeilingServices(run: ServiceRun) {
     branch: ServiceBranch,
     across: number,
     ductBottom: number,
-    color: string,
+    color: string | Material,
   ) => {
     const at = from + branch.at * m;
     const drop = (branch.drop ?? 0.12) * m;
@@ -785,8 +807,8 @@ export function createCeilingServices(run: ServiceRun) {
         const w = (clad ? 0.56 : 0.5) * m;
         const h = (clad ? 0.38 : 0.32) * m;
         const y = top - h / 2;
-        const color = clad ? SILVER : '#8d918a';
-        place(new BoxGeometry(length, h, w), color, middle, y, lane.across);
+        const finish = clad ? paint(SILVER) : galvanized('box');
+        place(new BoxGeometry(length, h, w), finish, middle, y, lane.across);
         // Flanged joints, or the straps over the insulation's joints.
         for (let at = from + 0.6 * m; at < to; at += (clad ? 0.6 : 1.2) * m)
           place(
@@ -811,7 +833,7 @@ export function createCeilingServices(run: ServiceRun) {
           );
         rods(lane.across, top - h - 0.03, 2.4 * m, w / 2 + 0.12);
         for (const branch of lane.branches ?? [])
-          grille(branch, lane.across, top - h, color);
+          grille(branch, lane.across, top - h, finish);
         break;
       }
       case 'round-duct':
@@ -819,10 +841,10 @@ export function createCeilingServices(run: ServiceRun) {
         const clad = lane.kind === 'clad-duct';
         const r = ((lane.diameter ?? 0.35) * m) / 2;
         const y = top - r;
-        const color = clad ? SILVER : '#9a9d95';
+        const finish = clad ? paint(SILVER) : galvanized('round');
         place(
           new CylinderGeometry(r, r, length, clad ? 10 : 8),
-          color,
+          finish,
           middle,
           y,
           lane.across,
@@ -850,7 +872,7 @@ export function createCeilingServices(run: ServiceRun) {
             );
         } else rods(lane.across, y, 2 * m, 0);
         for (const branch of lane.branches ?? [])
-          grille(branch, lane.across, y - r * 0.9, color);
+          grille(branch, lane.across, y - r * 0.9, finish);
         break;
       }
       case 'pipe': {

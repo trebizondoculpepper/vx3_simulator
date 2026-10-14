@@ -276,3 +276,31 @@ describe('the lab as a graph', () => {
     expect(world.snapshot()).toEqual(saved);
   });
 });
+
+describe('the lamp test', () => {
+  it('flashes every alarm window together for ten seconds, then stops', () => {
+    const world = createWorld();
+    // Clear the plant-supply alarm, so only the test lights the windows.
+    world.work('plant.master');
+    world.tick(0.1, () => 0.5);
+    world.work('board.QUITT');
+    world.tick(0.1, () => 0.5);
+    world.work('board.L-TEST');
+    const windows = () =>
+      world.conditions.map((c) =>
+        world.read<boolean>(`board.window.${c.id.slice('alarm.'.length)}`),
+      );
+    const seen = new Set<string>();
+    for (let t = 0; t < 9.8; t += 0.1) {
+      world.tick(0.1, () => 0.5);
+      const lit = windows();
+      // All together: every window on, or every window off.
+      expect(new Set(lit).size).toBe(1);
+      seen.add(String(lit[0]));
+    }
+    expect(seen).toEqual(new Set(['true', 'false']));
+    for (let t = 0; t < 0.5; t += 0.1) world.tick(0.1, () => 0.5);
+    expect(world.read('board.testing')).toBe(false);
+    expect(windows().some(Boolean)).toBe(false);
+  });
+});

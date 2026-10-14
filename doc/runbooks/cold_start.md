@@ -151,7 +151,7 @@ Stand at B6 ANTRIEB (_drive_), cabinet B's drive unit at shoulder height, with t
 | Over the red lines                          | East board SPINDEL ROT (_spindle in the red_), FELD ROT (_field in the red_), LAST (_load_); the machine smokes, RAUCH (_smoke_); the fire alarm, BRAND (_fire_) | Bring DREHZAHL (_speed_) and FELD (_field_) down; the fire alarm is reset at the corridor panel                                                            |
 | The cabinets are dead                       | No lamps or readouts in cabinets A and B; powered buttons log "no supply"                                                                                        | Close the HAUPTSCHALTER (_main switch_); check the isolator, A11 and B13                                                                                   |
 
-`East board: QUITT handle` (_acknowledge_) acknowledges the flashing windows: an acknowledged window burns steady until its cause clears, and one that cleared before anyone acknowledged it keeps flashing until QUITT. `East board: L-TEST handle` (_lamp test_) lights every lamp.
+`East board: QUITT handle` (_acknowledge_) acknowledges the flashing windows: an acknowledged window burns steady until its cause clears, and one that cleared before anyone acknowledged it keeps flashing until QUITT. `East board: L-TEST handle` (_lamp test_) flashes every lamp on the board together for ten seconds.
 
 ## The east board's alarm windows
 

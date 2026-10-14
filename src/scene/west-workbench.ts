@@ -12,8 +12,11 @@ import {
 } from 'three';
 import type { BufferGeometry, Material, Object3D } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import { realistic } from '../rendering/render-style';
+import { createAgedBenchTop } from '../rendering/wood-finish';
 import { createSinkLeak } from '../game/sink-leak';
 import { createCassettePlayer } from './cassette-player';
+import { createCardboardBox } from './cardboard-box';
 
 export interface WestWorkbenchOptions {
   floorY: number;
@@ -109,22 +112,53 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
   cassette.group.rotation.y = Math.PI / 2;
   group.add(cassette.group);
 
-  // Worktop in pieces around the sink cut-out, with a dark front edge.
+  // Worktop in pieces around the sink cut-out, with a dark front edge. In
+  // the realistic style it is one aged top, half a century of polish and
+  // use, laid across every piece: each vertex takes its place on the bench.
+  const aged = realistic ? createAgedBenchTop({ length, depth }) : null;
+  const agedTop = (() => {
+    if (!aged) return null;
+    const material = createPs1Material({
+      color: '#ffffff',
+      map: aged.map,
+      roughnessMap: aged.roughnessMap,
+      roughness: 1,
+    });
+    materials.push(material);
+    return material;
+  })();
+  const onBench = (piece: Mesh) => {
+    if (!agedTop) return piece;
+    piece.material = agedTop;
+    const position = piece.geometry.attributes.position;
+    const uv = piece.geometry.attributes.uv;
+    for (let i = 0; i < position.count; i++) {
+      const z = piece.position.z + position.getZ(i);
+      const out = (piece.position.x + position.getX(i) - wallX) / m;
+      uv.setXY(i, (z - fromZ) / (toZ - fromZ), 1 - out / depth);
+    }
+    uv.needsUpdate = true;
+    return piece;
+  };
   const run = (z0: number, z1: number, out0: number, out1: number) =>
-    box(
-      out1 - out0,
-      slab,
-      (z1 - z0) / m,
-      TOP,
-      (out0 + out1) / 2,
-      topY,
-      (z0 + z1) / 2,
+    onBench(
+      box(
+        out1 - out0,
+        slab,
+        (z1 - z0) / m,
+        TOP,
+        (out0 + out1) / 2,
+        topY,
+        (z0 + z1) / 2,
+      ),
     );
   run(fromZ, sinkNorth, 0, depth);
   run(sinkSouth, toZ, 0, depth);
   run(sinkNorth, sinkSouth, 0, sinkOut);
   run(sinkNorth, sinkSouth, sinkOut + sinkWidth, depth);
-  box(0.03, slab + 0.02, length, TOP_EDGE, depth - 0.01, topY - 0.01, midZ);
+  onBench(
+    box(0.03, slab + 0.02, length, TOP_EDGE, depth - 0.01, topY - 0.01, midZ),
+  );
 
   // Upstand with a socket trunking along the wall.
   box(0.02, 0.15, length, TOP_EDGE, 0.01, height + 0.075, midZ);
@@ -172,13 +206,47 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
     fromZ + 0.35 * m,
   );
   // Boxes and a coil of cable on the shelf.
-  const boxes: [number, number, string][] = [
-    [1.6, 0.28, '#8a6e47'],
-    [2.1, 0.22, '#6d5a3f'],
-    [2.5, 0.3, '#8a6e47'],
+  const boxes = [
+    {
+      at: 1.6,
+      height: 0.28,
+      shade: '#a68456',
+      label: 'MESSRÖHREN',
+      code: 'MR-17 / TROCKEN LAGERN',
+    },
+    {
+      at: 2.1,
+      height: 0.22,
+      shade: '#866a47',
+      label: 'FERROKERN-SPULEN',
+      code: 'FS-03 / SATZ B',
+    },
+    {
+      at: 2.5,
+      height: 0.3,
+      shade: '#9b7950',
+      label: 'VX3 ERSATZTEILE',
+      code: 'LAGER 04 · 1976',
+    },
   ];
-  for (const [at, h, color] of boxes)
-    box(0.42, h, 0.36, color, 0.3, 0.2 + h / 2, fromZ + at * m);
+  const cartons = boxes.map((item, index) => {
+    const carton = createCardboardBox({
+      width: 0.42 * m,
+      height: item.height * m,
+      depth: 0.36 * m,
+      shade: item.shade,
+      label: item.label,
+      code: item.code,
+      seed: 8701 + index * 233,
+    });
+    carton.group.position.set(
+      wallX + 0.3 * m,
+      floorY + (0.2 + item.height / 2) * m,
+      fromZ + item.at * m,
+    );
+    group.add(carton.group);
+    return carton;
+  });
   const coil = mesh(
     new CylinderGeometry(0.14 * m, 0.14 * m, 0.08 * m, 10),
     '#26364a',
@@ -399,6 +467,7 @@ export function createWestWorkbench(options: WestWorkbenchOptions) {
     },
     dispose() {
       cassette.dispose();
+      for (const carton of cartons) carton.dispose();
       group.remove(cassette.group);
       group.traverse((object) => {
         if (object instanceof Mesh) object.geometry.dispose();

@@ -13,6 +13,7 @@ import type {
   Texture,
 } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import { drawButtonFinish } from './button-finish';
 import { createCanvasTexture } from './screens';
 
 /**
@@ -148,10 +149,14 @@ export const GERMAN_COUNT = [
 function capTexture(kit: PanelKit, legend: string, ink: string, shift = 0) {
   const size = 64;
   const { context, texture } = createCanvasTexture(size, size);
-  // White under the tint: the material's colour supplies the cap's hue,
-  // so lighting it is only a change of colour.
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, size, size);
+  // Near-white moulding under the tint keeps lit and unlit cap colours intact.
+  drawButtonFinish(
+    context,
+    size,
+    size,
+    '#f8f7f3',
+    [...legend].reduce((n, letter) => n * 31 + letter.charCodeAt(0), 117),
+  );
   context.strokeStyle = 'rgba(0,0,0,0.18)';
   context.lineWidth = 3;
   context.strokeRect(1.5, 1.5, size - 3, size - 3);
@@ -241,13 +246,17 @@ export function createEightiesButton(
     {
       map: capTexture(kit, legend, style.ink, led ? 7 : 0),
       color: illuminated ? style.dark : plastic,
+      roughness: 0.52,
     },
     illuminated,
     illuminated,
   ) as MeshBasicMaterial;
   kit.materials.push(capMaterial);
   const sideMaterial = createPs1Material(
-    { color: illuminated ? style.dark : plastic.clone().multiplyScalar(0.8) },
+    {
+      color: illuminated ? style.dark : plastic.clone().multiplyScalar(0.8),
+      roughness: 0.54,
+    },
     illuminated,
     illuminated,
   ) as MeshBasicMaterial;

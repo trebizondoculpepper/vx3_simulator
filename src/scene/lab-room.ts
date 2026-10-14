@@ -9,6 +9,8 @@ import {
 } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
+import { createAgedWallMap } from '../rendering/aged-wall';
+import { createLabSurfaceMap } from '../rendering/lab-surface';
 import { createCeilingServices } from './ceiling-services';
 import { createLightSwitch } from './light-switch';
 import { createLabelTexture } from './screens';
@@ -96,6 +98,35 @@ export function createLabRoom(options: LabRoomOptions) {
     y: number,
     z: number,
   ) => mesh(new BoxGeometry(w, h, d), color, x, y, z);
+  const agedWallBox = (
+    w: number,
+    h: number,
+    d: number,
+    color: string,
+    x: number,
+    y: number,
+    z: number,
+    seed: number,
+    dado = false,
+  ) => {
+    const wall = box(w, h, d, color, x, y, z);
+    const map = createAgedWallMap({
+      width: Math.max(w, d) / worldUnitsPerMetre,
+      height: h / worldUnitsPerMetre,
+      base: color,
+      seed,
+      dado,
+    });
+    textures.push(map);
+    const finish = createPs1Material({
+      color: '#ffffff',
+      map,
+      roughness: 0.96,
+    });
+    materials.push(finish);
+    wall.material = finish;
+    return wall;
+  };
 
   const width = maxX - minX;
   const depth = maxZ - minZ;
@@ -106,7 +137,25 @@ export function createLabRoom(options: LabRoomOptions) {
   const wallThickness = 0.3 * worldUnitsPerMetre;
 
   // Floor with seams on a 1.5-unit grid.
-  box(width + 0.4, 0.3, depth + 0.4, '#706d60', midX, floorY - 0.18, midZ);
+  const floor = box(
+    width + 0.4,
+    0.3,
+    depth + 0.4,
+    '#706d60',
+    midX,
+    floorY - 0.18,
+    midZ,
+  );
+  const floorMap = createLabSurfaceMap(
+    'floor',
+    3107,
+    width / (1.5 * worldUnitsPerMetre),
+    depth / (1.5 * worldUnitsPerMetre),
+  );
+  textures.push(floorMap);
+  const floorFinish = createPs1Material({ map: floorMap, roughness: 0.9 });
+  materials.push(floorFinish);
+  floor.material = floorFinish;
   for (let x = Math.ceil(minX / 1.5) * 1.5; x <= maxX; x += 1.5)
     box(0.025, 0.008, depth, '#56594f', x, floorY - 0.02, midZ);
   for (let z = Math.ceil(minZ / 1.5) * 1.5; z <= maxZ; z += 1.5)
@@ -116,7 +165,7 @@ export function createLabRoom(options: LabRoomOptions) {
   for (const side of [-1, 1]) {
     const face = side < 0 ? minX : maxX;
     const out = (offset: number) => face + side * offset;
-    box(
+    agedWallBox(
       wallThickness,
       height + 0.4,
       depth + wallThickness * 2,
@@ -124,8 +173,19 @@ export function createLabRoom(options: LabRoomOptions) {
       out(wallThickness / 2),
       midY,
       midZ,
+      410 + side,
     );
-    box(0.22, 3.4, depth, DADO, out(-0.01), floorY + 1.7, midZ);
+    agedWallBox(
+      0.22,
+      3.4,
+      depth,
+      DADO,
+      out(-0.01),
+      floorY + 1.7,
+      midZ,
+      510 + side,
+      true,
+    );
     box(0.29, 0.11, depth, RAIL, out(-0.1), floorY + 3.4, midZ);
     box(0.3, 0.2, depth, SKIRT, out(-0.1), floorY + 0.12, midZ);
   }
@@ -163,7 +223,7 @@ export function createLabRoom(options: LabRoomOptions) {
   const wallZ = maxZ + wallThickness / 2;
   const leftWidth = doorX - doorWidth / 2 - minX;
   const rightWidth = maxX - (doorX + doorWidth / 2);
-  box(
+  agedWallBox(
     leftWidth,
     height + 0.4,
     wallThickness,
@@ -171,8 +231,9 @@ export function createLabRoom(options: LabRoomOptions) {
     minX + leftWidth / 2,
     midY,
     wallZ,
+    621,
   );
-  box(
+  agedWallBox(
     rightWidth,
     height + 0.4,
     wallThickness,
@@ -180,8 +241,9 @@ export function createLabRoom(options: LabRoomOptions) {
     maxX - rightWidth / 2,
     midY,
     wallZ,
+    622,
   );
-  box(
+  agedWallBox(
     doorWidth,
     height - doorHeight,
     wallThickness,
@@ -189,12 +251,23 @@ export function createLabRoom(options: LabRoomOptions) {
     doorX,
     floorY + doorHeight + (height - doorHeight) / 2,
     wallZ,
+    623,
   );
   for (const [x0, w] of [
     [minX, leftWidth],
     [doorX + doorWidth / 2, rightWidth],
   ]) {
-    box(w, 3.4, 0.22, DADO, x0 + w / 2, floorY + 1.7, maxZ + 0.01);
+    agedWallBox(
+      w,
+      3.4,
+      0.22,
+      DADO,
+      x0 + w / 2,
+      floorY + 1.7,
+      maxZ + 0.01,
+      720 + Math.round(x0),
+      true,
+    );
     box(w, 0.11, 0.29, RAIL, x0 + w / 2, floorY + 3.4, maxZ - 0.03);
     box(w, 0.2, 0.3, SKIRT, x0 + w / 2, floorY + 0.12, maxZ - 0.04);
   }
@@ -488,7 +561,7 @@ export function createLabRoom(options: LabRoomOptions) {
   // Tall ceiling, with exposed beams running front to back.
   const roof = new Group();
   group.add(roof);
-  mesh(
+  const ceiling = mesh(
     new BoxGeometry(width + 0.4, 0.25, depth + 0.4),
     '#3d433f',
     midX,
@@ -496,6 +569,16 @@ export function createLabRoom(options: LabRoomOptions) {
     midZ,
     roof,
   );
+  const ceilingMap = createLabSurfaceMap(
+    'ceiling',
+    7119,
+    width / (1.2 * worldUnitsPerMetre),
+    depth / (1.2 * worldUnitsPerMetre),
+  );
+  textures.push(ceilingMap);
+  const ceilingFinish = createPs1Material({ map: ceilingMap, roughness: 0.96 });
+  materials.push(ceilingFinish);
+  ceiling.material = ceilingFinish;
   for (let x = minX + 3; x < maxX - 1; x += 5)
     mesh(
       new BoxGeometry(0.35, 0.45, depth),

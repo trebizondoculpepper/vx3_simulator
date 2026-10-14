@@ -2761,31 +2761,28 @@ export function createFerrocoreColumnRig(
   }
   let leadsDrop = 0;
 
-  // A black hose coiled on the skid, and a mains plug left on the floor.
-  tube(
-    group,
-    [
-      [0.05, 0.42, 0.06],
-      [0.1, 0.3, 0.2],
-      [0.25, skidTop + 0.02, 0.36],
-      [0.0, skidTop + 0.018, 0.42],
-      [-0.26, skidTop + 0.02, 0.33],
-      [-0.2, skidTop + 0.022, 0.2],
-      [0.1, skidTop + 0.02, 0.25],
-      [0.28, skidTop + 0.025, 0.4],
-      [0.18, skidTop + 0.01, 0.46],
-      [0.12, 0.05, 0.52],
-      [0.0, 0.02, 0.62],
-    ],
-    0.016,
-    '#121214',
-    120,
-  );
-  box(group, 0.07, 0.05, 0.05, '#1c1c1e', -0.04, 0.025, 0.66);
-  cyl(group, 0.03, 0.06, '#2a2a2c', -0.1, 0.03, 0.66, {
-    axis: 'x',
-    segments: 12,
-  });
+  // The vessel's black service hose: down from under the chamber, back
+  // behind the vessel off the skid, and along behind the olive cabinet into
+  // a gland in its back, low down, clear of the floor.
+  {
+    const end: [number, number, number] = [0.66, skidTop + 0.18, backRight];
+    tube(
+      group,
+      [
+        [0.05, 0.42, 0.06],
+        [0.08, 0.3, -0.02],
+        [0.12, skidTop + 0.12, -0.18],
+        [0.22, skidTop + 0.1, -0.36],
+        [0.4, skidTop + 0.12, -0.44],
+        [0.55, skidTop + 0.16, backRight - 0.04],
+        end,
+      ],
+      0.016,
+      '#121214',
+      64,
+    );
+    gland(end, 0.02);
+  }
 
   // ---- The core's look: colour from temperature ---------------------------
   // Cold, it is dark grey. Active, it glows from a deep orange through

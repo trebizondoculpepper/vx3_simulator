@@ -515,10 +515,16 @@ const CABINET = '#3a4540';
 export function createCircuitBoard(
   kit: PanelKit,
   world: () => World,
-  { log = (() => {}) as (text: string) => void } = {},
+  {
+    log = (() => {}) as (text: string) => void,
+    /** Bays whose hatch compartment is left empty, for the room to fill. */
+    emptyCompartments = [] as string[],
+  } = {},
 ) {
   const group = new Group();
   const uses = new Map<Object3D, (direction?: number) => void>();
+  const compartments = new Map<string, Group>();
+  const hatches = new Map<Object3D, () => void>();
   const follow: (() => void)[] = [];
   const updates: ((delta: number) => void)[] = [];
   const hub = createPartSoundHub();
@@ -529,6 +535,15 @@ export function createCircuitBoard(
     return world().read<T>(id);
   };
   const wrecked = () => world().read<string>('fire.phase') === 'extinguished';
+  /**
+   * During the lamp test every lamp on the board flashes together: what a
+   * lamp shows, given what it would show otherwise.
+   */
+  const lit = (normally: () => boolean) =>
+    !wrecked() &&
+    (world().read<boolean>('board.testing')
+      ? world().read<boolean>('board.testFlash')
+      : normally());
 
   const paint = (colour: string) => {
     const material = wornPaint(
@@ -706,36 +721,37 @@ export function createCircuitBoard(
       (ledgeFrontY + PLINTH) / 2,
       (CABINET_FRONT - BODY_DEPTH) / 2,
     );
-    // The access hatch: a door on the cabinet's front, with louvres to
-    // let the heat out, two hinges and a latch.
+    // The access hatch: a door on the cabinet's front, hinged on its left,
+    // with louvres to let the heat out and a latch. A click swings it open
+    // on a dark compartment of relays and terminals; another shuts it.
     const hatchPaint = paint('#45564e');
     const hatchH = ledgeFrontY - PLINTH - 0.12;
     const hatchY = PLINTH + 0.05 + hatchH / 2;
-    add(
-      bay,
-      BAY_WIDTH - 0.08,
-      hatchH,
-      0.014,
-      hatchPaint,
-      0,
-      hatchY,
-      CABINET_FRONT + 0.007,
-    );
+    const hatchW = BAY_WIDTH - 0.08;
+    // The door stands out in a frame, deep enough for what is behind it.
+    const doorZ = CABINET_FRONT + 0.052;
+    const hinge = new Group();
+    hinge.position.set(-hatchW / 2, hatchY, doorZ);
+    bay.add(hinge);
+    const onLeaf = (x: number) => x + hatchW / 2;
+    const leaf = add(hinge, hatchW, hatchH, 0.014, hatchPaint, onLeaf(0), 0, 0);
+    leaf.name = `${design.title}: access hatch`;
     const slot = createPs1Material({ color: '#1c2420' });
     kit.materials.push(slot);
     for (let i = 0; i < 6; i++)
       add(
-        bay,
+        hinge,
         0.22,
         0.009,
         0.004,
         slot,
-        -0.13,
-        hatchY + hatchH / 2 - 0.08 - i * 0.026,
-        CABINET_FRONT + 0.015,
+        onLeaf(-0.13),
+        hatchH / 2 - 0.08 - i * 0.026,
+        0.008,
       );
     const fitting = createPs1Material({ color: '#b9b5a2', metalness: 0.6 });
     kit.materials.push(fitting);
+    // The hinges stay on the cabinet; the latch goes with the door.
     for (const dy of [-1, 1])
       add(
         bay,
@@ -745,27 +761,92 @@ export function createCircuitBoard(
         fitting,
         -BAY_WIDTH / 2 + 0.05,
         hatchY + dy * (hatchH / 2 - 0.07),
-        CABINET_FRONT + 0.016,
+        doorZ + 0.009,
       );
+    // The frame round the opening.
+    for (const [w, h, x, y] of [
+      [hatchW + 0.02, 0.012, 0, hatchY + hatchH / 2 + 0.006],
+      [hatchW + 0.02, 0.012, 0, hatchY - hatchH / 2 - 0.006],
+      [0.012, hatchH, -hatchW / 2 - 0.004, hatchY],
+      [0.012, hatchH, hatchW / 2 + 0.004, hatchY],
+    ] as const)
+      add(bay, w, h, 0.05, hatchPaint, x, y, CABINET_FRONT + 0.025);
     add(
-      bay,
+      hinge,
       0.018,
       0.11,
       0.024,
       fitting,
-      BAY_WIDTH / 2 - 0.08,
-      hatchY,
-      CABINET_FRONT + 0.02,
+      onLeaf(BAY_WIDTH / 2 - 0.08),
+      0,
+      0.013,
     );
     label(
-      bay,
+      hinge,
       'ZUGANG NUR FÜR FACHPERSONAL',
-      0.12,
-      hatchY + hatchH / 2 - 0.06,
+      onLeaf(0.12),
+      hatchH / 2 - 0.06,
       0.012,
       '#e8e2cc',
       '#1f2622',
-    ).position.z = CABINET_FRONT + 0.016;
+    ).position.z = 0.009;
+    // Behind it: a dark recess, a DIN rail of relays and a terminal strip.
+    const recess = createPs1Material({ color: '#151917' });
+    const relayPaint = createPs1Material({ color: '#c9c3ad' });
+    const terminalPaint = createPs1Material({ color: '#7a6a3a' });
+    kit.materials.push(recess, relayPaint, terminalPaint);
+    add(
+      bay,
+      hatchW - 0.02,
+      hatchH - 0.02,
+      0.004,
+      recess,
+      0,
+      hatchY,
+      CABINET_FRONT + 0.001,
+    );
+    // The compartment, behind the door: a place to fit things.
+    const inside = new Group();
+    inside.position.set(0, hatchY, CABINET_FRONT + 0.004);
+    bay.add(inside);
+    compartments.set(design.title, inside);
+    if (!emptyCompartments.includes(design.title))
+      for (const [row, y] of [0.12, -0.05].entries()) {
+        add(
+          bay,
+          hatchW - 0.08,
+          0.012,
+          0.008,
+          fitting,
+          0,
+          hatchY + y,
+          CABINET_FRONT + 0.006,
+        );
+        for (let k = 0; k < (row ? 12 : 6); k++) {
+          const pitch = (hatchW - 0.12) / (row ? 12 : 6);
+          add(
+            bay,
+            pitch * 0.8,
+            row ? 0.035 : 0.07,
+            0.03,
+            row ? terminalPaint : relayPaint,
+            -hatchW / 2 + 0.06 + (k + 0.5) * pitch,
+            hatchY + y,
+            CABINET_FRONT + 0.02,
+          );
+        }
+      }
+    const hatch = createSwitch({
+      sounds: { transitions: { on: 'door-open', off: 'door-close' } },
+    });
+    hub.add(hatch, leaf, 'hatch');
+    // A cabinet door, not a machine control: a room fitting.
+    hatches.set(leaf, () => hatch.flip());
+    updates.push((delta) => {
+      // Swings outward on its hinges, most of the way round.
+      const target = hatch.state.value ? -1.9 : 0;
+      hinge.rotation.y += (target - hinge.rotation.y) * Math.min(1, delta * 5);
+    });
     // The sloping ledge, from the foot of the face down and out to the
     // cabinet's front. Its controls sit on it, facing up and out.
     const ledge = new Group();
@@ -895,7 +976,7 @@ export function createCircuitBoard(
         0.003,
       );
       face.add(lamp.group);
-      follow.push(() => lamp.set(!wrecked() && node.lit(world())));
+      follow.push(() => lamp.set(lit(() => node.lit(world()))));
     }
 
     // Instruments.
@@ -1146,7 +1227,7 @@ export function createCircuitBoard(
         uses.set(made.cap, () => part.press());
         follow.push(() => {
           made.lit = !wrecked() && part.state.value;
-          made.glow = !wrecked() && part.lit.value;
+          made.glow = lit(() => part.lit.value);
         });
       } else {
         const part = createMomentary({
@@ -1179,8 +1260,8 @@ export function createCircuitBoard(
     }
     follow.push(() => {
       const any = windowLit.some((lit) => lit());
-      fault.set(!wrecked() && any);
-      ready.set(!wrecked() && !any);
+      fault.set(lit(() => any));
+      ready.set(lit(() => !any));
     });
   });
 
@@ -1192,6 +1273,13 @@ export function createCircuitBoard(
     onSound: hub.onSound,
     onHeld: hub.onHeld,
     /** The world was replaced: bound parts read the new one. */
+    /**
+     * A bay's hatch compartment, centred on its opening and facing out,
+     * in metres: about 0.7 wide and 0.55 high, 0.04 deep to the door.
+     */
+    compartment: (title: string) => compartments.get(title),
+    /** The bays' hatch doors, and what a click on each does: fittings. */
+    hatches,
     restarted() {
       generation.value++;
     },

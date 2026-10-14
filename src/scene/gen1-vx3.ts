@@ -36,11 +36,13 @@ import type { RigState } from '../game/rig';
 import { redlineFraction } from '../game/redlines';
 import { ferrocoreAngularVelocity } from '../game/ferrocore-anomaly';
 import { createPs1Material } from '../rendering/ps1-material';
+import { drawButtonFinish } from './button-finish';
 import {
   createDialTexture,
   createLabelTexture,
   createNixieScreen,
   createScopeScreen,
+  createCanvasTexture,
 } from './screens';
 import { createThermionicValve } from './thermionic-valve';
 import {
@@ -748,6 +750,25 @@ export function createGen1Vx3(hookup: Gen1Hookup) {
                 ? '#b29952'
                 : '#ad5946';
           const button = cube(slot, 0.26, 0.2, 0.12, color, 0, cy, 0.35);
+          const capArt = createCanvasTexture(64, 64);
+          drawButtonFinish(
+            capArt.context,
+            64,
+            64,
+            color,
+            [...control.label].reduce(
+              (n, letter) => n * 31 + letter.charCodeAt(0),
+              617,
+            ),
+          );
+          capArt.texture.needsUpdate = true;
+          textures.push(capArt.texture);
+          const capFinish = createPs1Material({
+            map: capArt.texture,
+            roughness: 0.58,
+          });
+          materials.push(capFinish);
+          button.material = capFinish;
           input(button, machine, `${control.label} button`, () => {
             play('button');
             if (control.id === 'reset') resetRig();
