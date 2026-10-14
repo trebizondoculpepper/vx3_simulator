@@ -25,6 +25,7 @@ export interface CorridorOptions {
   doorWidth: number;
   doorHeight: number;
   devDoor?: { x: number; width: number; height: number };
+  museumDoor?: { x: number; width: number; height: number };
   plantDoor?: { x: number; width: number; height: number };
 }
 
@@ -136,13 +137,18 @@ export function createCorridor(options: CorridorOptions) {
     box(w, 0.06, 0.08, RAIL, x, floorY + 0.9 * m, z + face * 0.04);
     box(w, 0.15, 0.1, SKIRT, x, floorY + 0.075, z + face * 0.05);
   };
-  const devDoor = options.devDoor;
-  const southRanges = devDoor
-    ? [
-        [-halfLength, devDoor.x - devDoor.width / 2],
-        [devDoor.x + devDoor.width / 2, halfLength],
-      ]
-    : [[-halfLength, halfLength]];
+  const southOpenings = [options.museumDoor, options.devDoor]
+    .filter((door): door is { x: number; width: number; height: number } =>
+      Boolean(door),
+    )
+    .sort((a, b) => a.x - b.x);
+  const southRanges: number[][] = [];
+  let southCursor = -halfLength;
+  for (const door of southOpenings) {
+    southRanges.push([southCursor, door.x - door.width / 2]);
+    southCursor = door.x + door.width / 2;
+  }
+  southRanges.push([southCursor, halfLength]);
   for (const [a, b] of southRanges) {
     box(
       b - a,
@@ -155,14 +161,14 @@ export function createCorridor(options: CorridorOptions) {
     );
     run(a, b, southZ, -1);
   }
-  if (devDoor)
+  for (const door of southOpenings)
     box(
-      devDoor.width,
-      height - devDoor.height,
+      door.width,
+      height - door.height,
       wallThickness,
       WALL,
-      devDoor.x,
-      floorY + (height + devDoor.height) / 2,
+      door.x,
+      floorY + (height + door.height) / 2,
       southZ + wallThickness / 2,
     );
   // The north wall stops short of its back face, so where a room such as
@@ -408,9 +414,9 @@ export function createCorridor(options: CorridorOptions) {
       const dx = x + offset;
       if (
         face < 0 &&
-        options.devDoor &&
-        Math.abs(dx - options.devDoor.x) <
-          options.devDoor.width / 2 + otherDoorWidth
+        southOpenings.some(
+          (door) => Math.abs(dx - door.x) < door.width / 2 + otherDoorWidth,
+        )
       )
         continue;
       // Remove the nearest decorative doorway to the left of the real plant room.

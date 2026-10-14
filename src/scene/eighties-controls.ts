@@ -181,6 +181,12 @@ export interface EightiesButton {
   /** Latching buttons stay in and lit once pressed; momentary ones spring back. */
   latching: boolean;
   lit: boolean;
+  /**
+   * Whether its light is on, when that is not simply whether it is pressed
+   * in: an unpowered latching button stays in, dark. Left null, it lights
+   * while pressed in.
+   */
+  glow: boolean | null;
   /** Press the button: a latching one toggles, a momentary one flashes in. */
   press(): void;
   update(delta: number): void;
@@ -280,6 +286,7 @@ export function createEightiesButton(
     cap,
     latching,
     lit,
+    glow: null,
     press() {
       // Every press pushes the cap in; a latching one also toggles, and
       // stays in while lit. A refused press still dips, so it never feels dead.
@@ -288,7 +295,7 @@ export function createEightiesButton(
     },
     update(delta) {
       held = Math.max(0, held - delta);
-      const on = button.lit || (!latching && held > 0);
+      const on = button.glow ?? (button.lit || (!latching && held > 0));
       if (illuminated) {
         const shade = on ? litColour : darkColour;
         capMaterial.color.copy(shade);

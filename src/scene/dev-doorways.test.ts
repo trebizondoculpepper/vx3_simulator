@@ -60,12 +60,12 @@ describe('walk-through development doors', () => {
   it('blocks the corridor south entrance across its width, and returns facing north', () => {
     const passages = createDevDoorways(
       'corridor',
-      [{ to: 'dev', side: 'south', x: 8, z: 12 }],
+      [{ to: 'dev0', side: 'south', x: 8, z: 12 }],
       0,
       1,
     );
     expect(slide(passages.solids(), 8.35, 11, 0, 2, 0.25).z).toBeLessThan(12);
-    const pose = passages.arrival('dev');
+    const pose = passages.arrival('dev0');
     expect(pose?.x).toBeCloseTo(8);
     expect(pose?.z).toBeCloseTo(11.25);
     expect(pose?.yaw).toBeCloseTo(0);

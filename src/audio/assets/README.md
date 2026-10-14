@@ -17,3 +17,7 @@ All authors, original source URLs and licences are recorded centrally in [CREDIT
 Rotary detents share the crisp switch recording at gain 0.025; selectors use gain 0.06. Isolators/breakers share the deeper rocker recording at gain 0.12. The defaults are centralised in `control-sound-defaults.ts`; individual mechanical effects such as a valve handwheel, clamp or ram stop retain their own sound definitions.
 
 `key-thock.wav` is the second press/release pair from the MattRuthSound mechanical-keyboard recording, filtered and played at 88% source speed during editing, about 0.25 seconds long. Peak 0.55; keycap playback gain 0.09. Source and licence are in CREDITS.md.
+
+`bakelite-heavy-switch.wav` is a 0.42-second excerpt beginning at 1.70 seconds in the owner-supplied Stanwood Studios video. `fluorescent-ballast-start.wav` is a 1.38-second excerpt beginning at 2.17 seconds. Both are mono 22,050 Hz PCM16 WAV with short fades; the startup is raised 18 dB because it is quiet in the source. Their recording credit and source status are in CREDITS.md.
+
+`fluorescent-room-tone.wav` is an original four-second mono 22,050 Hz PCM16 loop rendered by `scripts/synthesize-fluorescent.py`. Analysis of the source video from 3.8 to 7.0 seconds found dominant 120, 240 and 360 Hz components and a smaller 258 Hz tone. The synthesized loop layers those tones with a faint 60 Hz fundamental and quiet shaped noise, and is heard only when the listener's room lights are on. No ambience from the video is sampled into this file.

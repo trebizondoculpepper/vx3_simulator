@@ -91,7 +91,7 @@ Stand at B11 SÄULE (_column_), cabinet B's column station, low in the cabinet: 
 
 ![The outlet handwheel on the beam tube](images/09-outlet-valve.png)
 
-2. Wait about half a minute while the xenon flows in and the air is pumped out.
+2. Wait about twenty seconds while the xenon flows in and the air is pumped out, until the oxygen is below 0.5 %.
    - **Watch:** on B11, the LAMBDA-SONDE (_lambda probe_) needle climbs into the green band and the O2 = 0 (_no oxygen_) lamp lights.
 
 ![B11 SÄULE (column station) with the purge complete](images/10-b11-purged.png)

@@ -1,6 +1,7 @@
 import type { Footprint } from './walk-collision';
 
-export type DevRoomId = 'corridor' | 'dev' | 'dev1' | 'dev2' | 'dev3';
+export type DevRoomId =
+  'corridor' | 'dev0' | 'dev1' | 'dev2' | 'dev3' | 'museum';
 export type DoorSide = 'north' | 'south' | 'east' | 'west';
 export interface DevDoor {
   to: DevRoomId;
@@ -11,10 +12,11 @@ export interface DevDoor {
 
 export const DEV_ROOM_NAMES: Record<DevRoomId, string> = {
   corridor: 'HAUPTFLUR',
-  dev: 'DEV · ENTWICKLUNG',
+  dev0: 'DEV0 · ENTWICKLUNG',
   dev1: 'DEV1 · EFFEKTE',
-  dev2: 'DEV2 · RESERVE',
+  dev2: 'DEV2 · BAUTEILE',
   dev3: 'DEV3 · ARCHIV',
+  museum: 'VX-MUSEUM',
 };
 export const DEV_DOOR_WIDTH = 1.2;
 export const DEV_DOOR_HEIGHT = 2.2;
@@ -39,7 +41,16 @@ export function devDoors(
     z: laneZ,
   });
   switch (id) {
-    case 'dev':
+    case 'museum':
+      return [
+        {
+          to: 'corridor',
+          side: 'north',
+          x: (bounds.minX + bounds.maxX) / 2 - 2.475 * metre,
+          z: bounds.minZ,
+        },
+      ];
+    case 'dev0':
       return [
         {
           to: 'corridor',
@@ -50,7 +61,7 @@ export function devDoors(
         east('dev1'),
       ];
     case 'dev1':
-      return [west('dev'), east('dev2')];
+      return [west('dev0'), east('dev2')];
     case 'dev2':
       return [west('dev1'), east('dev3')];
     case 'dev3':

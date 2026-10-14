@@ -37,19 +37,21 @@ const resetEffects = async () => {
 const openRoom = async () => {
   const ownRevision = ++revision;
   const params = new URLSearchParams(location.search);
-  const requested = params.get('room');
+  // The developer room was `dev` before it became dev0; old links still work.
+  const asked = params.get('room');
+  const requested = asked === 'dev' ? 'dev0' : asked;
   const room =
-    requested && ['dev', 'dev1', 'dev2', 'dev3'].includes(requested)
+    requested && ['dev0', 'dev1', 'dev2', 'dev3'].includes(requested)
       ? requested
       : 'corridor';
   let start: (canvas: HTMLCanvasElement) => RoomHandle;
   if (room === 'dev3')
     start = (await import('./rendering/gen1-room')).startGen1Room;
   else if (room === 'dev2')
-    start = (await import('./rendering/placeholder-room')).startPlaceholderRoom;
+    start = (await import('./rendering/parts-room')).startPartsRoom;
   else if (room === 'dev1')
     start = (await import('./rendering/effects-room')).startEffectsRoom;
-  else if (room === 'dev')
+  else if (room === 'dev0')
     start = (await import('./rendering/dev-room')).startDevRoom;
   else start = startScene;
   await resetEffects();
@@ -78,7 +80,9 @@ const openRoom = async () => {
       'aria-label',
       room === 'corridor'
         ? 'Laboratory and corridor'
-        : `Development room ${room}`,
+        : room === 'museum'
+          ? 'VX Museum'
+          : `Development room ${room}`,
     );
     canvas.parentElement!.append(root);
     root.append(surface);
@@ -100,7 +104,8 @@ const openRoom = async () => {
 const travel = (event: Event) => {
   const { to, from } = (event as CustomEvent<{ to: string; from: string }>)
     .detail;
-  if (!['corridor', 'dev', 'dev1', 'dev2', 'dev3'].includes(to)) return;
+  if (!['corridor', 'dev0', 'dev1', 'dev2', 'dev3', 'museum'].includes(to))
+    return;
   const url = new URL(location.href);
   url.search = '';
   if (to === 'corridor') url.searchParams.set('view', 'corridor');

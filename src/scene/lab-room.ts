@@ -5,7 +5,6 @@ import {
   Group,
   Mesh,
   PlaneGeometry,
-  MeshStandardMaterial,
   PointLight,
 } from 'three';
 import type { BufferGeometry, Material, Texture } from 'three';
@@ -264,6 +263,7 @@ export function createLabRoom(options: LabRoomOptions) {
     leaf.userData.side = side;
     group.add(leaf);
     leaves.push(leaf);
+    let faceOwner: 'lab' | 'corridor' | undefined;
     const part = (
       w: number,
       h: number,
@@ -281,20 +281,23 @@ export function createLabRoom(options: LabRoomOptions) {
         z - doorZ,
         leaf,
       );
+      if (faceOwner) result.userData.roomId = faceOwner;
       doorParts.push(result);
       return result;
     };
     const leafX = doorX + side * (leafWidth / 2 + 0.03);
-    part(
-      leafWidth,
-      doorHeight - 0.05,
-      0.08,
-      '#55665f',
-      leafX,
-      floorY + doorHeight / 2,
-      doorZ,
-    );
     for (const face of [-1, 1]) {
+      faceOwner = face < 0 ? 'lab' : 'corridor';
+      // Each half of the leaf is owned by the room it faces.
+      part(
+        leafWidth,
+        doorHeight - 0.05,
+        0.04,
+        '#55665f',
+        leafX,
+        floorY + doorHeight / 2,
+        doorZ + face * 0.02,
+      );
       const glassZ = doorZ + face * 0.05;
       part(2.05, 4.2, 0.02, '#1c2724', leafX, glassY, glassZ);
       for (let i = 0; i < 5; i++) {
@@ -359,6 +362,7 @@ export function createLabRoom(options: LabRoomOptions) {
         doorZ + face * 0.05,
       );
     }
+    faceOwner = undefined;
     if (side > 0)
       part(
         0.12,
@@ -421,14 +425,8 @@ export function createLabRoom(options: LabRoomOptions) {
       frameZ,
     ),
   );
-  // The door and its lining take the corridor's light: the scene's fill
-  // follows the lab's switch, so as the lab darkens they make up the
-  // difference themselves, as the corridor's own surfaces do.
-  const doorwaySurfaces = new Set<MeshStandardMaterial>();
-  for (const part of [...doorParts, ...lining])
-    if (part.material instanceof MeshStandardMaterial)
-      doorwaySurfaces.add(part.material);
-  let doorwayDark = -1;
+  for (const outerFrame of lining.slice(-3))
+    outerFrame.userData.roomId = 'corridor';
   // The closed door is solid; the walker's collision asks for this.
   const doorFootprint = {
     minX: doorX - doorWidth / 2,
@@ -774,11 +772,8 @@ export function createLabRoom(options: LabRoomOptions) {
         return lightsOn;
       },
     },
-    /**
-     * Advance the sway and the occasional flicker. `fromCorridor` says the
-     * viewer is outside, where the door takes the corridor's light.
-     */
-    update(seconds: number, reducedMotion: boolean, fromCorridor = true) {
+    /** Advance the sway and the occasional flicker. */
+    update(seconds: number, reducedMotion: boolean) {
       const delta = last === undefined ? 0 : Math.min(0.1, seconds - last);
       last = seconds;
       services.update(seconds, fireAlarm);
@@ -844,14 +839,6 @@ export function createLabRoom(options: LabRoomOptions) {
       const share = lit / fixtures.length;
       level +=
         (share - level) * Math.min(1, delta * (reducedMotion ? 60 : 2.5));
-      const doorwayTarget = fromCorridor ? 1 - level : 0;
-      if (Math.abs(doorwayTarget - doorwayDark) > 0.01) {
-        doorwayDark = doorwayTarget;
-        for (const surface of doorwaySurfaces)
-          surface.emissive
-            .copy(surface.color)
-            .multiplyScalar(0.55 * doorwayDark);
-      }
       lightSwitch.update(lightsOn);
     },
     dispose() {

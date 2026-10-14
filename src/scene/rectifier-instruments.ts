@@ -88,7 +88,7 @@ export function createRectifierInstruments(m: number) {
     size: 16,
   });
   textures.push(plate.texture);
-  const plateMaterial = createPs1Material({ map: plate.texture }, true, true);
+  const plateMaterial = createPs1Material({ map: plate.texture }, true);
   materials.push(plateMaterial);
   const header = new Mesh(new PlaneGeometry(0.9 * m, 0.075 * m), plateMaterial);
   header.position.set(0, 0.255 * m, 0.061 * m);
@@ -109,7 +109,7 @@ export function createRectifierInstruments(m: number) {
     group.add(bezel);
     const texture = meterDial(spec);
     textures.push(texture);
-    const dialMaterial = createPs1Material({ map: texture }, true, true);
+    const dialMaterial = createPs1Material({ map: texture }, true);
     materials.push(dialMaterial);
     const face = new Mesh(new CircleGeometry(0.149 * m, 20), dialMaterial);
     face.position.set(x, 0.01 * m, 0.095 * m);
@@ -134,11 +134,7 @@ export function createRectifierInstruments(m: number) {
       size: 15,
     });
     textures.push(caption.texture);
-    const captionMaterial = createPs1Material(
-      { map: caption.texture },
-      true,
-      true,
-    );
+    const captionMaterial = createPs1Material({ map: caption.texture }, true);
     materials.push(captionMaterial);
     const label = new Mesh(
       new PlaneGeometry(0.34 * m, 0.067 * m),

@@ -214,7 +214,8 @@ export function createCorridorBlueprints(options: {
   const materials: Material[] = [];
   const textures: Texture[] = [];
   const kinds: Sheet[] = ['start', 'xenon', 'shutdown', 'resonance'];
-  for (let i = 0; i < kinds.length; i++) {
+  // The first frame gave way to the museum entrance.
+  for (let i = 1; i < kinds.length; i++) {
     const x = doorX + (i - 1.5) * 1.65 * m;
     const y = floorY + 1.64 * m;
     const frame = new Mesh(

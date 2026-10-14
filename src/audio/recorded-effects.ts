@@ -6,6 +6,12 @@ const assets = {
   'toggle-up': [new URL('./assets/switch-click.wav', import.meta.url)],
   'toggle-down': [new URL('./assets/switch-click.wav', import.meta.url)],
   rocker: [new URL('./assets/rocker-click.wav', import.meta.url)],
+  'bakelite-switch': [
+    new URL('./assets/bakelite-heavy-switch.wav', import.meta.url),
+  ],
+  'ballast-start': [
+    new URL('./assets/fluorescent-ballast-start.wav', import.meta.url),
+  ],
   knob: [new URL('./assets/switch-click.wav', import.meta.url)],
   selector: [new URL('./assets/switch-click.wav', import.meta.url)],
   'breaker-on': [new URL('./assets/rocker-click.wav', import.meta.url)],
@@ -24,6 +30,8 @@ const levels: Record<RecordedCue, number> = {
   'toggle-up': 0.07,
   'toggle-down': 0.07,
   rocker: 0.08,
+  'bakelite-switch': 0.22,
+  'ballast-start': 0.35,
   knob: 0.025,
   selector: 0.06,
   'breaker-on': 0.12,

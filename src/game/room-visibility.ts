@@ -1,15 +1,21 @@
-import type { RoomId } from './sound-rooms';
+import type { DoorOpenings, RoomId } from './sound-rooms';
 
 /**
- * Which rooms are worth drawing from where the viewer stands. The lab and
- * the plant room share only a solid wall and each opens onto the corridor
- * by its own door in the same wall, so neither can be seen from inside the
- * other. From the corridor both doorways are in view.
+ * A corridor hub with three doors. The bordering rooms are always drawn from
+ * the corridor so their door leaves remain visible; other interiors are
+ * reached only through open links. This graph decides visibility, not light.
  */
-export function visibleRooms(viewer: RoomId): Record<RoomId, boolean> {
+export function visibleRooms(
+  viewer: RoomId,
+  doors: DoorOpenings,
+): Record<RoomId, boolean> {
+  if (viewer === 'corridor')
+    return { lab: true, plant: true, museum: true, corridor: true };
+  const through = doors[viewer] > 0.05;
   return {
-    lab: viewer !== 'plant',
-    plant: viewer !== 'lab',
+    lab: viewer === 'lab' || (through && doors.lab > 0.05),
+    plant: viewer === 'plant' || (through && doors.plant > 0.05),
+    museum: viewer === 'museum' || (through && doors.museum > 0.05),
     corridor: true,
   };
 }

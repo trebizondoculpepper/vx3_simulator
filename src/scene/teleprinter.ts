@@ -15,7 +15,7 @@ import { designate } from '../game/machine-parts';
 import { createPs1Material } from '../rendering/ps1-material';
 import { createCanvasTexture, createLabelTexture } from './screens';
 
-function paperFace() {
+function paperFace(title: string) {
   const { context, texture } = createCanvasTexture(512, 1024);
   texture.wrapT = RepeatWrapping;
   const draw = (rows: readonly string[]) => {
@@ -32,7 +32,7 @@ function paperFace() {
     }
     context.fillStyle = '#3f463e';
     context.font = 'bold 14px monospace';
-    context.fillText('VX3 / OPERATOR ACTION LOG', 30, 25);
+    context.fillText(title, 30, 25);
     context.font = '14px monospace';
     rows
       .slice(-58)
@@ -43,8 +43,11 @@ function paperFace() {
   return { texture, draw };
 }
 
-/** Continuous action logger with endless fanfold stock and a recycled collapsed pile. */
-export function createTeleprinter() {
+/**
+ * Continuous action logger with endless fanfold stock and a recycled
+ * collapsed pile. `title` is printed at the head of the paper.
+ */
+export function createTeleprinter(title = 'VX3 / OPERATOR ACTION LOG') {
   const group = new Group();
   group.name = 'WallTeleprinter';
   const materials: Material[] = [];
@@ -161,7 +164,7 @@ export function createTeleprinter() {
   });
 
   const log = createPrinterLog();
-  const printed = paperFace();
+  const printed = paperFace(title);
   textures.push(printed.texture);
   const paperMaterial = createPs1Material(
     { map: printed.texture, side: DoubleSide },

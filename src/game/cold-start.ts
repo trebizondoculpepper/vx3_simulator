@@ -32,6 +32,7 @@
 import {
   AIR_OXYGEN_PERCENT,
   AMBIENT,
+  PURGE_COMPLETE_PERCENT,
   acknowledge as acknowledgeVessel,
   chamberPressure,
   coreStage,
@@ -60,7 +61,7 @@ import type { RigModel } from './rig-model';
 import { XENON_HAZARD_STRAIN_PER_SECOND, xenonHazard } from './xenon-supply';
 
 /** The oxygen sensor reads zero below this, percent. */
-export const OXYGEN_ZERO_PERCENT = 0.1;
+export const OXYGEN_ZERO_PERCENT = PURGE_COMPLETE_PERCENT;
 /** Flow through the gauge while purging, SLPM. */
 export const PURGE_FLOW_SLPM = 5;
 /** Flow round the recirculator's loop, SLPM. */

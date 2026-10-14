@@ -1,3 +1,4 @@
+import { createRenderer, renderScale, useEnvironment } from './render-style';
 import { prepareStageThree } from '../game/stage-three-cheat';
 import { createPrintedImageTexture } from '../scene/printed-image';
 import { defaultControlRecording } from '../audio/control-sound-defaults';
@@ -7,15 +8,14 @@ import { createDelayedPrinter } from '../game/delayed-printer';
 import { createMachineActionLog } from '../game/machine-action-log';
 import { DEV_DOOR_WIDTH, DEV_DOOR_HEIGHT } from '../game/dev-room-links';
 import { createDevDoorways } from '../scene/dev-doorways';
+import { createMuseumGallery } from '../scene/museum-gallery';
 import { MAX_ZOOM, MIN_ZOOM, wheelZoom } from './first-person';
-import { HALLWAY_LAYER, renderWithHallwayLighting } from './hallway-render';
+import { createRoomLighting } from './room-lighting';
 import {
-  AmbientLight,
   Box3,
   BoxGeometry,
   CatmullRomCurve3,
   CircleGeometry,
-  DirectionalLight,
   Fog,
   Group,
   MeshBasicMaterial,
@@ -30,7 +30,6 @@ import {
   TubeGeometry,
   Vector2,
   Vector3,
-  WebGLRenderer,
 } from 'three';
 import type {
   Intersection,
@@ -133,43 +132,28 @@ import {
 import { createCrystalSparkles } from '../scene/crystal-sparkles';
 import { createToolRack } from '../scene/tool-rack';
 import { createWestWorkbench } from '../scene/west-workbench';
-import {
-  benchContraptionLayout,
-  contraptionNames,
-  contraptionNotes,
-  createBenchContraptions,
-} from '../scene/bench-contraptions';
 import { createEastControlPanel } from '../scene/east-control-panel';
 import { createTouchSticks } from '../ui/touch-sticks';
 import { slide } from '../game/walk-collision';
 import type { Footprint } from '../game/walk-collision';
 import { createTeleprinter } from '../scene/teleprinter';
-import { createPs1Material, dimPrintedWith, ps1Uniforms } from './ps1-material';
+import { createPs1Material, ps1Uniforms } from './ps1-material';
 
 // The 19-inch panel sets the world's scale.
 const panelWidth = PANEL_WIDTH;
 const worldUnitsPerMetre = panelWidth / 0.4826;
 
 export function startScene(canvas: HTMLCanvasElement) {
-  const renderer = new WebGLRenderer({ canvas, antialias: false });
+  const renderer = createRenderer(canvas);
   renderer.shadowMap.enabled = true;
-  renderer.setPixelRatio(1);
   const perspectiveCamera = new PerspectiveCamera(52, 1, 0.1, 150);
   const scene = new Scene();
+  // Realistic style: soft light and reflections from every side.
+  const freeEnvironment = useEnvironment(renderer, scene, 0.9);
   // Two floors underground the corridor fades into darkness either way.
   const basementFog = new Fog('#0d0c0a', 55, 148);
   scene.background = basementFog.color;
   scene.fog = basementFog;
-  // The fill lights stand in for the lab's fluorescent tubes and follow
-  // the light switch.
-  const fill = new AmbientLight('#fff0d7', 1.5);
-  scene.add(fill);
-  const lamp = new DirectionalLight('#ffe4ad', 2.1);
-  lamp.position.set(-3, 5, 7);
-  scene.add(lamp);
-  const rim = new DirectionalLight('#829a98', 0.7);
-  rim.position.set(3, -1, 2);
-  scene.add(rim);
 
   const materials: Material[] = [];
   const textures: Texture[] = [];
@@ -348,14 +332,6 @@ export function startScene(canvas: HTMLCanvasElement) {
     worldUnitsPerMetre,
   };
   const wallThickness = 0.3 * worldUnitsPerMetre;
-  // Doors take the corridor's light only while the viewer is out there.
-  const inCorridor = () => walker.z > room.maxZ + wallThickness;
-  // The scene's fill lights stand in for whichever room the viewer is in:
-  // the plant room's tubes in there, the lab's everywhere else. Rooms out
-  // of sight are not drawn, so only one room's lighting is ever on show.
-  const fillLevel = () => labRoom.lights.level;
-  /** Room light for the signs on the plant-room door, set each frame. */
-  const plantDoorLight = { value: 1 };
   const backWallHeight = room.ceilingY - floorY;
   cube(
     lab,
@@ -391,11 +367,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   const labRoom = createLabRoom(room);
   lab.add(labRoom.group);
   dynamic.push(() =>
-    labRoom.update(
-      performance.now() / 1000,
-      reducedMotion.matches,
-      inCorridor(),
-    ),
+    labRoom.update(performance.now() / 1000, reducedMotion.matches),
   );
   // Outside the door: the long basement corridor of the Helmholtz-Bau.
   const plantRoom = createPlantRoom({
@@ -435,16 +407,27 @@ export function startScene(canvas: HTMLCanvasElement) {
     recirculatorLastSeconds = seconds;
   });
   const devEntry = {
-    x: labRoom.door.handle.x + 4.8 * worldUnitsPerMetre,
+    x: labRoom.door.handle.x + 9.5 * worldUnitsPerMetre,
     z: room.maxZ + wallThickness + 2.4 * worldUnitsPerMetre,
   };
   const devPassages = createDevDoorways(
     'corridor',
-    [{ to: 'dev', side: 'south', ...devEntry }],
+    [{ to: 'dev0', side: 'south', ...devEntry }],
     floorY,
     worldUnitsPerMetre,
   );
   scene.add(devPassages.group);
+  const museumEntry = {
+    x: labRoom.door.handle.x - 2.475 * worldUnitsPerMetre,
+    z: devEntry.z,
+  };
+  const museum = createMuseumGallery(
+    worldUnitsPerMetre,
+    floorY,
+    labRoom.door.handle.x,
+    museumEntry.z + wallThickness,
+  );
+  scene.add(museum.group);
   const corridor = createCorridor({
     floorY,
     worldUnitsPerMetre,
@@ -457,6 +440,11 @@ export function startScene(canvas: HTMLCanvasElement) {
     plantDoor: plantRoom.doorway,
     devDoor: {
       x: devEntry.x,
+      width: DEV_DOOR_WIDTH * worldUnitsPerMetre,
+      height: DEV_DOOR_HEIGHT * worldUnitsPerMetre,
+    },
+    museumDoor: {
+      x: museumEntry.x,
       width: DEV_DOOR_WIDTH * worldUnitsPerMetre,
       height: DEV_DOOR_HEIGHT * worldUnitsPerMetre,
     },
@@ -683,35 +671,6 @@ export function startScene(canvas: HTMLCanvasElement) {
     toZ: room.maxZ,
   });
   lab.add(workbench.group);
-  // Three baffling machines on the clear stretch of worktop between the
-  // vice at the north end and the cassette player near the sink, each
-  // plugged into the socket trunking behind it.
-  const contraptions = createBenchContraptions(
-    worldUnitsPerMetre,
-    benchContraptionLayout,
-  );
-  contraptions.group.position.set(
-    room.minX,
-    floorY + 0.9 * worldUnitsPerMetre,
-    room.minZ + 1.4 * worldUnitsPerMetre,
-  );
-  lab.add(contraptions.group);
-  dynamic.push(() =>
-    contraptions.update(performance.now() / 1000, reducedMotion.matches),
-  );
-  const contraptionVisits = [0, 0, 0];
-  for (const [i, parts] of contraptions.parts.entries())
-    for (const part of parts)
-      fixture(part, 'Bench apparatus', () => {
-        const on = contraptions.toggle(i);
-        audio.play(on ? 'toggle-up' : 'toggle-down');
-        const notes = contraptionNotes[i];
-        write(
-          on
-            ? notes[contraptionVisits[i]++ % notes.length]
-            : `Switched the ${contraptionNames[i]} off. It took a moment to agree.`,
-        );
-      });
   const eastControlPanel = createEastControlPanel(worldUnitsPerMetre);
   eastControlPanel.group.position.set(
     room.maxX - 0.025 * worldUnitsPerMetre,
@@ -1029,6 +988,26 @@ export function startScene(canvas: HTMLCanvasElement) {
       audio.play('toggle-up');
     });
   }
+  for (const part of museum.doorParts) {
+    doorParts.add(part);
+    fixture(part, 'VX-Museum entrance', () => {
+      museum.toggleDoor();
+      audio.play('door-open');
+    });
+  }
+  for (const part of museum.switchParts)
+    fixture(part, 'Museum light switch', () => {
+      const on = museum.toggleLights();
+      audio.play('bakelite-switch');
+      if (on) window.setTimeout(() => audio.play('ballast-start'), 90);
+    });
+  for (const [part, action] of museum.actions)
+    fixture(part, 'Museum exhibit', () => {
+      action();
+      audio.play('button');
+      const message = museum.status;
+      if (message) write(message);
+    });
   for (const part of plantRoom.gateParts) doorParts.add(part);
   for (const part of plantRoom.entryParts) doorParts.add(part);
   const withinReach = new Set<Object3D>([
@@ -1039,23 +1018,15 @@ export function startScene(canvas: HTMLCanvasElement) {
     fixture(part, 'Light switch', () => {
       if (fire.ruinCause) return;
       const on = labRoom.lights.toggle();
-      // A light switch clicks: a light plastic tick, not a toggle's snap.
-      audio.play('key');
+      audio.play('bakelite-switch');
+      if (on) window.setTimeout(() => audio.play('ballast-start'), 90);
       write(
         on ? 'Lights on. The tubes take their time about it.' : 'Lights off.',
       );
     });
   dynamic.push(() => {
-    const level = fillLevel();
-    fill.intensity = 1.5 * (0.02 + 0.98 * level);
-    lamp.intensity = 2.1 * level;
-    rim.intensity = 0.7 * level;
     ps1Uniforms.roomLight.value = 0.03 + 0.97 * labRoom.lights.level;
-    ps1Uniforms.plantLight.value = Math.max(
-      0.03 + 0.97 * plantRoom.lightLevel,
-      rectifier.lightLevel * 0.85,
-    );
-    plantDoorLight.value = inCorridor() ? 1 : ps1Uniforms.plantLight.value;
+    ps1Uniforms.plantLight.value = 0.03 + 0.97 * plantRoom.lightLevel;
     for (const item of lamps)
       item.emissive.copy(item.color).multiply(item.color);
   });
@@ -1701,51 +1672,6 @@ export function startScene(canvas: HTMLCanvasElement) {
     hoseEnd: new Vector3(plantRoom.port.x, plantRoom.port.y, plantRoom.port.z),
   });
   scene.add(xenon.group);
-  // Signs, labels and dial faces inside the plant room follow its own
-  // switch; those on the corridor side of its wall keep the corridor's.
-  // Signs on the door itself follow whichever side the viewer is on.
-  const entryParts = new Set<Object3D>(plantRoom.entryParts);
-  dimPrintedWith(plantRoom.entryParts, plantDoorLight);
-  dimPrintedWith(
-    [plantRoom.group, rectifier.group, recirculator.group, xenon.group],
-    ps1Uniforms.plantLight,
-    (mesh) =>
-      entryParts.has(mesh) ||
-      new Vector3().setFromMatrixPosition(mesh.matrixWorld).z >
-        plantRoom.bounds.maxZ - 0.01,
-    // The walls and fittings as well, so the room is as dark as its switch
-    // leaves it, not lit by the lab's lights through the door.
-    true,
-  );
-  // Plant-room light does not borrow the lab's fill while viewed through its door.
-  perspectiveCamera.layers.enable(1);
-  const plantFill = new AmbientLight('#fff0d7', 0.03);
-  const plantLamp = new DirectionalLight('#ffe4ad', 0);
-  plantLamp.position.copy(lamp.position);
-  const plantRim = new DirectionalLight('#829a98', 0);
-  plantRim.position.copy(rim.position);
-  for (const light of [plantFill, plantLamp, plantRim]) {
-    light.layers.set(1);
-    scene.add(light);
-  }
-  for (const group of [
-    plantRoom.group,
-    rectifier.group,
-    recirculator.group,
-    xenon.group,
-  ])
-    group.traverse((object) => {
-      object.layers.set(1);
-      if (object instanceof PointLight) object.shadow.camera.layers.set(1);
-    });
-  // The outward-facing entrance leaf retains the corridor's lighting.
-  for (const part of plantRoom.entryParts) part.layers.set(0);
-  dynamic.push(() => {
-    const level = plantRoom.lightLevel;
-    plantFill.intensity = 1.5 * (0.02 + 0.98 * level);
-    plantLamp.intensity = 2.1 * level;
-    plantRim.intensity = 0.7 * level;
-  });
   for (const part of plantRoom.entryParts) {
     withinReach.add(part);
     fixture(part, 'Plant room door', () => {
@@ -1771,8 +1697,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     withinReach.add(part);
     fixture(part, 'Plant-room light switch', () => {
       const on = plantRoom.toggleLights();
-      // A light switch clicks: a light plastic tick, not a toggle's snap.
-      audio.play('key');
+      audio.play('bakelite-switch');
+      if (on) window.setTimeout(() => audio.play('ballast-start'), 90);
       write(on ? 'Technikraum: Licht an.' : 'Technikraum: Licht aus.');
     });
   }
@@ -1996,7 +1922,16 @@ export function startScene(canvas: HTMLCanvasElement) {
     },
   ] satisfies Array<Emitter & { id: SoundSource }>;
   // Shut doors stop sound between the lab, the plant room and the corridor.
-  const roomPlan = { lab: room, plant: plantRoom.bounds };
+  const roomPlan = {
+    lab: room,
+    plant: plantRoom.bounds,
+    museum: {
+      minX: museum.group.position.x - 4.5 * worldUnitsPerMetre,
+      maxX: museum.group.position.x + 4.5 * worldUnitsPerMetre,
+      minZ: museum.group.position.z,
+      maxZ: museum.group.position.z + 7.5 * worldUnitsPerMetre,
+    },
+  };
   // Rooms are culled whole: everything in the lab hangs under `lab`, and
   // the plant room is these four groups. The lab pieces placed straight in
   // the scene move under it, keeping their world positions.
@@ -2246,8 +2181,6 @@ export function startScene(canvas: HTMLCanvasElement) {
   const raycaster = new Raycaster();
   // The plant room is drawn on layer 1 for its own lighting; the pointer
   // must see it too, or none of its controls can be worked.
-  raycaster.layers.enable(1);
-  raycaster.layers.enable(HALLWAY_LAYER);
   const pointer = new Vector2();
   let orbitYaw = 0;
   let orbitPitch = 0;
@@ -2276,9 +2209,34 @@ export function startScene(canvas: HTMLCanvasElement) {
     labRoom.lights.toggle();
   }
   if (inspectionParams.get('plant-lights') === 'on') plantRoom.toggleLights();
+  if (inspectionParams.get('museum-lights') === 'on') museum.toggleLights();
   // Named viewpoints: shareable inspection links (?view=rack) and the
   // teleport board's destinations.
   const viewpoints: Record<string, () => void> = {
+    'museum-north': () => {
+      walker.x = museum.group.position.x - 1.0 * metre;
+      walker.z = museum.group.position.z + 2.4 * metre;
+      orbitYaw = 0;
+      orbitPitch = 0;
+    },
+    'museum-switch': () => {
+      walker.x = museum.group.position.x - 3.55 * metre;
+      walker.z = museum.group.position.z + 1.2 * metre;
+      orbitYaw = 0;
+      orbitPitch = -0.32;
+    },
+    'museum-door': () => {
+      walker.x = museumEntry.x;
+      walker.z = museumEntry.z - 1.4 * metre;
+      orbitYaw = Math.PI;
+      orbitPitch = -0.08;
+    },
+    museum: () => {
+      walker.x = museum.group.position.x - 2.475 * metre;
+      walker.z = museumEntry.z + 1.35 * metre;
+      orbitYaw = Math.PI;
+      orbitPitch = -0.05;
+    },
     cheats: () => {
       walker.x = cheats.group.position.x - 0.1575 * metre;
       walker.z = cheats.group.position.z + 1.4 * metre;
@@ -2429,7 +2387,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       audio.play('selector');
       if (view === 'developer-room') {
         write('Teleport: to the developer room.');
-        window.location.assign('/?room=dev');
+        window.location.assign('/?room=dev0');
         return;
       }
       destinations.forEach((_, i) => teleports.show(i, i === index));
@@ -2437,9 +2395,6 @@ export function startScene(canvas: HTMLCanvasElement) {
       write(`Teleport: ${caption.toLowerCase()}.`);
     });
   });
-  // The corridor has its own permanently energised lighting circuit.
-  perspectiveCamera.layers.enable(HALLWAY_LAYER);
-  const corridorLight = { value: 1 };
   const corridorRoots = [
     corridor.group,
     devPassages.group,
@@ -2449,21 +2404,6 @@ export function startScene(canvas: HTMLCanvasElement) {
     firePanel,
     hallBeacon,
   ];
-  dimPrintedWith(corridorRoots, corridorLight, () => false, true);
-  for (const root of corridorRoots)
-    root.traverse((object) => {
-      object.layers.set(HALLWAY_LAYER);
-      if (object instanceof PointLight)
-        object.shadow.camera.layers.set(HALLWAY_LAYER);
-    });
-  for (const part of plantRoom.entryParts) part.layers.set(HALLWAY_LAYER);
-  const corridorFill = new AmbientLight('#d8dcbe', 1.15);
-  corridorFill.layers.set(HALLWAY_LAYER);
-  scene.add(corridorFill);
-  const corridorLamp = new DirectionalLight('#d8dcbe', 0.6);
-  corridorLamp.position.copy(lamp.position);
-  corridorLamp.layers.set(HALLWAY_LAYER);
-  scene.add(corridorLamp);
 
   const keys = new Set<string>();
   const nudge = { forward: 0, right: 0 };
@@ -2655,7 +2595,6 @@ export function startScene(canvas: HTMLCanvasElement) {
         rig,
         lights: labRoom.lights,
         plantRoom,
-        contraptions,
         /** Every machine with its inputs and indicators, and any problems. */
         parts: () => ({
           machines: Object.fromEntries(partInventory(partsInScene())),
@@ -2905,7 +2844,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   const resize = () => {
     const { width, height } = canvas.getBoundingClientRect();
     if (!width || !height) return;
-    const scale = Math.min(640 / width, 480 / height, 1);
+    const scale = renderScale(width, height);
     const w = Math.max(1, Math.round(width * scale));
     const h = Math.max(1, Math.round(height * scale));
     renderer.setSize(w, h, false);
@@ -2916,6 +2855,42 @@ export function startScene(canvas: HTMLCanvasElement) {
   const observer = new ResizeObserver(resize);
   observer.observe(canvas);
   resize();
+  const roomLighting = createRoomLighting();
+  // These fittings face the corridor and were parented to the lab for
+  // placement convenience. Move them to the scene before declaring rooms.
+  for (const root of [cheats.group, teleports.group, hotline.group])
+    scene.attach(root);
+  const labLighting = roomLighting.defineRoom('lab', ps1Uniforms.roomLight);
+  const plantLighting = roomLighting.defineRoom(
+    'plant',
+    ps1Uniforms.plantLight,
+  );
+  const corridorLighting = roomLighting.defineRoom('corridor', { value: 1 });
+  const museumLighting = roomLighting.defineRoom('museum', museum.lighting);
+  roomLighting.registerRoot(labLighting, lab);
+  for (const root of plantGroups)
+    roomLighting.registerRoot(plantLighting, root);
+  for (const root of corridorRoots)
+    roomLighting.registerRoot(corridorLighting, root);
+  roomLighting.registerRoot(museumLighting, museum.group);
+  const roomAudit = roomLighting.audit(scene);
+  if (
+    import.meta.env.DEV &&
+    (roomAudit.unowned.length || roomAudit.multiplyOwned.length)
+  )
+    console.warn(
+      'Room lighting ownership audit',
+      roomAudit.unowned.length,
+      'unowned:',
+      roomAudit.unowned
+        .map((mesh) => mesh.name || mesh.parent?.name || '(unnamed)')
+        .join(', '),
+      roomAudit.multiplyOwned.length,
+      'multiply owned:',
+      roomAudit.multiplyOwned
+        .map((mesh) => mesh.name || mesh.parent?.name || '(unnamed)')
+        .join(', '),
+    );
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let last = 0;
   let xenonWarned = false;
@@ -2928,12 +2903,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     }
     const delta = last ? Math.min(0.1, (time - last) / 1000) : 0;
     last = time;
-    plantRoom.update(
-      delta,
-      reducedMotion.matches,
-      telltales.powerKw,
-      inCorridor() ? 1 - labRoom.lights.level : 0,
-    );
+    plantRoom.update(delta, reducedMotion.matches, telltales.powerKw);
     rectifier.update(plantRoom.powered, time / 1000, reducedMotion.matches);
     audio.setPlantPower(plantRoom.powered);
     // The machine. The xenon reaching it comes through the recirculator;
@@ -3181,6 +3151,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     const solid = [
       ...footprints,
       ...devPassages.solids(),
+      ...museum.solids,
+      ...(museum.doorBlocking ? [museum.doorFootprint] : []),
       ...(labRoom.door.blocking ? [labRoom.door.footprint] : []),
       ...(plantRoom.blocking ? [plantRoom.gateFootprint] : []),
       ...(plantRoom.entryBlocking ? [plantRoom.entryFootprint] : []),
@@ -3197,6 +3169,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     walker.x = next.x;
     walker.z = next.z;
     devPassages.update(delta, walker.x, walker.z);
+    museum.update(delta, time / 1000, reducedMotion.matches);
     walker.crouch +=
       ((walker.lowCrouched ? 1.85 : walker.crouched ? 1 : 0) - walker.crouch) *
       Math.min(1, delta * 10);
@@ -3221,25 +3194,42 @@ export function startScene(canvas: HTMLCanvasElement) {
     }
     if (locked()) crosshair.dataset.hot = String(Boolean(target()));
     unitReadout.textContent =
-      walker.z > room.maxZ
-        ? 'CORRIDOR · EBENE −2'
-        : walker.x < room.minX
-          ? 'TECHNIKRAUM · XENON'
-          : 'VX3 LAB · RAUM −2.17';
+      walker.z > museumEntry.z &&
+      walker.x > museum.group.position.x - 4.5 * metre &&
+      walker.x < museum.group.position.x + 4.5 * metre
+        ? 'VX-MUSEUM · SEKTION PHYSIK'
+        : walker.z > room.maxZ
+          ? 'CORRIDOR · EBENE −2'
+          : walker.x < room.minX
+            ? 'TECHNIKRAUM · XENON'
+            : 'VX3 LAB · RAUM −2.17';
     ps1Uniforms.snapPixels.value = reducedMotion.matches ? 0 : 1;
     const viewer = perspectiveCamera;
     viewer.getWorldPosition(ear);
     viewer.getWorldDirection(facing);
     audio.listen(ear.x, ear.y, ear.z, Math.atan2(facing.x, -facing.z));
     const listenerRoom = roomAt(roomPlan, ear.x, ear.z);
+    audio.setFluorescent(
+      listenerRoom === 'lab'
+        ? labRoom.lights.level
+        : listenerRoom === 'plant'
+          ? plantRoom.lightLevel
+          : 0,
+    );
     // Draw only the rooms that can be seen from here. Collision was taken
     // from the whole scene on the first frame, before anything was hidden.
-    const shown = visibleRooms(listenerRoom);
+    const shown = visibleRooms(listenerRoom, {
+      lab: labRoom.door.amount,
+      plant: plantRoom.entryAmount,
+      museum: museum.doorAmount,
+    });
     lab.visible = shown.lab;
     for (const group of plantGroups) group.visible = shown.plant;
+    museum.group.visible = shown.museum;
     const doorOpenings = {
       lab: labRoom.door.amount,
       plant: plantRoom.entryAmount,
+      museum: museum.doorAmount,
     };
     for (const [source, sourceRoom] of soundRooms)
       audio.setTransmission(
@@ -3256,7 +3246,7 @@ export function startScene(canvas: HTMLCanvasElement) {
               source === 'sink',
             ),
       );
-    renderWithHallwayLighting(renderer, scene, viewer);
+    renderer.render(scene, viewer);
   });
   const dispose = () => {
     renderer.setAnimationLoop(null);
@@ -3284,7 +3274,6 @@ export function startScene(canvas: HTMLCanvasElement) {
     for (const plume of Object.values(heatSmoke)) plume.dispose();
     for (const { spray } of sprinklerEffects) spray.dispose();
     xenon.dispose();
-    contraptions.dispose();
     recirculator.dispose();
     sparkles.dispose();
     plantRoom.dispose();
@@ -3294,6 +3283,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     hotline.dispose();
     labRoom.dispose();
     devPassages.dispose();
+    museum.dispose();
+    roomLighting.dispose();
     corridor.dispose();
     toolRack.dispose();
     cub.dispose();
@@ -3311,6 +3302,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     });
     for (const item of materials) item.dispose();
     for (const item of textures) item.dispose();
+    freeEnvironment();
     renderer.dispose();
   };
   return Object.assign(dispose, {

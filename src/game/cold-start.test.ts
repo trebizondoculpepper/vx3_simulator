@@ -140,7 +140,7 @@ describe('cold start', () => {
       (s) => oxygenPercent(s) < OXYGEN_ZERO_PERCENT,
       120,
     );
-    expect(purge.waited).toBeGreaterThan(20);
+    expect(purge.waited).toBeGreaterThan(15);
     // The lambda probe is the operator's proxy: it has swung into its band.
     expect(oxygenSensorVolts(state)).toBeGreaterThan(PURGE_COMPLETE_VOLTS);
     expect(coreStage(state.vessel)).toBe('cold');

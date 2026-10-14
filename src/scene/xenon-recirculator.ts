@@ -54,7 +54,7 @@ export function createXenonRecirculator(m: number) {
       size: 16,
     });
     textures.push(image.texture);
-    const material = createPs1Material({ map: image.texture }, true, true);
+    const material = createPs1Material({ map: image.texture }, true);
     materials.push(material);
     const face = new Mesh(
       new PlaneGeometry(width, (width * image.height) / image.width),

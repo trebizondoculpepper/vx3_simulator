@@ -5,12 +5,12 @@ import { overlaps, slide } from './walk-collision';
 const bounds = { minX: -5, maxX: 5, minZ: -5, maxZ: 5 };
 describe('development wing', () => {
   it('connects every neighbour in both directions and leaves dev2 as a through room', () => {
-    expect(devDoors('dev', bounds, 1).map((door) => door.to)).toEqual([
+    expect(devDoors('dev0', bounds, 1).map((door) => door.to)).toEqual([
       'corridor',
       'dev1',
     ]);
     expect(devDoors('dev1', bounds, 1).map((door) => door.to)).toEqual([
-      'dev',
+      'dev0',
       'dev2',
     ]);
     expect(devDoors('dev2', bounds, 1).map((door) => door.to)).toEqual([

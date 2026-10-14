@@ -97,8 +97,15 @@ export function settingsForActivity(activity: number): EffectSettings {
 }
 
 /** The effects the console can bypass, one per row. */
-export type EffectName =
-  'warp' | 'field' | 'precision' | 'pi' | 'phaser' | 'divergence';
+export const EFFECT_NAMES = [
+  'warp',
+  'field',
+  'precision',
+  'pi',
+  'phaser',
+  'divergence',
+] as const;
+export type EffectName = (typeof EFFECT_NAMES)[number];
 
 /**
  * The settings with each bypassed effect switched off, leaving the rest
@@ -164,4 +171,139 @@ export function effectFrame(settings: EffectSettings, seconds: number) {
       precision.flickerHz,
     ] as const,
   };
+}
+
+/** What a recording holds besides the effects: the room's own state. */
+export interface EffectRoomState {
+  /** The lab activity the presets were last set to. */
+  activity: number;
+  /** How fast effect time runs. */
+  timeSpeed: number;
+  /** The effect clock when recorded, seconds; it sets the wander and phases. */
+  effectSeconds: number;
+  /** Exhibits kept whole against lost precision. */
+  exempt: string[];
+  /** Effects switched off on the console, whatever their knobs say. */
+  bypassed: EffectName[];
+}
+
+/**
+ * A saved set of effect settings: what the effects room's RECORD button
+ * writes out as a JSON file, and what `readEffectRecording` loads back.
+ */
+export interface EffectRecording {
+  format: 'vx3-effects';
+  version: 1;
+  /** Which recording this was in its session, from 1. */
+  number: number;
+  /** When it was made, as an ISO timestamp. */
+  recorded: string;
+  settings: EffectSettings;
+  room: EffectRoomState;
+}
+
+export function effectRecording(
+  settings: EffectSettings,
+  room: EffectRoomState,
+  number: number,
+  recorded: Date,
+): EffectRecording {
+  return {
+    format: 'vx3-effects',
+    version: 1,
+    number,
+    recorded: recorded.toISOString(),
+    settings: structuredClone(settings),
+    room: structuredClone(room),
+  };
+}
+
+/** The file name a recording is saved under. */
+export function recordingFileName(recording: EffectRecording) {
+  const stamp = recording.recorded
+    .replace(/\.\d+Z$/, '')
+    .replace(/[-:]/g, '')
+    .replace('T', '-');
+  return `vx3-effects-${stamp}-${String(recording.number).padStart(2, '0')}.json`;
+}
+
+/**
+ * Load a recording, accepting the parsed JSON or its text. Anything a
+ * recording leaves out, or holds in the wrong form, falls back to the
+ * lab's settings at no activity, so an older recording still loads after
+ * new dials are added.
+ */
+export function readEffectRecording(input: unknown): EffectRecording {
+  const data: unknown = typeof input === 'string' ? JSON.parse(input) : input;
+  const record = (data ?? {}) as Partial<EffectRecording>;
+  if (record.format !== 'vx3-effects')
+    throw new Error('Not a VX3 effects recording.');
+  const merge = <T>(base: T, given: unknown): T => {
+    if (Array.isArray(base)) {
+      return (
+        Array.isArray(given) &&
+        given.length === base.length &&
+        given.every((v) => typeof v === 'number' && Number.isFinite(v))
+          ? [...given]
+          : base
+      ) as T;
+    }
+    if (typeof base === 'number')
+      return (
+        typeof given === 'number' && Number.isFinite(given) ? given : base
+      ) as T;
+    if (base && typeof base === 'object') {
+      const out = { ...base } as Record<string, unknown>;
+      const from = (given ?? {}) as Record<string, unknown>;
+      for (const key of Object.keys(out)) out[key] = merge(out[key], from[key]);
+      return out as T;
+    }
+    return base;
+  };
+  const room = (record.room ?? {}) as Partial<EffectRoomState>;
+  return {
+    format: 'vx3-effects',
+    version: 1,
+    number: typeof record.number === 'number' ? record.number : 0,
+    recorded: typeof record.recorded === 'string' ? record.recorded : '',
+    settings: merge(settingsForActivity(0), record.settings),
+    room: {
+      activity: merge(0, room.activity),
+      timeSpeed: merge(1, room.timeSpeed),
+      effectSeconds: merge(0, room.effectSeconds),
+      exempt: Array.isArray(room.exempt)
+        ? room.exempt.filter((v): v is string => typeof v === 'string')
+        : [],
+      bypassed: Array.isArray(room.bypassed)
+        ? room.bypassed.filter((v): v is EffectName =>
+            (EFFECT_NAMES as readonly unknown[]).includes(v),
+          )
+        : [],
+    },
+  };
+}
+
+/** A recording as it is typed on the effects room's printer. */
+export function printRecording(recording: EffectRecording) {
+  const { settings: s, room } = recording;
+  const f = (value: number, digits = 2) => value.toFixed(digits);
+  const w = s.warp;
+  const p = s.phaser;
+  const d = s.divergence;
+  const q = s.precision;
+  return [
+    `RECORDING ${String(recording.number).padStart(2, '0')}  ${recording.recorded.slice(0, 19).replace('T', ' ')}`,
+    `LAB ACT ${f(room.activity)}  TIME X${f(room.timeSpeed)}  T ${f(room.effectSeconds, 1)}`,
+    `WARP AMT ${f(w.amount)} TWIST ${f(w.twist, 3)} F ${f(w.twistFrequency)} S ${f(w.twistSpeed)}`,
+    `     SWELL ${f(w.swell, 3)} F ${f(w.swellFrequency)} S ${f(w.swellSpeed)}`,
+    `FIELD X ${f(w.centreX)} Z ${f(w.centreZ)} REACH ${f(w.radius)}`,
+    `PRECISION GRID ${f(q.grid, 3)} TREMBLE ${f(q.tremble)} FLICKER ${f(q.flickerHz, 1)}`,
+    `PI OFFSET ${f(s.pi.offset, 3)} WANDER ${f(s.pi.wander)}`,
+    `PHASER DEPTH ${f(p.depth)} HZ ${p.hz.map((v) => f(v)).join('/')} SPREAD ${f(p.spread)}`,
+    `DIVERGE H ${f(d.horizontalPx, 1)}PX ${f(d.horizontalHz)}HZ V ${f(d.verticalPx, 1)}PX ${f(d.verticalHz)}HZ PARALLAX ${f(d.parallax, 1)}`,
+    `BYPASSED ${room.bypassed.length ? room.bypassed.join(', ').toUpperCase() : 'NONE'}`,
+    `KEPT WHOLE ${room.exempt.length ? room.exempt.join(', ').toUpperCase() : 'NONE'}`,
+    `FILE ${recordingFileName(recording)}`,
+    '-'.repeat(48),
+  ].join('\n');
 }

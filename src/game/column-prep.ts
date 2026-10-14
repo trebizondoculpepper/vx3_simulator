@@ -89,7 +89,9 @@ export const FULL_SPIN = 1.4;
 export const MAXIMUM = 4000;
 /** Flow coefficients through the inlet and the outlet, per second. */
 const INLET = 0.15;
-const OUTLET = 0.15;
+// The pump takes a fifth of the chamber's gas each second, so the air
+// decays exponentially: from room air to 0.5 % oxygen in about 20 s.
+const OUTLET = 0.2;
 /** How fast an unsealed chamber fills with room air, per second. */
 const VENT = 2;
 /** The core's thermal lag, seconds. */
@@ -135,15 +137,22 @@ export const oxygenPercent = (state: ColumnPrepState) =>
   isSealed(state) ? airShare(state) * AIR_OXYGEN_PERCENT : AIR_OXYGEN_PERCENT;
 
 /**
+ * The purge is complete once the chamber's oxygen is below this, percent:
+ * low enough that a hot core will not burn.
+ */
+export const PURGE_COMPLETE_PERCENT = 0.5;
+
+/**
  * The chamber's oxygen sensor is a narrowband lambda probe, as in a
  * motorcycle exhaust: about 0.1 V with oxygen about, switching through
- * 0.45 V near 0.3 % and settling toward 0.85 V as the last of it goes. It
- * is the operator's proxy for a finished purge.
+ * 0.45 V near 1 % and settling toward 0.85 V as the last of it goes. It
+ * is calibrated to read `PURGE_COMPLETE_VOLTS` at `PURGE_COMPLETE_PERCENT`,
+ * and is the operator's proxy for a finished purge.
  */
 export const lambdaVolts = (oxygen: number) =>
-  0.1 + 0.75 / (1 + (Math.max(0, oxygen) / 0.3) ** 2);
+  0.1 + 0.75 / (1 + (Math.max(0, oxygen) / (2 * PURGE_COMPLETE_PERCENT)) ** 2);
 
-/** The probe reads purge complete above this, volts. */
+/** The probe reads purge complete above this, volts (0.5 % oxygen). */
 export const PURGE_COMPLETE_VOLTS = 0.7;
 
 /** Whether the core is hot enough to be active. */

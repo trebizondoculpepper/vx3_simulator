@@ -94,6 +94,7 @@ export const contraptionNames = [
 export function createBenchContraptions(
   worldUnitsPerMetre: number,
   layout: ContraptionLayout,
+  powerLeads = true,
 ) {
   const m = worldUnitsPerMetre;
   const group = new Group();
@@ -733,6 +734,7 @@ export function createBenchContraptions(
     const along = layout.along[i];
     machine.position.set(layout.out * m, 0, along * m);
     machine.rotation.y = Math.PI / 2;
+    if (!powerLeads) continue;
     // In a machine's frame +x runs north along the bench and -z runs
     // towards the wall.
     const socketX = -(layout.sockets[i] - along);
@@ -870,6 +872,7 @@ export function createBenchContraptions(
 
   return {
     group,
+    machines: machines as readonly Group[],
     /** Every mesh of each machine, for clicking. */
     parts: machines.map((machine) => {
       const meshes: Mesh[] = [];
@@ -889,9 +892,10 @@ export function createBenchContraptions(
     },
     update,
     dispose() {
-      group.traverse((object) => {
-        if (object instanceof Mesh) object.geometry.dispose();
-      });
+      for (const machine of machines)
+        machine.traverse((object) => {
+          if (object instanceof Mesh) object.geometry.dispose();
+        });
       for (const item of materials) item.dispose();
       for (const item of textures) item.dispose();
     },

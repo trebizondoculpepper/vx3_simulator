@@ -1,3 +1,9 @@
+import {
+  createRenderer,
+  realistic,
+  renderScale,
+  useEnvironment,
+} from './render-style';
 import { devDoors, devWallPieces } from '../game/dev-room-links';
 import { createDevDoorways } from '../scene/dev-doorways';
 import {
@@ -14,7 +20,6 @@ import {
   Raycaster,
   Vector2,
   TubeGeometry,
-  WebGLRenderer,
 } from 'three';
 import type { Material, Texture } from 'three';
 import { PANEL_WIDTH } from '../game/rack-layout';
@@ -41,9 +46,10 @@ const metre = PANEL_WIDTH / 0.4826;
  * front. It is unwired: switched off, silent, and nothing on it works.
  */
 export function startGen1Room(canvas: HTMLCanvasElement) {
-  const renderer = new WebGLRenderer({ canvas, antialias: false });
-  renderer.setPixelRatio(1);
+  const renderer = createRenderer(canvas);
   const scene = new Scene();
+  // Realistic style: soft light and reflections from every side.
+  const freeEnvironment = useEnvironment(renderer, scene, 0.45);
   const fog = new Fog('#1b1c1a', 120, 220);
   scene.fog = fog;
   scene.background = fog.color;
@@ -260,7 +266,7 @@ export function startGen1Room(canvas: HTMLCanvasElement) {
   notes.innerHTML =
     '<strong>Room dev3</strong> · not part of the game · the first-generation VX3, retired and unwired, kept as an archive<br>' +
     'Click: mouse look · WASD: walk · Shift: run · C: crouch · wheel: zoom · Esc: cursor · <kbd>P</kbd> toggles PS1 resolution<br>' +
-    'Door to dev2: west, south of the archive cordon · <a href="/?room=dev">developer room</a> · <a href="/?room=dev1">effects room</a> · <a href="/">lab</a>';
+    'Door to dev2: west, south of the archive cordon · <a href="/?room=dev0">developer room</a> · <a href="/?room=dev1">effects room</a> · <a href="/">lab</a>';
   Object.assign(notes.style, {
     position: 'absolute',
     left: '12px',
@@ -274,11 +280,12 @@ export function startGen1Room(canvas: HTMLCanvasElement) {
   for (const link of notes.querySelectorAll('a')) link.style.color = '#ffb43a';
   canvas.parentElement?.append(notes);
 
-  let ps1 = true;
+  // The PS1 resolution, on P; the realistic style starts without it.
+  let ps1 = !realistic;
   const resize = () => {
     const { width: w, height: h } = canvas.getBoundingClientRect();
     if (!w || !h) return;
-    const scale = ps1 ? Math.min(640 / w, 480 / h, 1) : 1;
+    const scale = ps1 ? renderScale(w, h, true) : 1;
     const rw = Math.max(1, Math.round(w * scale));
     const rh = Math.max(1, Math.round(h * scale));
     renderer.setSize(rw, rh, false);
@@ -352,6 +359,7 @@ export function startGen1Room(canvas: HTMLCanvasElement) {
     });
     for (const item of materials) item.dispose();
     for (const item of textures) item.dispose();
+    freeEnvironment();
     renderer.dispose();
   };
   return Object.assign(dispose, {

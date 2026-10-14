@@ -1,3 +1,9 @@
+import {
+  createRenderer,
+  realistic,
+  renderScale,
+  useEnvironment,
+} from './render-style';
 import { devDoors, devWallPieces } from '../game/dev-room-links';
 import { createDevDoorways } from '../scene/dev-doorways';
 import {
@@ -19,7 +25,6 @@ import {
   TorusKnotGeometry,
   Vector2,
   Vector3,
-  WebGLRenderer,
 } from 'three';
 import type {
   BufferGeometry,
@@ -33,10 +38,19 @@ import { RACK_METRE } from '../game/rack-layout';
 import type { Footprint } from '../game/walk-collision';
 import {
   effectFrame,
+  effectRecording,
+  printRecording,
+  readEffectRecording,
+  recordingFileName,
   settingsForActivity,
   withBypass,
 } from '../game/effect-settings';
-import type { EffectName, EffectSettings } from '../game/effect-settings';
+import type {
+  EffectName,
+  EffectRecording,
+  EffectSettings,
+} from '../game/effect-settings';
+import { createTeleprinter } from '../scene/teleprinter';
 import { createCanvasTexture } from '../scene/screens';
 import { createFirstPerson } from './first-person';
 import { createPs1Material, ps1Uniforms } from './ps1-material';
@@ -62,10 +76,11 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
   const HEIGHT = 3;
   const half = (ROOM / 2) * m;
 
-  const renderer = new WebGLRenderer({ canvas, antialias: false });
-  renderer.setPixelRatio(1);
+  const renderer = createRenderer(canvas);
   renderer.setClearColor('#16181a');
   const scene = new Scene();
+  // Realistic style: soft light and reflections from every side.
+  const freeEnvironment = useEnvironment(renderer, scene, 0.5);
   const camera = new PerspectiveCamera(60, 1, 0.05, 40 * m);
   scene.add(new AmbientLight('#fff4e2', 1.5));
   const key = new DirectionalLight('#fff0d0', 2);
@@ -748,6 +763,7 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
             lit: () => frozen,
             press: () => (frozen = !frozen),
           },
+          { legend: 'RECORD', colour: 'red', press: () => record() },
         ],
       },
       {
@@ -1025,6 +1041,85 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
   exempt(station, ['ps1Precision', 'ps1Warp', 'ps1Pi']);
   solid(0, 3.0, deskW, depth + 0.06);
 
+  // ---- The recording teletype ---------------------------------------------
+  // The lab's own teletype, on a stand to the right of the desk, turned to
+  // face the operator. RECORD types the settings onto its paper and saves
+  // the same recording as a JSON file (to the browser's downloads folder),
+  // which `readEffectRecording` loads back exactly, here or in the game.
+  const PRINTER_SCALE = 2.5;
+  const printerY = 0.95 * m;
+  const teletype = createTeleprinter('VX3 / EFFECTS RECORDINGS');
+  teletype.group.scale.setScalar(PRINTER_SCALE);
+  teletype.group.position.set(1.35 * m, printerY, 3.1 * m);
+  teletype.group.rotation.y = -0.7;
+  teletype.outputPile.position.y = -printerY / PRINTER_SCALE + 0.08;
+  room.add(teletype.group);
+  add(
+    new BoxGeometry(0.62 * m, printerY - 0.25 * m, 0.5 * m),
+    material({ color: '#3d4a45' }),
+    1.35,
+    (printerY / m - 0.25) / 2,
+    3.1,
+  ).rotation.y = -0.7;
+  solid(1.35, 3.1, 0.8, 0.8);
+
+  const STORE = 'vx3.effects.recordings';
+  const stored = (): EffectRecording[] => {
+    try {
+      const raw = localStorage.getItem(STORE);
+      return raw
+        ? (JSON.parse(raw) as unknown[]).map((item) =>
+            readEffectRecording(item),
+          )
+        : [];
+    } catch {
+      return [];
+    }
+  };
+  let recordings = stored().length;
+  const record = () => {
+    recordings += 1;
+    const recording = effectRecording(
+      settings,
+      {
+        activity,
+        timeSpeed: speed,
+        effectSeconds,
+        exempt: teapotHolds ? ['teapot'] : [],
+        bypassed: [...bypassed],
+      },
+      recordings,
+      new Date(),
+    );
+    teletype.record(printRecording(recording));
+    try {
+      localStorage.setItem(STORE, JSON.stringify([...stored(), recording]));
+    } catch {
+      // Storage is a convenience; the file is the record.
+    }
+    const file = new Blob([JSON.stringify(recording, null, 2) + '\n'], {
+      type: 'application/json',
+    });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(file);
+    link.download = recordingFileName(recording);
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    console.info('Effects recording', recording);
+    return recording;
+  };
+  const load = (input: unknown) => {
+    const recording = readEffectRecording(input);
+    settings = recording.settings;
+    activity = recording.room.activity;
+    speed = recording.room.timeSpeed;
+    effectSeconds = recording.room.effectSeconds;
+    teapotHolds = recording.room.exempt.includes('teapot');
+    bypassed.clear();
+    for (const name of recording.room.bypassed) bypassed.add(name);
+    return recording;
+  };
+
   // The warp's centre, when it has one: a small glowing beacon on the floor.
   const beacon = add(
     new CylinderGeometry(0.05 * m, 0.12 * m, 0.04 * m, 12),
@@ -1095,8 +1190,8 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
   notes.innerHTML =
     '<strong>Effects room</strong> · not part of the game · the console is in front of you<br>' +
     'Click: mouse look · WASD: walk · Shift: run · C: crouch · wheel: zoom · Esc: cursor<br>' +
-    'Click a knob’s left or right half to turn it down or up<br>' +
-    'Doors: dev west · dev2 east · <kbd>P</kbd> toggles PS1 resolution · <a href="/?room=dev">developer room</a> · <a href="/">lab</a>';
+    'Click a knob’s left or right half to turn it down or up · RECORD prints and saves the settings<br>' +
+    'Doors: dev0 west · dev2 east · <kbd>P</kbd> toggles PS1 resolution · <a href="/?room=dev0">developer room</a> · <a href="/">lab</a>';
   Object.assign(notes.style, {
     position: 'absolute',
     left: '12px',
@@ -1131,11 +1226,12 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
   };
 
   // ---- Running ------------------------------------------------------------
-  let ps1 = true;
+  // The PS1 resolution, on P; the realistic style starts without it.
+  let ps1 = !realistic;
   const resize = () => {
     const { width, height } = canvas.getBoundingClientRect();
     if (!width || !height) return;
-    const scale = ps1 ? Math.min(640 / width, 480 / height, 1) : 1;
+    const scale = ps1 ? renderScale(width, height, true) : 1;
     const rw = Math.max(1, Math.round(width * scale));
     const rh = Math.max(1, Math.round(height * scale));
     renderer.setSize(rw, rh, false);
@@ -1194,6 +1290,12 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
     load(next: EffectSettings) {
       settings = next;
     },
+    /** Press RECORD: print, store and download the settings. */
+    record,
+    /** Every recording kept in this browser, oldest first. */
+    recordings: stored,
+    /** Restore a recording (parsed JSON or its text), as RECORD saved it. */
+    restore: load,
     preset,
     /** Where each console control is, metres, for scripted clicks. */
     controls: () =>
@@ -1264,6 +1366,7 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
     desk.update(delta);
     for (const panel of panels)
       panel.update(seconds, delta, reducedMotion.matches);
+    teletype.update(delta, reducedMotion.matches);
     walk.update(delta);
     passages.update(delta, walk.walker.x, walk.walker.z);
     if (divergence.active(frame.divergence))
@@ -1282,12 +1385,14 @@ export function startEffectsRoom(canvas: HTMLCanvasElement) {
     ps1Uniforms.pi.value = Math.PI;
     for (const panel of panels) panel.dispose();
     reflections.dispose();
+    teletype.dispose();
     disposeKit(kit, desk.group);
     scene.traverse((object) => {
       if (object instanceof Mesh) object.geometry.dispose();
     });
     for (const item of materials) item.dispose();
     for (const item of textures) item.dispose();
+    freeEnvironment();
     renderer.dispose();
   };
   return Object.assign(dispose, {

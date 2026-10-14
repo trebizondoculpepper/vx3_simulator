@@ -4,7 +4,6 @@ import {
   CylinderGeometry,
   Group,
   Mesh,
-  MeshStandardMaterial,
   PlaneGeometry,
   PointLight,
 } from 'three';
@@ -74,7 +73,7 @@ export function createPlantRoom(options: {
       size: 14,
     });
     textures.push(image.texture);
-    const material = createPs1Material({ map: image.texture }, true, true);
+    const material = createPs1Material({ map: image.texture }, true);
     materials.push(material);
     const mesh = new Mesh(
       new PlaneGeometry(w, (w * image.height) / image.width),
@@ -179,32 +178,25 @@ export function createPlantRoom(options: {
     floorY + (height + doorHeight) / 2,
     maxZ + wallThickness / 2 - 0.01,
   );
-  // Steel jambs and a head lining round the opening; like the door they
-  // take the corridor's light when seen from outside.
-  const lining: Mesh[] = [];
-  for (const x of [midX - doorWidth / 2, midX + doorWidth / 2])
-    lining.push(
-      box(
-        0.06 * m,
-        doorHeight,
-        wallThickness,
+  // Both faces of the masonry lining are separate room-owned surfaces.
+  const lining = (w: number, h: number, x: number, y: number) => {
+    for (const face of [-1, 1]) {
+      const skin = box(
+        w,
+        h,
+        wallThickness / 2,
         '#384b40',
         x,
-        floorY + doorHeight / 2,
-        maxZ + wallThickness / 2,
-      ),
-    );
-  lining.push(
-    box(
-      doorWidth + 0.06 * m,
-      0.03 * m,
-      wallThickness,
-      '#384b40',
-      midX,
-      floorY + doorHeight - 0.015 * m,
-      maxZ + wallThickness / 2,
-    ),
-  );
+        y,
+        maxZ + wallThickness * (face < 0 ? 0.25 : 0.75),
+      );
+      skin.userData.roomId = face < 0 ? 'plant' : 'corridor';
+    }
+  };
+  for (const x of [midX - doorWidth / 2, midX + doorWidth / 2])
+    lining(0.06 * m, doorHeight, x, floorY + doorHeight / 2);
+  lining(doorWidth + 0.06 * m, 0.03 * m, midX, floorY + doorHeight - 0.015 * m);
+  const exteriorFirst = group.children.length;
   label('TECHNIKRAUM', 1.25 * m, midX, floorY + 2.3 * m, entryZ + 0.05);
   // Corridor-side reminder fixed to the wall beside, rather than on, the door.
   const noticeX = midX - doorWidth / 2 - 0.5 * m;
@@ -235,6 +227,8 @@ export function createPlantRoom(options: {
     noticeY - 0.095 * m,
     noticeZ + 0.022 * m,
   );
+  for (const surface of group.children.slice(exteriorFirst))
+    if (surface instanceof Mesh) surface.userData.roomId = 'corridor';
   // Room lighting has its own rocker just inside the entrance.
   const lightingPlate = new Group();
   lightingPlate.position.set(
@@ -253,18 +247,22 @@ export function createPlantRoom(options: {
   // Hinge at the room face of the wall so the open leaf clears the jamb.
   door.position.set(midX - doorWidth / 2, floorY, maxZ + 0.02 * m);
   group.add(door);
-  box(
-    doorWidth - 0.05 * m,
-    doorHeight,
-    0.045 * m,
-    '#53665c',
-    doorWidth / 2,
-    doorHeight / 2,
-    0,
-    door,
-  );
+  for (const face of [-1, 1]) {
+    const skin = box(
+      doorWidth - 0.05 * m,
+      doorHeight,
+      0.023 * m,
+      '#53665c',
+      doorWidth / 2,
+      doorHeight / 2,
+      face * 0.0115 * m,
+      door,
+    );
+    skin.userData.roomId = face < 0 ? 'plant' : 'corridor';
+  }
   const grilleGlows: Material[] = [];
   for (const face of [-1, 1]) {
+    const firstPart = door.children.length;
     box(
       0.29 * m,
       0.56 * m,
@@ -357,6 +355,9 @@ export function createPlantRoom(options: {
       face * 0.026 * m,
       door,
     );
+    for (const surface of door.children.slice(firstPart))
+      if (surface instanceof Mesh)
+        surface.userData.roomId = face < 0 ? 'plant' : 'corridor';
   }
   // Paired painted hazard pictograms on both sides of the door: electric
   // shock and compressed xenon. They sit above the wired-glass window.
@@ -406,7 +407,7 @@ export function createPlantRoom(options: {
   hazardCtx.fillText('HOCHSPANNUNG', 85, 128);
   hazardCtx.fillText('Xe · GAS', 272, 128);
   hazard.texture.needsUpdate = true;
-  const hazardMaterial = createPs1Material({ map: hazard.texture }, true, true);
+  const hazardMaterial = createPs1Material({ map: hazard.texture }, true);
   materials.push(hazardMaterial);
   for (const face of [-1, 1]) {
     const print = new Mesh(
@@ -415,27 +416,13 @@ export function createPlantRoom(options: {
     );
     print.position.set(doorWidth / 2, 1.88 * m, face * 0.029 * m);
     if (face < 0) print.rotation.y = Math.PI;
+    print.userData.roomId = face < 0 ? 'plant' : 'corridor';
     door.add(print);
   }
   const entryParts: Mesh[] = [];
   door.traverse((o) => {
     if (o instanceof Mesh) entryParts.push(o);
   });
-  // The scene's fill light follows the lab's switch, so the door makes up
-  // the difference itself and keeps the corridor's lighting either way.
-  const entrySurfaces = new Set<MeshStandardMaterial>();
-  // Paints are shared by colour, so the door gets its own copies.
-  for (const part of [...entryParts, ...lining])
-    if (
-      part.material instanceof MeshStandardMaterial &&
-      !part.material.transparent
-    ) {
-      const own = part.material.clone();
-      part.material = own;
-      materials.push(own);
-      entrySurfaces.add(own);
-    }
-  let entryDark = -1;
   let entryOpened = false;
   let entryAmount = 0;
   let arcCountdown = 1.7;
@@ -762,7 +749,7 @@ export function createPlantRoom(options: {
     [createNoOpenFlameTexture(), gateW * 0.62],
   ] as const) {
     textures.push(image.texture);
-    const material = createPs1Material({ map: image.texture }, true, true);
+    const material = createPs1Material({ map: image.texture }, true);
     materials.push(material);
     const sign = new Mesh(
       new PlaneGeometry(0.3 * m, (0.3 * m * image.height) / image.width),
@@ -853,12 +840,7 @@ export function createPlantRoom(options: {
     openGate() {
       opened = true;
     },
-    update(delta: number, reducedMotion: boolean, loadKw = 0, labDark = 0) {
-      if (Math.abs(labDark - entryDark) > 0.01) {
-        entryDark = labDark;
-        for (const surface of entrySurfaces)
-          surface.emissive.copy(surface.color).multiplyScalar(0.55 * labDark);
-      }
+    update(delta: number, reducedMotion: boolean, loadKw = 0) {
       instruments.update(powered, loadKw, delta);
       entryAmount +=
         Math.sign((entryOpened ? 1 : 0) - entryAmount) *

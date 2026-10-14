@@ -7,13 +7,15 @@ import {
   Vector4,
 } from 'three';
 import type { MeshStandardMaterialParameters, Object3D } from 'three';
+import { realistic } from './render-style';
 
 // Quantize projected coordinates, preserving clip-space depth and the original w.
 // Shared uniforms let resizing and reduced motion update every scene material.
 export const ps1Uniforms = {
   resolution: { value: new Vector2(640, 480) },
   snapPixels: { value: 1.0 },
-  snapStrength: { value: 0.35 },
+  // The realistic render style draws vertices where they are.
+  snapStrength: { value: realistic ? 0 : 0.35 },
   /** How much of the lab's own lighting is on, from 0 (dark) to 1. */
   roomLight: { value: 1.0 },
   /** The same for the plant room, which has its own switch. */
@@ -76,40 +78,49 @@ export function createPs1Material(
     ? new MeshBasicMaterial(options)
     : new MeshStandardMaterial({
         ...options,
-        flatShading: true,
-        roughness: 1,
+        // Realistic: smooth, with a sheen; metal polished. PS1: flat, matt.
+        flatShading: !realistic,
+        roughness: realistic
+          ? (options.roughness ?? ((options.metalness ?? 0) > 0 ? 0.32 : 0.62))
+          : 1,
       });
+  // Printed and glowing surfaces keep their own colours exactly.
+  if (realistic && unlit) material.toneMapped = false;
   // This material's share of lost precision and of the warp: 0 keeps it
   // whole and straight.
   material.userData.ps1Precision = { value: 1 };
   material.userData.ps1Warp = { value: 1 };
   material.userData.ps1Pi = { value: 1 };
   material.userData.ps1PiAxis = { value: new Vector3(0, 1, 0) };
-  material.onBeforeCompile = (shader) => {
+  material.userData.ps1Glow = glow;
+  material.onBeforeCompile = function (this: typeof material, shader) {
     shader.uniforms.ps1Resolution = ps1Uniforms.resolution;
     shader.uniforms.ps1SnapPixels = ps1Uniforms.snapPixels;
     shader.uniforms.ps1SnapStrength = ps1Uniforms.snapStrength;
-    const room = material.userData.ps1Room as typeof ps1Uniforms.roomLight;
+    const room = this.userData.ps1Room as typeof ps1Uniforms.roomLight;
     shader.uniforms.ps1RoomLight = room ?? ps1Uniforms.roomLight;
-    shader.uniforms.ps1Dims = { value: room || (unlit && !glow) ? 1 : 0 };
+    shader.uniforms.ps1Dims = {
+      value: !this.userData.ps1Glow && (room || unlit) ? 1 : 0,
+    };
     shader.uniforms.ps1Channels = ps1Uniforms.channels;
     shader.uniforms.ps1Warp = ps1Uniforms.warp;
     shader.uniforms.ps1WarpTwist = ps1Uniforms.warpTwist;
     shader.uniforms.ps1WarpSwell = ps1Uniforms.warpSwell;
     shader.uniforms.ps1WarpField = ps1Uniforms.warpField;
     shader.uniforms.ps1Precision = ps1Uniforms.precision;
-    shader.uniforms.ps1PrecisionScale = material.userData.ps1Precision as {
+    shader.uniforms.ps1PrecisionScale = this.userData.ps1Precision as {
       value: number;
     };
-    shader.uniforms.ps1WarpScale = material.userData.ps1Warp as {
+    shader.uniforms.ps1WarpScale = this.userData.ps1Warp as {
       value: number;
     };
     shader.uniforms.ps1Pi = ps1Uniforms.pi;
-    shader.uniforms.ps1PiScale = material.userData.ps1Pi as { value: number };
-    shader.uniforms.ps1PiAxis = material.userData.ps1PiAxis as {
+    shader.uniforms.ps1PiScale = this.userData.ps1Pi as { value: number };
+    shader.uniforms.ps1PiAxis = this.userData.ps1PiAxis as {
       value: Vector3;
     };
     shader.uniforms.ps1LinearTarget = ps1Uniforms.linearTarget;
+    shader.uniforms.ps1Dither = { value: realistic ? 0 : 1 };
     shader.uniforms.ps1Time = ps1Uniforms.time;
     shader.vertexShader = `uniform vec2 ps1Resolution;
       uniform float ps1SnapPixels;
@@ -198,21 +209,35 @@ export function createPs1Material(
       uniform float ps1Dims;
       uniform vec3 ps1Channels;
       uniform float ps1LinearTarget;
+      uniform float ps1Dither;
       ${shader.fragmentShader}`.replace(
       '#include <dithering_fragment>',
       `gl_FragColor.rgb *= mix(1.0, ps1RoomLight, ps1Dims);
       gl_FragColor.rgb *= ps1Channels;
-      float px = mod(floor(gl_FragCoord.x), 2.0);
-      float py = mod(floor(gl_FragCoord.y), 2.0);
-      float threshold = (px == 0.0 ? (py == 0.0 ? 0.0 : 3.0) : (py == 0.0 ? 2.0 : 1.0));
-      vec3 shown = clamp(gl_FragColor.rgb, 0.0, 1.0);
-      if (ps1LinearTarget > 0.5) shown = pow(shown, vec3(1.0 / 2.2));
-      shown = floor(shown * 31.0 + (threshold + 0.5) / 4.0) / 31.0;
-      if (ps1LinearTarget > 0.5) shown = pow(shown, vec3(2.2));
-      gl_FragColor.rgb = shown;`,
+      if (ps1Dither > 0.5) {
+        float px = mod(floor(gl_FragCoord.x), 2.0);
+        float py = mod(floor(gl_FragCoord.y), 2.0);
+        float threshold = (px == 0.0 ? (py == 0.0 ? 0.0 : 3.0) : (py == 0.0 ? 2.0 : 1.0));
+        vec3 shown = clamp(gl_FragColor.rgb, 0.0, 1.0);
+        if (ps1LinearTarget > 0.5) shown = pow(shown, vec3(1.0 / 2.2));
+        shown = floor(shown * 31.0 + (threshold + 0.5) / 4.0) / 31.0;
+        if (ps1LinearTarget > 0.5) shown = pow(shown, vec3(2.2));
+        gl_FragColor.rgb = shown;
+      }`,
     );
+    if (this.userData.ps1LocalRoom && this instanceof MeshStandardMaterial)
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'vec3 outgoingLight = totalDiffuse + totalSpecular + totalEmissiveRadiance;',
+        realistic
+          ? // Lit by the environment alone, so no other room's lamp reaches it.
+            `vec3 outgoingLight = reflectedLight.indirectDiffuse + reflectedLight.indirectSpecular + totalEmissiveRadiance;`
+          : `float ps1Face = 0.72 + 0.28 * max(0.0, dot(normal, normalize(vec3(0.4, 0.8, 0.5))));
+        vec3 outgoingLight = diffuseColor.rgb * ps1Face + totalEmissiveRadiance;`,
+      );
   };
-  material.customProgramCacheKey = () => 'ps1-snap-dither-v7';
+  material.customProgramCacheKey = function (this: typeof material) {
+    return `${this.userData.ps1LocalRoom ? 'ps1-local-room-v1' : 'ps1-snap-dither-v7'}-${realistic ? 'realistic' : 'ps1'}`;
+  };
   return material;
 }
 

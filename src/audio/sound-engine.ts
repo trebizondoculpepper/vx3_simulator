@@ -23,6 +23,8 @@ export type SoundCue =
   | 'button'
   | 'key'
   | 'rocker'
+  | 'bakelite-switch'
+  | 'ballast-start'
   | 'fire-call'
   | 'breaker-on'
   | 'breaker-off'
@@ -121,6 +123,7 @@ interface AudioGraph {
   rectifier: GainNode;
   sprinkler: GainNode;
   recirculator: GainNode;
+  fluorescent: GainNode;
   panners: Record<Channel, StereoPannerNode>;
   spindleTone: OscillatorNode;
   rotorPulse: OscillatorNode;
@@ -182,6 +185,7 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
   const rectifier = gain(0, 'rectifier');
   const sprinkler = gain(0, 'sprinkler');
   const recirculator = gain(0, 'recirculator');
+  const fluorescent = gain(0);
   const sources: Array<OscillatorNode | AudioBufferSourceNode> = [];
   const oscillator = (
     type: OscillatorType,
@@ -337,6 +341,7 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
     rectifier,
     sprinkler,
     recirculator,
+    fluorescent,
     panners,
     spindleTone,
     rotorPulse,
@@ -424,10 +429,32 @@ export function createSoundEngine() {
     loading = (async () => {
       if (!graph) {
         graph = createGraph(await import('zzfx'));
+        const current = graph;
         void graph.recordings
           .preload()
           .catch((error) =>
             console.warn('Sound recordings could not preload.', error),
+          );
+        void fetch(
+          new URL('./assets/fluorescent-room-tone.wav', import.meta.url),
+        )
+          .then((response) => {
+            if (!response.ok)
+              throw new Error('Fluorescent room tone unavailable');
+            return response.arrayBuffer();
+          })
+          .then((bytes) => current.context.decodeAudioData(bytes))
+          .then((buffer) => {
+            if (disposed) return;
+            const source = current.context.createBufferSource();
+            source.buffer = buffer;
+            source.loop = true;
+            source.connect(current.fluorescent);
+            source.start();
+            current.sources.push(source);
+          })
+          .catch((error) =>
+            console.warn('Fluorescent ambience unavailable.', error),
           );
       }
       setMix(volume, muted);
@@ -727,6 +754,14 @@ export function createSoundEngine() {
     graph.master.disconnect();
   };
   return {
+    setFluorescent(level: number) {
+      if (!graph) return;
+      graph.fluorescent.gain.setTargetAtTime(
+        0.12 * Math.max(0, Math.min(1, level)),
+        graph.context.currentTime,
+        0.12,
+      );
+    },
     setPlantPower(on: boolean) {
       plantPowered = on;
     },

@@ -6,7 +6,7 @@
  * closed door stops a sound completely.
  */
 
-export type RoomId = 'lab' | 'plant' | 'corridor';
+export type RoomId = 'lab' | 'plant' | 'corridor' | 'museum';
 
 export interface FloorBounds {
   minX: number;
@@ -18,12 +18,14 @@ export interface FloorBounds {
 export interface RoomPlan {
   lab: FloorBounds;
   plant: FloorBounds;
+  museum: FloorBounds;
 }
 
 /** How far each door is open, from 0 (shut) to 1 (wide open). */
 export interface DoorOpenings {
   lab: number;
   plant: number;
+  museum: number;
 }
 
 const within = (bounds: FloorBounds, x: number, z: number) =>
@@ -33,6 +35,7 @@ const within = (bounds: FloorBounds, x: number, z: number) =>
 export function roomAt(plan: RoomPlan, x: number, z: number): RoomId {
   if (within(plan.lab, x, z)) return 'lab';
   if (within(plan.plant, x, z)) return 'plant';
+  if (within(plan.museum, x, z)) return 'museum';
   return 'corridor';
 }
 
@@ -52,6 +55,8 @@ export function transmission(
       ? clamp(doors.lab)
       : room === 'plant'
         ? clamp(doors.plant)
-        : 1;
+        : room === 'museum'
+          ? clamp(doors.museum)
+          : 1;
   return door(from) * door(to);
 }

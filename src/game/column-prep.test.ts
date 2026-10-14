@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AIR_LIMIT,
+  AIR_OXYGEN_PERCENT,
   AMBIENT,
   FULL_POWER,
   FULL_SPIN,
@@ -17,6 +18,7 @@ import {
   isStarved,
   lambdaVolts,
   oxygenPercent,
+  PURGE_COMPLETE_PERCENT,
   PURGE_COMPLETE_VOLTS,
   setActivation,
   setClamped,
@@ -106,8 +108,53 @@ describe('column cold start', () => {
     expect(lambdaVolts(oxygenPercent(state))).toBeGreaterThan(
       PURGE_COMPLETE_VOLTS,
     );
-    // The probe switches through about 0.45 V near 0.3 % oxygen.
-    expect(lambdaVolts(0.3)).toBeCloseTo(0.475, 2);
+    // The probe switches through about 0.45 V near 1 % oxygen, and reads
+    // purge complete at 0.5 %.
+    expect(lambdaVolts(1)).toBeCloseTo(0.475, 2);
+    expect(lambdaVolts(PURGE_COMPLETE_PERCENT)).toBeCloseTo(
+      PURGE_COMPLETE_VOLTS,
+      6,
+    );
+  });
+
+  it('purges in about 20 s, the oxygen falling exponentially', () => {
+    const state = sealed();
+    state.inletOpen = true;
+    state.outletOpen = true;
+    const at: number[] = [];
+    let t = 0;
+    while (oxygenPercent(state) >= PURGE_COMPLETE_PERCENT) {
+      if (Math.abs(t - Math.round(t / 5) * 5) < 1e-9)
+        at.push(oxygenPercent(state));
+      run(state, 0.1);
+      t = Math.round((t + 0.1) * 10) / 10;
+    }
+    expect(t).toBeGreaterThan(18);
+    expect(t).toBeLessThan(22);
+    // Each five seconds takes away a like share of what is left.
+    const ratios = at.slice(1).map((o, i) => o / at[i]);
+    for (const r of ratios.slice(1)) expect(r).toBeCloseTo(ratios[1], 1);
+  });
+
+  it('lets the room air back in when the clamps open and the head rises', () => {
+    const state = sealed();
+    state.inletOpen = true;
+    state.outletOpen = true;
+    run(state, 30);
+    expect(oxygenPercent(state)).toBeLessThan(PURGE_COMPLETE_PERCENT);
+    state.inletOpen = false;
+    state.outletOpen = false;
+    expect(setClamped(state, false)).toBe(true);
+    driveLift(state, 1);
+    run(state, 2);
+    expect(oxygenPercent(state)).toBeCloseTo(AIR_OXYGEN_PERCENT, 1);
+    // Lowered and clamped again, the chamber is full of air: purge again.
+    run(state, LIFT_SECONDS);
+    driveLift(state, 0);
+    run(state, LIFT_SECONDS + 0.5);
+    setClamped(state, true);
+    expect(oxygenPercent(state)).toBeCloseTo(AIR_OXYGEN_PERCENT, 1);
+    expect(state.air).toBeCloseTo(1, 2);
   });
 
   it('purges the air without lighting the core', () => {
