@@ -33,6 +33,7 @@ import type { World, WorldEvent } from '../game/world/world';
 import { createAutoStart } from '../game/world/auto-start';
 import type { AutoStart } from '../game/world/auto-start';
 import { createCircuitBoard } from '../scene/circuit-board';
+import { createFirePanel } from '../scene/fire-panel';
 import {
   createEightiesButton,
   createMicroLabel,
@@ -574,32 +575,18 @@ export function startScene(canvas: HTMLCanvasElement) {
     }
   });
 
-  const firePanel = new Group();
+  // The corridor's fire alarm control panel, modelled on the owner's
+  // photograph of an RP-2002 (src/scene/fire-panel.ts), built in metres.
+  const firePanelModel = createFirePanel();
+  const firePanel = firePanelModel.group;
   firePanel.position.set(
     labRoom.door.handle.x - labRoom.door.width / 2 - 0.4 * worldUnitsPerMetre,
     floorY + 1.35 * worldUnitsPerMetre,
-    room.maxZ + wallThickness + 0.18,
+    room.maxZ + wallThickness + 0.01,
   );
-  firePanel.scale.setScalar(0.7 * worldUnitsPerMetre);
+  firePanel.scale.setScalar(worldUnitsPerMetre);
   scene.add(firePanel);
-  // Red steel enclosure with a pale inset, recessed annunciator and small
-  // green display, in the style of the owner's RP-2002 reference photograph.
-  fireBox(firePanel, 0.7, 0.72, 0.14, '#61201d', 0.025, 0, -0.055, 0.72);
-  fireBox(firePanel, 0.68, 0.7, 0.04, '#ae3029', 0, 0, 0.03, 0.72);
-  fireBox(firePanel, 0.52, 0.34, 0.018, '#d8d8d0', 0, 0.045, 0.062, 0.8);
-  fireBox(firePanel, 0.31, 0.29, 0.023, '#191d1b', 0, 0.045, 0.079, 0.75);
-  fireBox(firePanel, 0.235, 0.2, 0.01, '#3b403c', 0, 0.04, 0.095, 0.72);
-  const fireScreen = fireBox(
-    firePanel,
-    0.19,
-    0.07,
-    0.007,
-    '#65a76b',
-    0,
-    0.095,
-    0.103,
-    0.9,
-  );
+  const fireScreen = firePanelModel.screen;
   const fireLcd = createCanvasTexture(384, 128);
   textures.push(fireLcd.texture);
   fireScreen.material.map = fireLcd.texture;
@@ -642,56 +629,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     fireLcd.texture.needsUpdate = true;
   };
   showFireLcd('normal');
-  for (const x of [-0.055, 0, 0.055])
-    fireBox(firePanel, 0.035, 0.013, 0.006, '#b5b6a9', x, -0.025, 0.105, 0.85);
-  const panelTitle = label(
-    firePanel,
-    'BRANDMELDERZENTRALE',
-    0,
-    0.29,
-    0.058,
-    7,
-    '#f0d6c3',
-    '#ae3029',
-  );
-  panelTitle.scale.setScalar(0.34);
-  panelTitle.material.userData.ps1Room = { value: 0.8 };
-  const panelBrand = label(
-    firePanel,
-    'SYNCLEX · BZ-3',
-    0,
-    -0.09,
-    0.073,
-    7,
-    '#272c28',
-    '#d8d8d0',
-  );
-  panelBrand.scale.setScalar(0.25);
-  panelBrand.material.userData.ps1Room = { value: 0.8 };
-  const panelReset = fireBox(
-    firePanel,
-    0.1,
-    0.07,
-    0.025,
-    '#242723',
-    0,
-    -0.24,
-    0.068,
-    0.72,
-  );
-  const resetLabel = label(
-    firePanel,
-    'RÜCKSTELLEN',
-    0,
-    -0.32,
-    0.059,
-    7,
-    '#f3e6d7',
-    '#ae3029',
-  );
-  resetLabel.scale.setScalar(0.29);
-  resetLabel.material.userData.ps1Room = { value: 0.72 };
-  input(panelReset, 'Fire circuit', 'RÜCKSTELLEN', () => {
+  input(firePanelModel.resetKey, 'Fire circuit', 'RÜCKSTELLEN', () => {
     audio.play('button');
     write(
       world.work('fire.RÜCKSTELLEN')
@@ -3341,6 +3279,11 @@ export function startScene(canvas: HTMLCanvasElement) {
     showFireLcd(
       extinguished ? 'extinguished' : fire.alarm ? 'alarm' : 'normal',
     );
+    firePanelModel.setLamps(
+      !extinguished,
+      fire.alarm && !extinguished && Math.sin(time * 0.009) > 0,
+      extinguished,
+    );
     labBeacon.intensity = beaconPulse ? 20 : 0;
     hallBeacon.intensity = beaconPulse ? 14 : 0;
     discharge.intensity =
@@ -3603,6 +3546,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     rectifier.dispose();
     cheats.dispose();
     teleports.dispose();
+    firePanelModel.dispose();
     hotline.dispose();
     labRoom.dispose();
     devPassages.dispose();
