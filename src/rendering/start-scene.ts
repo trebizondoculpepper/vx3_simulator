@@ -17,6 +17,7 @@ import { createDevDoorways } from '../scene/dev-doorways';
 import { createMuseumGallery } from '../scene/museum-gallery';
 import { createMuseumVx3Exhibit } from '../scene/museum-vx3-exhibit';
 import { MAX_ZOOM, MIN_ZOOM, wheelZoom } from './first-person';
+import { createRoomTextures } from './room-textures';
 import { createRoomLighting } from './room-lighting';
 import { createAgedWallMap } from './aged-wall';
 import { createWorld } from '../game/world/world';
@@ -2780,6 +2781,8 @@ export function startScene(canvas: HTMLCanvasElement) {
         /** How many of the time-dilation crystal's sparks are in the air. */
         sparks: () =>
           sparkles.group.children.filter((child) => child.visible).length,
+        /** Every texture the rooms use (room-textures.ts). */
+        textures: () => roomTextures.textures(),
         /** Stand at a named viewpoint, as the teleport board does. */
         goTo,
         /** The last frame's draw calls and triangles, and what the GPU holds. */
@@ -2788,6 +2791,8 @@ export function startScene(canvas: HTMLCanvasElement) {
           triangles: renderer.info.render.triangles,
           geometries: renderer.info.memory.geometries,
           textures: renderer.info.memory.textures,
+          /** Texture bytes by room, and how many are on the GPU now. */
+          roomTextures: roomTextures.report(),
           programs: renderer.info.programs?.length ?? 0,
         }),
         look(yaw: number, pitch = 0) {
@@ -3213,6 +3218,13 @@ export function startScene(canvas: HTMLCanvasElement) {
   for (const root of corridorRoots)
     roomLighting.registerRoot(corridorLighting, root);
   roomLighting.registerRoot(museumLighting, museum.group);
+  // Rooms out of sight give their textures back to the GPU (room-textures.ts).
+  const roomTextures = createRoomTextures({
+    lab: [lab],
+    plant: plantGroups,
+    corridor: corridorRoots,
+    museum: [museum.group],
+  });
   const roomAudit = roomLighting.audit(scene);
   if (
     import.meta.env.DEV &&
@@ -3646,6 +3658,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     lab.visible = shown.lab;
     for (const group of plantGroups) group.visible = shown.plant;
     museum.group.visible = shown.museum;
+    roomTextures.update(shown, time / 1000);
     const doorOpenings = {
       lab: labRoom.door.amount,
       plant: plantRoom.entryAmount,
