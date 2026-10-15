@@ -70,6 +70,8 @@ import {
 } from '../game/hallucination';
 import type { Viewer } from '../game/hallucination';
 import { createApparitionImage } from './apparition-image';
+import { createGhosting } from '../game/ghosting';
+import { createGhostOverlay } from './ghost-overlay';
 
 /**
  * The hallucination room, `/?room=dev4`: not part of the game. A clone of
@@ -752,6 +754,10 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
     perMinute: 0,
   });
   const ghost = hallucinations.settings;
+  // Perceptual ghosting: echoes of still moments left on the screen.
+  const ghosting = createGhosting();
+  const echo = ghosting.settings;
+  const echoes = createGhostOverlay(renderer);
   let summoned = 0;
   let faded = 0;
   const desk = createEffectsConsole(
@@ -811,9 +817,66 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
           },
         ],
       },
+      {
+        title: 'GHOSTING',
+        dials: [
+          dial(
+            'STILL S',
+            0.05,
+            1.5,
+            () => echo.stillSeconds,
+            (v) => (echo.stillSeconds = v),
+          ),
+          dial(
+            'MOVE °/S',
+            2,
+            90,
+            () => echo.moveDegrees,
+            (v) => (echo.moveDegrees = v),
+            0,
+          ),
+          dial(
+            'STRENGTH',
+            0,
+            1,
+            () => echo.strength,
+            (v) => (echo.strength = v),
+          ),
+          dial(
+            'FADE S',
+            0.2,
+            6,
+            () => echo.fadeSeconds,
+            (v) => (echo.fadeSeconds = v),
+            1,
+          ),
+          dial(
+            'DRIFT',
+            0,
+            0.2,
+            () => echo.drift,
+            (v) => (echo.drift = v),
+            3,
+          ),
+          {
+            ...dial(
+              'MOST',
+              1,
+              6,
+              () => echo.most,
+              (v) => (echo.most = Math.round(v)),
+              0,
+            ),
+            steps: 5,
+          },
+        ],
+        buttons: [
+          { legend: 'CLEAR', colour: 'grey', press: () => ghosting.clear() },
+        ],
+      },
     ],
     () => [
-      `NOW ${hallucinations.apparitions.length} MADE ${summoned} GONE ${faded}`,
+      `APP ${hallucinations.apparitions.length}/${summoned}/${faded} GHOSTS ${ghosting.ghosts.length}`,
     ],
   );
   // Each apparition is one flat image, square to the camera, standing on
@@ -1079,6 +1142,7 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
     '<strong>Hallucination room</strong> · not part of the game · the console is in front of you<br>' +
     'Click: mouse look · WASD: walk · Shift: run · C: crouch · wheel: zoom · Esc: cursor<br>' +
     'APPARITION: turn up RATE, or press SUMMON, then turn about: they wait at the edge of sight and fade when looked at<br>' +
+    'GHOSTING: turn up STRENGTH, hold still a moment, then turn: what you saw stays on your eyes and fades<br>' +
     'Door: dev3 west · <kbd>P</kbd> toggles PS1 resolution · <a href="/?room=dev1">effects room</a> · <a href="/">lab</a>';
   Object.assign(notes.style, {
     position: 'absolute',
@@ -1170,6 +1234,8 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
         apparitionImage = texture;
       });
     },
+    /** Perceptual ghosting and its settings (src/game/ghosting.ts). */
+    ghosting,
     /** How many have appeared, and how many have faded away. */
     counts: () => ({ summoned, faded }),
     /** Stand with the eye at (x, y, z) metres, looking at (tx, ty, tz). */
@@ -1276,6 +1342,18 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
     if (divergence.active(frame.divergence))
       divergence.render(scene, camera, frame.divergence, effectSeconds);
     else renderer.render(scene, camera);
+    // The echoes: take this frame if the view has held still, then lay
+    // the ghosts over it. The snapshot is taken before they are drawn, so
+    // a ghost never carries an older ghost in it.
+    const { take } = ghosting.step(delta, {
+      x: walk.walker.x / m,
+      z: walk.walker.z / m,
+      yaw: walk.walker.yaw,
+      pitch: walk.walker.pitch,
+    });
+    if (take !== null) echoes.take(take);
+    echoes.draw(ghosting.ghosts);
+    echoes.keep(ghosting.inUse());
   });
 
   const dispose = () => {
@@ -1292,6 +1370,7 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
     teletype.dispose();
     for (const mesh of shown.values()) mesh.material.dispose();
     apparitionGeometry.dispose();
+    echoes.dispose();
     apparitionImage.dispose();
     disposeKit(kit, desk.group);
     scene.traverse((object) => {
