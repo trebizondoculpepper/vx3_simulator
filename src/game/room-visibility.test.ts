@@ -25,13 +25,16 @@ describe('visibleRooms', () => {
     });
   });
 
-  it('draws door leaves of every adjoining room from the corridor', () => {
+  it('sees into a room from the corridor only through its open door', () => {
     expect(visibleRooms('corridor', closed)).toEqual({
-      lab: true,
-      plant: true,
-      museum: true,
+      lab: false,
+      plant: false,
+      museum: false,
       corridor: true,
     });
+    expect(visibleRooms('corridor', { lab: 0.5, plant: 0, museum: 0 })).toEqual(
+      { lab: true, plant: false, museum: false, corridor: true },
+    );
   });
 
   it('sees into another room only when both corridor links are open', () => {

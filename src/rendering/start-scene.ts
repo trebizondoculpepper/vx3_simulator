@@ -17,6 +17,7 @@ import { createDevDoorways } from '../scene/dev-doorways';
 import { createMuseumGallery } from '../scene/museum-gallery';
 import { createMuseumVx3Exhibit } from '../scene/museum-vx3-exhibit';
 import { MAX_ZOOM, MIN_ZOOM, wheelZoom } from './first-person';
+import { splitRoom } from './room-interiors';
 import { createRoomTextures } from './room-textures';
 import { createRoomLighting } from './room-lighting';
 import { createAgedWallMap } from './aged-wall';
@@ -2161,8 +2162,9 @@ export function startScene(canvas: HTMLCanvasElement) {
       maxZ: museum.group.position.z + museum.bounds.maxZ,
     },
   };
-  // Rooms are culled whole: everything in the lab hangs under `lab`, and
-  // the plant room is these four groups. The lab pieces placed straight in
+  // Each room hangs under its own groups (the lab under `lab`, the plant
+  // room these four), so it can be culled: its interior and its facade are
+  // split below (room-interiors.ts). The lab pieces placed straight in
   // the scene move under it, keeping their world positions.
   for (const object of [discharge]) lab.attach(object);
   const plantGroups = [
@@ -2431,8 +2433,8 @@ export function startScene(canvas: HTMLCanvasElement) {
   };
   canvas.addEventListener('wheel', wheel, { passive: false });
   const raycaster = new Raycaster();
-  // The plant room is drawn on layer 1 for its own lighting; the pointer
-  // must see it too, or none of its controls can be worked.
+  // The pointer reaches only what the camera draws: a room's interior is
+  // on its own layer while it cannot be seen into (room-interiors.ts).
   const pointer = new Vector2();
   let orbitYaw = 0;
   let orbitPitch = 0;
@@ -2793,6 +2795,14 @@ export function startScene(canvas: HTMLCanvasElement) {
           textures: renderer.info.memory.textures,
           /** Texture bytes by room, and how many are on the GPU now. */
           roomTextures: roomTextures.report(),
+          /** Each room's facade and interior, in meshes. */
+          interiors: Object.fromEntries(
+            Object.entries(interiors).map(([id, split]) => [
+              id,
+              { facade: split.facade.length, interior: split.interior.length },
+            ]),
+          ),
+          layers: perspectiveCamera.layers.mask,
           programs: renderer.info.programs?.length ?? 0,
         }),
         look(yaw: number, pitch = 0) {
@@ -3218,12 +3228,39 @@ export function startScene(canvas: HTMLCanvasElement) {
   for (const root of corridorRoots)
     roomLighting.registerRoot(corridorLighting, root);
   roomLighting.registerRoot(museumLighting, museum.group);
+  // Each room's interior is drawn only while someone can see into it; its
+  // facade (doors, frames, signs) whenever the corridor can be seen.
+  const interiors = {
+    lab: splitRoom([lab], {
+      bounds: room,
+      doorway: { x: labRoom.door.handle.x, z: room.maxZ },
+      reach: labRoom.door.width / 2 + 1.5 * worldUnitsPerMetre,
+      layer: 1,
+    }),
+    plant: splitRoom(plantGroups, {
+      bounds: plantRoom.bounds,
+      doorway: { x: plantRoom.doorway.x, z: plantRoom.bounds.maxZ },
+      reach: plantRoom.doorway.width / 2 + 1.5 * worldUnitsPerMetre,
+      layer: 2,
+    }),
+    museum: splitRoom([museum.group], {
+      bounds: roomPlan.museum,
+      doorway: museumEntry,
+      reach: (DEV_DOOR_WIDTH / 2 + 1.5) * worldUnitsPerMetre,
+      layer: 3,
+    }),
+  };
   // Rooms out of sight give their textures back to the GPU (room-textures.ts).
   const roomTextures = createRoomTextures({
-    lab: [lab],
-    plant: plantGroups,
-    corridor: corridorRoots,
-    museum: [museum.group],
+    lab: interiors.lab.interior,
+    plant: interiors.plant.interior,
+    museum: interiors.museum.interior,
+    corridor: [
+      ...corridorRoots,
+      ...interiors.lab.facade,
+      ...interiors.plant.facade,
+      ...interiors.museum.facade,
+    ],
   });
   const roomAudit = roomLighting.audit(scene);
   if (
@@ -3655,9 +3692,20 @@ export function startScene(canvas: HTMLCanvasElement) {
       plant: plantRoom.entryAmount,
       museum: museum.doorAmount,
     });
-    lab.visible = shown.lab;
-    for (const group of plantGroups) group.visible = shown.plant;
-    museum.group.visible = shown.museum;
+    // A room's facade shows wherever the corridor can be seen from.
+    const corridorSeen =
+      listenerRoom === 'corridor' ||
+      (listenerRoom === 'lab' && labRoom.door.amount > 0.05) ||
+      (listenerRoom === 'plant' && plantRoom.entryAmount > 0.05) ||
+      (listenerRoom === 'museum' && museum.doorAmount > 0.05);
+    lab.visible = shown.lab || corridorSeen;
+    for (const group of plantGroups)
+      group.visible = shown.plant || corridorSeen;
+    museum.group.visible = shown.museum || corridorSeen;
+    interiors.lab.show(perspectiveCamera.layers, shown.lab);
+    interiors.plant.show(perspectiveCamera.layers, shown.plant);
+    interiors.museum.show(perspectiveCamera.layers, shown.museum);
+    raycaster.layers.mask = perspectiveCamera.layers.mask;
     roomTextures.update(shown, time / 1000);
     const doorOpenings = {
       lab: labRoom.door.amount,
