@@ -72,6 +72,8 @@ import type { Viewer } from '../game/hallucination';
 import { createApparitionImage } from './apparition-image';
 import { createGhosting } from '../game/ghosting';
 import { createGhostOverlay } from './ghost-overlay';
+import { createPatterns, patternMode, PATTERN_MODES } from '../game/patterns';
+import { createPatternOverlay } from './pattern-overlay';
 
 /**
  * The hallucination room, `/?room=dev4`: not part of the game. A clone of
@@ -758,6 +760,10 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
   const ghosting = createGhosting();
   const echo = ghosting.settings;
   const echoes = createGhostOverlay(renderer);
+  // Geometric hallucinations, worked into the picture of the room.
+  const patterns = createPatterns();
+  const vision = patterns.settings;
+  const patternOverlay = createPatternOverlay(renderer, patterns);
   let summoned = 0;
   let faded = 0;
   const desk = createEffectsConsole(
@@ -882,6 +888,63 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
           { legend: 'CLEAR', colour: 'grey', press: () => ghosting.clear() },
         ],
       },
+      {
+        title: 'PATTERNS',
+        dials: [
+          dial(
+            'STRENGTH',
+            0,
+            1,
+            () => vision.strength,
+            (v) => (vision.strength = v),
+          ),
+          {
+            ...dial(
+              'MODE',
+              0,
+              PATTERN_MODES.length - 1,
+              () => vision.mode,
+              (v) => (vision.mode = Math.round(v)),
+              0,
+            ),
+            steps: PATTERN_MODES.length - 1,
+            label: () => patternMode(vision),
+          },
+          {
+            ...dial(
+              'FOLDS',
+              2,
+              16,
+              () => vision.folds,
+              (v) => (vision.folds = Math.round(v)),
+              0,
+            ),
+            steps: 14,
+          },
+          dial(
+            'SCALE',
+            0.5,
+            10,
+            () => vision.scale,
+            (v) => (vision.scale = v),
+            1,
+          ),
+          dial(
+            'SPEED',
+            0,
+            2,
+            () => vision.speed,
+            (v) => (vision.speed = v),
+          ),
+          dial(
+            'FLOW',
+            -1,
+            1,
+            () => vision.flow,
+            (v) => (vision.flow = v),
+          ),
+        ],
+      },
     ],
     () => [
       `APP ${hallucinations.apparitions.length}/${summoned}/${faded} GHOSTS ${ghosting.ghosts.length}`,
@@ -892,6 +955,10 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
   let apparitionImage: Texture = createApparitionImage();
   const apparitionGeometry = new PlaneGeometry(1, 1).translate(0, 0.5, 0);
   const shown = new Map<number, Mesh<PlaneGeometry, MeshBasicMaterial>>();
+  // The apparitions stand in a scene of their own, drawn over the room
+  // after the patterns are worked into it, so the patterns never touch
+  // them.
+  const visions = new Scene();
   const imageAspect = () => {
     const image = apparitionImage.image as { width: number; height: number };
     return image.width / image.height;
@@ -939,7 +1006,7 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
         mesh.renderOrder = 10;
         mesh.name = `Apparition ${apparition.id}`;
         shown.set(apparition.id, mesh);
-        scene.add(mesh);
+        visions.add(mesh);
       }
       const height = ghost.size * m;
       mesh.scale.set(height * imageAspect(), height, 1);
@@ -951,7 +1018,7 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
     }
     for (const [id, mesh] of shown)
       if (!alive.has(id)) {
-        scene.remove(mesh);
+        visions.remove(mesh);
         mesh.material.dispose();
         shown.delete(id);
         faded += 1;
@@ -1151,6 +1218,7 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
     'Click: mouse look · WASD: walk · Shift: run · C: crouch · wheel: zoom · Esc: cursor<br>' +
     'APPARITION: turn up RATE, or press SUMMON, then turn about: they wait at the edge of sight and fade when looked at<br>' +
     'GHOSTING: turn up STRENGTH, hold still a moment, then turn: what you saw stays on your eyes, fading and blurring<br>' +
+    'PATTERNS: turn up STRENGTH: kaleidoscopic geometry worked into the room (MODE: XOR, AND or colour BURN), never into apparitions or ghosts<br>' +
     'Door: dev3 west · <kbd>P</kbd> toggles PS1 resolution · <a href="/?room=dev1">effects room</a> · <a href="/">lab</a>';
   Object.assign(notes.style, {
     position: 'absolute',
@@ -1244,6 +1312,8 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
     },
     /** Perceptual ghosting and its settings (src/game/ghosting.ts). */
     ghosting,
+    /** Geometric hallucinations and their settings (src/game/patterns.ts). */
+    patterns,
     /** How many have appeared, and how many have faded away. */
     counts: () => ({ summoned, faded }),
     /** Stand with the eye at (x, y, z) metres, looking at (tx, ty, tz). */
@@ -1347,19 +1417,39 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
     teletype.update(delta, reducedMotion.matches);
     walk.update(delta);
     passages.update(delta, walk.walker.x, walk.walker.z);
-    if (divergence.active(frame.divergence))
-      divergence.render(scene, camera, frame.divergence, effectSeconds);
-    else renderer.render(scene, camera);
-    // The echoes: take this frame if the view has held still, then lay
-    // the ghosts over it. The snapshot is taken before they are drawn, so
-    // a ghost never carries an older ghost in it.
+    patterns.step(delta);
     const { take } = ghosting.step(delta, {
       x: walk.walker.x / m,
       z: walk.walker.z / m,
       yaw: walk.walker.yaw,
       pitch: walk.walker.pitch,
     });
-    if (take !== null) echoes.take(take);
+    const drawRoom = () => {
+      if (divergence.active(frame.divergence))
+        divergence.render(scene, camera, frame.divergence, effectSeconds);
+      else renderer.render(scene, camera);
+    };
+    const drawVisions = () => {
+      const autoClear = renderer.autoClear;
+      renderer.autoClear = false;
+      renderer.render(visions, camera);
+      renderer.autoClear = autoClear;
+    };
+    // The echoes: take this frame if the view has held still, then lay
+    // the ghosts over it. The snapshot is taken before they are drawn, so
+    // a ghost never carries an older ghost in it, and before the patterns
+    // are worked in, so it never carries them either: on the frame a
+    // snapshot is due with patterns showing, the room is drawn twice.
+    if (take !== null) {
+      drawRoom();
+      drawVisions();
+      echoes.take(take);
+    }
+    if (take === null || patterns.showing) {
+      drawRoom();
+      patternOverlay.draw();
+      drawVisions();
+    }
     echoes.draw(ghosting.ghosts);
     echoes.keep(ghosting.inUse());
   });
@@ -1379,6 +1469,7 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
     for (const mesh of shown.values()) mesh.material.dispose();
     apparitionGeometry.dispose();
     echoes.dispose();
+    patternOverlay.dispose();
     apparitionImage.dispose();
     disposeKit(kit, desk.group);
     scene.traverse((object) => {

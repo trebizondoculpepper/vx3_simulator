@@ -21,6 +21,8 @@ export interface ConsoleDial {
   digits?: number;
   /** Detents across the travel; 40 by default. */
   steps?: number;
+  /** What the display shows for a value, if not the number itself. */
+  label?: (value: number) => string;
 }
 
 export interface ConsoleButton {
@@ -101,7 +103,8 @@ export function createEffectsConsole(
   lcd.group.position.set(0, top - 0.012, 0);
   group.add(lcd.group);
   follow.push(() => lcd.show([...touched, readout()[0] ?? '']));
-  const shown = (dial: ConsoleDial) => dial.get().toFixed(dial.digits ?? 2);
+  const shown = (dial: ConsoleDial) =>
+    dial.label?.(dial.get()) ?? dial.get().toFixed(dial.digits ?? 2);
 
   rows.forEach((row, r) => {
     const y = top - lcdHeight - 0.012 - r * ROW;
