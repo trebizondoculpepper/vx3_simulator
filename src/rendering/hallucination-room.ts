@@ -72,7 +72,13 @@ import type { Viewer } from '../game/hallucination';
 import { createApparitionImage } from './apparition-image';
 import { createGhosting } from '../game/ghosting';
 import { createGhostOverlay } from './ghost-overlay';
-import { createPatterns, patternMode, PATTERN_MODES } from '../game/patterns';
+import {
+  createPatterns,
+  patternMode,
+  patternStyle,
+  PATTERN_MODES,
+  PATTERN_STYLES,
+} from '../game/patterns';
 import { createPatternOverlay } from './pattern-overlay';
 
 /**
@@ -910,6 +916,25 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
             steps: PATTERN_MODES.length - 1,
             label: () => patternMode(vision),
           },
+          {
+            ...dial(
+              'STYLE',
+              0,
+              PATTERN_STYLES.length - 1,
+              () => vision.style,
+              (v) => (vision.style = Math.round(v)),
+              0,
+            ),
+            steps: PATTERN_STYLES.length - 1,
+            label: () => patternStyle(vision),
+          },
+          dial(
+            'COVER',
+            0,
+            1,
+            () => vision.cover,
+            (v) => (vision.cover = v),
+          ),
           {
             ...dial(
               'FOLDS',

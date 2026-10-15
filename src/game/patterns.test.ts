@@ -4,6 +4,7 @@ import {
   createPatterns,
   defaultPatternSettings,
   patternMode,
+  patternStyle,
 } from './patterns';
 
 describe('geometric hallucinations', () => {
@@ -30,6 +31,14 @@ describe('geometric hallucinations', () => {
     expect(patternMode({ ...s, mode: 0 })).toBe('XOR');
     expect(patternMode({ ...s, mode: 1.2 })).toBe('AND');
     expect(patternMode({ ...s, mode: 9 })).toBe('BURN');
+  });
+
+  it('names its style, clamped to the ones there are', () => {
+    const s = defaultPatternSettings();
+    expect(patternStyle(s)).toBe('STARS');
+    expect(patternStyle({ ...s, style: -3 })).toBe('LINES');
+    expect(patternStyle({ ...s, style: 2 })).toBe('HYPERBOLIC');
+    expect(patternStyle({ ...s, style: 99 })).toBe('TUNNEL');
   });
 
   it("exclusive-or's and and's the screen's bytes", () => {
