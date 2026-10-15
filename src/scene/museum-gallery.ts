@@ -5,6 +5,7 @@ import {
   Mesh,
   PlaneGeometry,
   SpotLight,
+  TextureLoader,
 } from 'three';
 import type { Material, Object3D, Texture } from 'three';
 import type { Footprint } from '../game/walk-collision';
@@ -22,6 +23,10 @@ import {
 import { createLightSwitch } from './light-switch';
 import { createCeilingServices } from './ceiling-services';
 import { createCanvasTexture, createLabelTexture } from './screens';
+import { createMuseumFinishes } from './museum-finishes';
+
+export const MUSEUM_WIDTH = 9;
+export const MUSEUM_DEPTH = 15;
 
 /** A continuous room south of the corridor, in the same world and renderer. */
 export function createMuseumGallery(
@@ -35,11 +40,25 @@ export function createMuseumGallery(
   group.position.set(centerX, floorY, northZ);
   const materials: Material[] = [];
   const textures: Texture[] = [];
+  const finishes = createMuseumFinishes();
+  textures.push(...Object.values(finishes));
   const actions = new Map<Object3D, () => void>();
   const solids: Footprint[] = [];
   const museumLight = { value: 0.12 };
+  const finish = (color: string) =>
+    ['#655139', '#765c3e', '#54442f', '#3d3025'].includes(color)
+      ? finishes.timber
+      : ['#4e5148', '#8d8f83'].includes(color)
+        ? finishes.terrazzo
+        : ['#687169', '#343b36', '#3c4940'].includes(color)
+          ? finishes.plaster
+          : finishes.metal;
   const paint = (color: string) => {
-    const material = createPs1Material({ color });
+    const material = createPs1Material({
+      color,
+      map: finish(color),
+      roughness: 0.88,
+    });
     material.userData.ps1Room = museumLight;
     materials.push(material);
     return material;
@@ -54,7 +73,23 @@ export function createMuseumGallery(
     y: number,
     z: number,
   ) => {
-    const mesh = new Mesh(new BoxGeometry(w * m, h * m, d * m), paint(color));
+    const geometry = new BoxGeometry(w * m, h * m, d * m);
+    // Box faces share a physical 80 cm texture scale, rather than stretching
+    // one square of grain over an entire fifteen-metre wall.
+    const uv = geometry.attributes.uv;
+    const dimensions = [
+      [d, h],
+      [d, h],
+      [w, d],
+      [w, d],
+      [w, h],
+      [w, h],
+    ];
+    for (let i = 0; i < uv.count; i++) {
+      const [u, v] = dimensions[Math.floor(i / 4)];
+      uv.setXY(i, (uv.getX(i) * u) / 0.8, (uv.getY(i) * v) / 0.8);
+    }
+    const mesh = new Mesh(geometry, paint(color));
     mesh.position.set(x * m, y * m, z * m);
     parent.add(mesh);
     return mesh;
@@ -89,13 +124,27 @@ export function createMuseumGallery(
     parent.add(mesh);
     return mesh;
   };
-  box(group, 9, 0.16, 7.5, '#4e5148', 0, -0.08, 3.75);
-  box(group, 9, 0.18, 7.5, '#343b36', 0, 3.29, 3.75);
+  box(group, 9, 0.16, MUSEUM_DEPTH, '#4e5148', 0, -0.08, MUSEUM_DEPTH / 2);
+  box(group, 9, 0.18, MUSEUM_DEPTH, '#343b36', 0, 3.29, MUSEUM_DEPTH / 2);
   for (const x of [-3, 0, 3])
-    box(group, 0.025, 0.006, 7.5, '#30352f', x, 0.006, 3.75);
-  for (let z = 0.5; z < 7.5; z += 1)
+    box(
+      group,
+      0.025,
+      0.006,
+      MUSEUM_DEPTH,
+      '#30352f',
+      x,
+      0.006,
+      MUSEUM_DEPTH / 2,
+    );
+  for (let z = 0.5; z < MUSEUM_DEPTH; z += 1)
     box(group, 9, 0.006, 0.025, '#30352f', 0, 0.007, z);
-  const bounds = { minX: -4.5 * m, maxX: 4.5 * m, minZ: 0, maxZ: 7.5 * m };
+  const bounds = {
+    minX: -4.5 * m,
+    maxX: 4.5 * m,
+    minZ: 0,
+    maxZ: MUSEUM_DEPTH * m,
+  };
   const doors = [
     { to: 'corridor' as const, side: 'north' as const, x: -2.475 * m, z: 0 },
   ];
@@ -108,6 +157,23 @@ export function createMuseumGallery(
       ),
       paint('#687169'),
     );
+    const wallUv = mesh.geometry.attributes.uv;
+    const wallDimensions = [
+      [piece.maxZ - piece.minZ, piece.top - piece.bottom],
+      [piece.maxZ - piece.minZ, piece.top - piece.bottom],
+      [piece.maxX - piece.minX, piece.maxZ - piece.minZ],
+      [piece.maxX - piece.minX, piece.maxZ - piece.minZ],
+      [piece.maxX - piece.minX, piece.top - piece.bottom],
+      [piece.maxX - piece.minX, piece.top - piece.bottom],
+    ];
+    for (let i = 0; i < wallUv.count; i++) {
+      const [u, v] = wallDimensions[Math.floor(i / 4)];
+      wallUv.setXY(
+        i,
+        (wallUv.getX(i) * u) / (0.8 * m),
+        (wallUv.getY(i) * v) / (0.8 * m),
+      );
+    }
     mesh.position.set(
       (piece.minX + piece.maxX) / 2,
       (piece.bottom + piece.top) / 2,
@@ -123,8 +189,17 @@ export function createMuseumGallery(
       });
   }
   for (const x of [-4.36, 4.36])
-    box(group, 0.035, 0.85, 7.5, '#3c4940', x, 0.425, 3.75);
-  box(group, 9, 0.85, 0.035, '#3c4940', 0, 0.425, 7.35);
+    box(
+      group,
+      0.035,
+      0.85,
+      MUSEUM_DEPTH,
+      '#3c4940',
+      x,
+      0.425,
+      MUSEUM_DEPTH / 2,
+    );
+  box(group, 9, 0.85, 0.035, '#3c4940', 0, 0.425, MUSEUM_DEPTH - 0.15);
   const outerThreshold = box(
     group,
     1.2,
@@ -137,7 +212,24 @@ export function createMuseumGallery(
   );
   outerThreshold.userData.roomId = 'corridor';
   box(group, 1.2, 0.03, 0.15, '#686557', -2.475, -0.015, -0.075);
-  label(group, 'VX-MUSEUM  ·  SEKTION PHYSIK', 2.7, -0.8, 2.78, 0.19);
+  label(group, 'VX-MUSEUM  ·  SEKTION PHYSIK', 3.2, 1.4, 2.9, 0.19);
+  const muralTexture = new TextureLoader().load(
+    '/art/museum/collective-vx-mural.png',
+  );
+  // Match canvas and label colour handling in the rest of the gallery.
+  muralTexture.colorSpace = finishes.plaster.colorSpace;
+  textures.push(muralTexture);
+  const muralMaterial = createPs1Material({ map: muralTexture }, true);
+  muralMaterial.userData.ps1Room = museumLight;
+  materials.push(muralMaterial);
+  const mural = new Mesh(
+    new PlaneGeometry(5.6 * m, (5.6 / 3) * m),
+    muralMaterial,
+  );
+  mural.name = 'Gemeinsam für die VX-Wissenschaft — north-wall fresco';
+  mural.position.set(1.4 * m, 1.72 * m, 0.19 * m);
+  group.add(mural);
+  label(group, 'GEMEINSAM FÜR DIE VX-WISSENSCHAFT', 3.1, 1.4, 0.67, 0.2);
 
   const hinge = new Group();
   hinge.position.set((-2.475 - DEV_DOOR_WIDTH / 2) * m, 0, 0);
@@ -282,13 +374,23 @@ export function createMuseumGallery(
     lens.position.set(x * m, 2.985 * m, (z - 0.25) * m);
     group.add(lens);
   }
-  for (const z of [2.2, 5.3])
+  for (const z of [2.2, 5.3, 9.5, 12.8])
     box(group, 8.2, 0.055, 0.065, '#242a27', 0, 3.17, z);
+  for (const z of [9.5, 12.8]) {
+    for (const x of [-1.2, 1.2]) {
+      const spot = new SpotLight('#ffe6af', 0, 5 * m, 0.65, 0.6, 1.5);
+      spot.position.set(x * m, 3.05 * m, z * m);
+      spot.target.position.set(0, 1.1 * m, 11.5 * m);
+      group.add(spot, spot.target);
+      spots.push(spot);
+      box(group, 0.22, 0.13, 0.28, '#282b27', x, 3.06, z);
+    }
+  }
   // The gallery has the lab's exposed services, but no fluorescent fittings.
   const services = createCeilingServices({
     axis: 'z',
     from: 0.45 * m,
-    to: 7.05 * m,
+    to: (MUSEUM_DEPTH - 0.45) * m,
     ceilingY: 3.2 * m,
     worldUnitsPerMetre: m,
     lanes: [
@@ -446,11 +548,27 @@ export function createMuseumGallery(
     -Math.PI / 2,
   );
   for (let i = 0; i < 3; i++)
-    framed(magazine(i), -2.8 + i * 2.8, 7.29, Math.PI, 1.02, 1.3);
-  label(group, 'BEITRÄGE DER DDR ZUR VX-TECHNIK', 3.4, 0, 2.85, 7.26, Math.PI);
+    framed(
+      magazine(i),
+      -2.8 + i * 2.8,
+      MUSEUM_DEPTH - 0.21,
+      Math.PI,
+      1.02,
+      1.3,
+    );
+  label(
+    group,
+    'BEITRÄGE DER DDR ZUR VX-TECHNIK',
+    3.4,
+    0,
+    2.85,
+    MUSEUM_DEPTH - 0.24,
+    Math.PI,
+  );
 
   return {
     group,
+    bounds,
     lighting: museumLight,
     actions,
     doorParts,

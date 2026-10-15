@@ -70,6 +70,8 @@ import {
   stepLift,
 } from '../game/column-prep';
 import type { ColumnPrepEvent, ColumnPrepState } from '../game/column-prep';
+import { REDLINES } from '../game/redlines';
+import { createWorld } from '../game/world/world';
 import {
   createCharacterLcd,
   createJewelLamp,
@@ -203,6 +205,12 @@ export interface FerrocoreColumnRigOptions {
    * own switches say; left out, it always is.
    */
   supplied?: () => boolean;
+  /**
+   * Reads the installation's model by vertex id (`src/game/world/world.ts`),
+   * for the cabinets' instruments: each shows a quantity of the model.
+   * Left out (the developer room's unhooked copy), they idle plausibly.
+   */
+  read?: (id: string) => unknown;
 }
 
 /** The log line for something that happened to the column. */
@@ -389,11 +397,23 @@ export function createFerrocoreColumnRig(
   // The olive cabinet's own NETZ rocker is in the rig's supply too.
   let cabinetMains = switchedOn;
   let motion = 1;
-  /** A slow wander between 0 and 1, different for every seed. */
-  const wander = (seconds: number, seed: number, speed = 0.3) =>
-    0.5 +
-    0.32 * Math.sin(seconds * speed * motion + seed * 2.1) +
-    0.12 * Math.sin(seconds * speed * 2.7 * motion + seed * 5.3);
+  // Every reading comes from the model. Without one (the developer
+  // room's unhooked copy), a lab of its own that stays cold, so its
+  // instruments read what a switched-off installation would.
+  const coldWorld = options.read ? null : createWorld();
+  const model = options.read ?? ((id: string) => coldWorld!.read(id));
+  /** A number from the model. */
+  const num = (id: string) => Number(model(id) ?? 0);
+  /** Whether any of the east board's alarm windows named is lit. */
+  const alarmed = (...windows: string[]) =>
+    windows.some((w) => Boolean(model(`alarm.${w}`)));
+  /** The hottest the drive's devices have got, 0 to 1. */
+  const hottest = () =>
+    Math.max(
+      ...Object.values(
+        (model('overheat') as { heat: Record<string, number> }).heat,
+      ),
+    );
   /** A control that a click works, and that moves as it eases. */
   const worked = (
     object: Object3D,
@@ -524,12 +544,15 @@ export function createFerrocoreColumnRig(
     y: number,
     period = 0,
     phase = 0,
+    /** What lights it, beyond the cabinet having power. */
+    when: () => boolean = () => true,
   ) => {
     const made = createPanelLed(kit, colour, true);
     place(parent, made.group, x, y);
     ticks.push((seconds, on) =>
       made.set(
         on &&
+          when() &&
           (period === 0 ||
             motion === 0 ||
             Math.sin((seconds / period + phase) * Math.PI * 2) > 0),
@@ -543,12 +566,15 @@ export function createFerrocoreColumnRig(
     x: number,
     y: number,
     period = 0,
+    /** What lights it, beyond the cabinet having power. */
+    when: () => boolean = () => true,
   ) => {
     const made = createJewelLamp(kit, colour);
     place(parent, made.group, x, y);
     ticks.push((seconds, on) =>
       made.set(
         on &&
+          when() &&
           (period === 0 ||
             motion === 0 ||
             Math.sin((seconds / period) * Math.PI * 2) > 0),
@@ -648,10 +674,16 @@ export function createFerrocoreColumnRig(
     ticks.push((seconds, on) => made.show(on ? value(seconds) : ''));
     return made;
   };
-  const bars = (parent: Object3D, x: number, y: number, seed: number) => {
+  const bars = (
+    parent: Object3D,
+    x: number,
+    y: number,
+    /** What it shows, 0 to 1. */
+    value: () => number,
+  ) => {
     const made = createBarGraph(kit, 10, { pitch: 0.0042, width: 0.007 });
     place(parent, made.group, x, y);
-    ticks.push((seconds, on) => made.set(on ? wander(seconds, seed, 1.4) : 0));
+    ticks.push((_, on) => made.set(on ? value() : 0));
     return made;
   };
   const meter = (
@@ -667,19 +699,6 @@ export function createFerrocoreColumnRig(
     ticks.push((seconds, on) => made.set(on ? reading(seconds) : 0));
     updates.push(made.update);
     return made;
-  };
-  const gauge = (
-    parent: Object3D,
-    x: number,
-    y: number,
-    radius: number,
-    unit: string,
-    reading: (seconds: number) => number,
-  ) => {
-    const made = createRoundGauge(kit, { radius, label: unit });
-    place(parent, made.group, x, y);
-    ticks.push((seconds, on) => made.set(on ? reading(seconds) : 0));
-    updates.push(made.update);
   };
   const screws = (parent: Object3D, w: number, h: number) => {
     for (const sx of [-1, 1])
@@ -877,6 +896,18 @@ export function createFerrocoreColumnRig(
     // 2U: a strip of eight small channel modules, each with a slide
     // switch, a push button with a green LED and a fault LED.
     const p = panel(left, 0, 2, CREAM);
+    // Each channel watches one circuit; its STÖR LED flashes while any of
+    // that circuit's alarm windows on the east board is lit.
+    const channels: [string, string[]][] = [
+      ['NETZ', ['NETZ AUS']],
+      ['HEIZUNG', ['HEIZ. GESP.']],
+      ['SPINDEL', ['SPINDEL ROT']],
+      ['FELD', ['FELD ROT']],
+      ['LAST', ['LAST']],
+      ['XENON', ['XE FLUSS', 'XE DRUCK', 'XE VORRAT']],
+      ['KESSEL', ['KOPF OFFEN', 'O2 KESSEL']],
+      ['KERN', ['KERN LUFT', 'KERN DEFEKT']],
+    ];
     for (let i = 0; i < 8; i++) {
       const x = -0.205 + i * 0.0585;
       if (i > 0)
@@ -890,14 +921,16 @@ export function createFerrocoreColumnRig(
           0,
           0.0006,
         );
-      label(p.group, `KANAL ${i + 1}`, x, 0.031, { height: 0.0022, ink: INK });
+      label(p.group, channels[i][0], x, 0.031, { height: 0.0022, ink: INK });
       slide(p.group, x - 0.016, -0.006, i % 3 === 0 ? 1 : 0);
       button(p.group, 'FREI', 'grey', x + 0.006, -0.006, {
         size: 0.015,
         led: 'green',
         lit: i % 3 !== 1,
       });
-      led(p.group, 'red', x + 0.02, 0.016, i === 5 ? 1.1 : 0, i * 0.13);
+      led(p.group, 'red', x + 0.02, 0.016, 0.7, i * 0.13, () =>
+        alarmed(...channels[i][1]),
+      );
       label(p.group, 'H/A', x - 0.016, -0.027, { height: 0.0016, ink: INK });
       label(p.group, 'STÖR', x + 0.02, 0.027, { height: 0.0014, ink: INK });
     }
@@ -928,11 +961,13 @@ export function createFerrocoreColumnRig(
     });
     const lcd = createCharacterLcd(kit, { columns: 16, rows: 2, cell: 0.0034 });
     place(p.group, lcd.group, -0.115, 0.018);
-    ticks.push((seconds, on) =>
+    ticks.push((_, on) =>
       lcd.show(
+        // The field's trim: where it balances, where TRIMM has it, and the
+        // drive's delta, OK while the trim matches.
         [
-          'FC1 SOLL 0.612',
-          `DELTA ${(0.598 + Math.sin(seconds * 0.4 * motion) * 0.004).toFixed(3)} OK`,
+          `SOLL${num('drive.idealTrim').toFixed(2)} IST${num('drive.trim').toFixed(2)}`,
+          `DELTA ${num('drive.delta').toFixed(3)} ${num('board.trimMatch') >= 0.8 ? 'OK' : 'ABW'}`,
         ],
         on,
       ),
@@ -993,7 +1028,15 @@ export function createFerrocoreColumnRig(
         0,
       );
     dymo(p.group, 'ENDSTUFE FC', 0, p.h / 2 - 0.02);
-    lamp(p.group, '#ffb43a', 0, -0.05);
+    // The amplifier drives the H-B field: BETRIEB while it does.
+    lamp(
+      p.group,
+      '#ffb43a',
+      0,
+      -0.05,
+      0,
+      () => Boolean(model('drive.mains')) && num('rig.field') > 0.02,
+    );
     label(p.group, 'BETRIEB', 0, -0.066, { height: 0.0022 });
   }
   {
@@ -1014,7 +1057,9 @@ export function createFerrocoreColumnRig(
     banana(p.group, 0.075, -0.012, '#1a1a1a');
     divider(p.group, 0.105, p.h * 0.8);
     button(p.group, 'TEST', 'white', 0.17, -0.002, { latching: false });
-    led(p.group, 'green', 0.2, -0.002);
+    // Lit while the field coils carry current.
+    led(p.group, 'green', 0.2, -0.002, 0, 0, () => num('rig.field') > 0.02);
+    label(p.group, 'STROM', 0.2, 0.018, { height: 0.0018, ink: INK });
     tube(
       left.group,
       [
@@ -1054,7 +1099,8 @@ export function createFerrocoreColumnRig(
       4,
       0.06,
       0.008,
-      (t) => (2.4 + wander(t, 1) * 0.1).toFixed(2).replace('.', ''),
+      // The valve heaters' cathode supply: 2.50 kV when they are warm.
+      () => (num('rig.heater') * 2.5).toFixed(2).replace('.', ''),
       0.012,
     );
     knob(p.group, 0.17, 0.004, 0.012, 'instrument', true);
@@ -1067,10 +1113,12 @@ export function createFerrocoreColumnRig(
     const a = panel(left, 18, 4, '#232527', half, -half / 2);
     const vfd = createVfd(kit, { columns: 9, height: 0.011 });
     place(a.group, vfd.group, 0, 0.026);
-    ticks.push((seconds, on) =>
-      vfd.show([`${(35 + wander(seconds, 3) * 0.04).toFixed(3)} MH`], on),
+    ticks.push((_, on) =>
+      vfd.show([`${(num('rig.field') * 44).toFixed(3)} MH`], on),
     );
     label(a.group, 'VARISTOR', -0.07, 0.048, { height: 0.0024 });
+    // What the display reads: the H-B field coils' inductance.
+    label(a.group, 'FELD-INDUKTIVITÄT', 0, 0.007, { height: 0.0018 });
     for (let i = 0; i < 4; i++)
       button(
         a.group,
@@ -1113,7 +1161,8 @@ export function createFerrocoreColumnRig(
         };
       }
     }
-    lamp(b.group, '#ff4a2e', -0.08, 0.025, 0.8);
+    // Flashes while too little xenon reaches the machine (XE FLUSS).
+    lamp(b.group, '#ff4a2e', -0.08, 0.025, 0.8, () => alarmed('XE FLUSS'));
     label(b.group, 'STÖRUNG', -0.08, 0.008, { height: 0.0022, ink: INK });
     label(b.group, 'SOLL · SLPM', 0.04, -0.062, {
       height: 0.0026,
@@ -1133,7 +1182,8 @@ export function createFerrocoreColumnRig(
       -0.13,
       -0.002,
       0.075,
-      (t) => 0.62 + wander(t, 4) * 0.08,
+      // The cathode supply, as A5's readout shows it.
+      () => num('rig.heater') * 0.7,
     );
     meter(
       p.group,
@@ -1141,7 +1191,8 @@ export function createFerrocoreColumnRig(
       0.13,
       -0.002,
       0.075,
-      (t) => 0.3 + wander(t, 5, 0.9) * 0.3,
+      // The beam current follows the ferrocore's activity.
+      () => num('ferrocore.activity') * 0.85,
     );
     for (let i = 0; i < 4; i++)
       button(
@@ -1195,13 +1246,15 @@ export function createFerrocoreColumnRig(
       4,
       0.06,
       0.006,
-      (t) => String(Math.round(608 + wander(t, 6) * 12)),
+      // The crucible sits on the valve heaters' circuit.
+      () => String(Math.round(20 + num('rig.heater') * 590)),
       0.015,
       '#ff3b24',
     );
     label(p.group, '°C', 0.138, 0.006, { height: 0.0026 });
     label(p.group, 'TEMP TIEGEL', 0.06, -0.019, { height: 0.0022 });
-    led(p.group, 'red', 0.2, 0.02, 0.6);
+    // Flashes once any of the drive's devices is hot enough to smoke.
+    led(p.group, 'red', 0.2, 0.02, 0.6, 0, () => hottest() >= 0.35);
     label(p.group, 'ÜBERTEMP.', 0.2, -0.005, { height: 0.0022, ink: INK });
   }
   {
@@ -1332,7 +1385,16 @@ export function createFerrocoreColumnRig(
       3,
       -0.16,
       -0.006,
-      (t) => String(Math.round(180 + n * 40 + wander(t, n) * 8)),
+      // Evaporator 1 is the HT valve heater, 2 the LT: its temperature.
+      () =>
+        String(
+          Math.round(
+            20 +
+              (model(`drive.${n === 1 ? 'ht' : 'lt'}`) ? 1 : 0) *
+                num('rig.heater') *
+                (180 + n * 40),
+          ),
+        ),
       0.011,
     );
     for (let i = 0; i < 3; i++)
@@ -1366,7 +1428,17 @@ export function createFerrocoreColumnRig(
       4,
       0.16,
       -0.006,
-      (t) => String(Math.round(1200 + wander(t, n + 4) * 60)),
+      // Its power: hard while it warms, a holding load once warm.
+      () =>
+        String(
+          Math.round(
+            model(`drive.${n === 1 ? 'ht' : 'lt'}`) &&
+              model('drive.mains') &&
+              model('drive.permit')
+              ? 600 + (1 - num('rig.heater')) * 900
+              : 0,
+          ),
+        ),
       0.009,
     );
     toggle(p.group, 0.235, -0.006);
@@ -1381,20 +1453,33 @@ export function createFerrocoreColumnRig(
         pitch: 0.0055,
       });
       place(p.group, matrix.group, x, 0.002);
-      ticks.push((seconds, on) => {
-        const step = Math.floor(seconds * 4 * motion);
+      ticks.push((_, on) => {
+        // The left shows the trim: a full column where TRIMM stands (IST),
+        // dots top and bottom where the field balances (SOLL). The right
+        // shows the strain as a bar, and the instability along the top.
+        const ist = Math.round(num('drive.trim') * 11);
+        const soll = Math.round(num('drive.idealTrim') * 11);
+        const strain = Math.round(num('rig.strain') * 12);
+        const unstable = Math.round(num('rig.instability') * 12);
         matrix.draw(
           (c, r) =>
             on &&
-            ((c * 7 + r * 3 + step + i * 5) % 9 < 3 ||
-              (r === 2 && (c + step) % 12 < 4)),
+            (i === 0
+              ? c === ist || (c === soll && (r === 0 || r === 4))
+              : (r >= 2 && c < strain) || (r === 0 && c < unstable)),
         );
       });
-      label(p.group, i === 0 ? 'STRAHLLAGE' : 'SCHICHTDICKE', x, -0.026, {
-        height: 0.0022,
-      });
+      label(
+        p.group,
+        i === 0 ? 'TRIMM  IST │ SOLL ⁚' : 'DEHNUNG ▬  INSTAB. ‾',
+        x,
+        -0.026,
+        { height: 0.0022 },
+      );
     }
-    led(p.group, 'red', 0.0, 0.01, 0.9);
+    // Flashes with the INSTAB window.
+    led(p.group, 'red', 0.0, 0.01, 0.9, 0, () => alarmed('INSTAB'));
+    label(p.group, 'INSTAB', 0.0, -0.006, { height: 0.0018 });
   }
   {
     // 4U: a modular instrument panel with the big round gauge.
@@ -1436,23 +1521,26 @@ export function createFerrocoreColumnRig(
       ),
     );
     label(p.group, 'HT  LT', -0.035, 0.058, { height: 0.0022, ink: INK });
-    const heaterLamp = lamp(p.group, '#ffb43a', -0.035, -0.005, 1.6);
-    if (hookup)
-      ticks.push(() =>
-        heaterLamp.set(hookup.heaters.get('ht') || hookup.heaters.get('lt')),
-      );
+    // The model's heater lamp: lit while either valve heater is in.
+    lamp(p.group, '#ffb43a', -0.035, -0.005, 0, () =>
+      Boolean(model('column.heaterLamp')),
+    );
     button(p.group, 'ZÜND', 'amber', -0.035, -0.045, { latching: false }, () =>
       hookup?.ignite(),
     );
-    gauge(
-      p.group,
-      0.165,
-      0.0,
-      0.058,
-      'mbar',
-      (t) => 0.55 + wander(t, 8, 0.2) * 0.08,
-    );
-    label(p.group, 'VORVAKUUM', 0.165, -0.071, { height: 0.0022, ink: INK });
+    // The spindle's actual speed beside its DREHZAHL knob, with the red
+    // line it must stay under.
+    {
+      const made = createRoundGauge(kit, {
+        radius: 0.058,
+        label: 'U/min ×1000',
+        redFrom: REDLINES.spindle.limit / REDLINES.spindle.fullScale,
+      });
+      place(p.group, made.group, 0.165, 0.0);
+      ticks.push((_, on) => made.set(on ? num('rig.spindle') : 0));
+      updates.push(made.update);
+    }
+    label(p.group, 'DREHZAHL IST', 0.165, -0.071, { height: 0.0022, ink: INK });
   }
   {
     // 4U: the ferrocore capacity meter.
@@ -1463,9 +1551,10 @@ export function createFerrocoreColumnRig(
       -0.14,
       0.012,
       0.11,
-      (t) => 0.5 + wander(t, 9, 0.25) * 0.15,
+      // How much of the ferrocore's capacity the drive is using.
+      () => num('ferrocore.activity'),
     );
-    label(p.group, 'FERROKERN KAPAZITÄT', -0.14, -0.06, {
+    label(p.group, 'FERROKERN AUSLASTUNG', -0.14, -0.06, {
       height: 0.0024,
       ink: INK,
     });
@@ -1493,11 +1582,24 @@ export function createFerrocoreColumnRig(
       4,
       -0.19,
       0.002,
-      (t) => String(Math.round(3300 + wander(t, 10) * 200)),
+      // The energy the drive has drawn, in watt-hours.
+      () => String(Math.round(num('telltales.energyKwh') * 1000) % 10000),
       0.014,
     );
+    label(p.group, 'ENERGIE Wh', -0.19, -0.028, { height: 0.0018 });
+    // The stored heat of the spindle drive, the field coils and the load,
+    // and the smoke in the room.
+    const heats: (() => number)[] = [
+      () =>
+        (model('overheat') as { heat: Record<string, number> }).heat.spindle,
+      () => (model('overheat') as { heat: Record<string, number> }).heat.field,
+      () => (model('overheat') as { heat: Record<string, number> }).heat.load,
+      () => num('room.smokeLevel'),
+    ];
     for (let i = 0; i < 4; i++)
-      bars(p.group, -0.105 + i * 0.016, 0.002, 11 + i);
+      bars(p.group, -0.105 + i * 0.016, 0.002, heats[i]);
+    label(p.group, 'WÄRME', -0.081, 0.032, { height: 0.0018 });
+    label(p.group, 'S  F  L  R', -0.081, -0.028, { height: 0.0016 });
     for (let i = 0; i < 5; i++) {
       knob(p.group, -0.01 + i * 0.05, 0.006, 0.0065);
       named(p.group, 'knob', `OFFSET ${i + 1} knob`);
@@ -1545,7 +1647,8 @@ export function createFerrocoreColumnRig(
     hookup?.band.set(selector.position / 2);
     label(p.group, 'SCHWEBUNG', 0.03, 0.046, { height: 0.0024, ink: INK });
     toggle(p.group, 0.11, 0.03);
-    lamp(p.group, '#ff4a2e', 0.11, -0.025, 0.45);
+    // Flashes with the DEHNUNG window: strain the band should clear.
+    lamp(p.group, '#ff4a2e', 0.11, -0.025, 0.45, () => alarmed('DEHNUNG'));
     label(p.group, 'FREIG.', 0.11, 0.057, { height: 0.002, ink: INK });
     label(p.group, 'STÖRUNG', 0.11, -0.048, { height: 0.002, ink: INK });
     label(p.group, 'nur mit Freigabe', 0.2, -0.05, {
@@ -1764,7 +1867,10 @@ export function createFerrocoreColumnRig(
       rocker.update,
     );
     label(p.group, 'NETZ', -0.17, 0.026, { height: 0.0026, ink: INK });
-    meter(p.group, 'V', 0.0, 0.01, 0.07, () => (cabinetMains ? 0.55 : 0));
+    // The supply reaching the cabinet: the rectifier, through the rocker.
+    meter(p.group, 'V', 0.0, 0.01, 0.07, () =>
+      cabinetMains && (options.supplied?.() ?? true) ? 0.55 : 0,
+    );
     label(p.group, 'NETZSPANNUNG', 0, -0.036, { height: 0.0022, ink: INK });
     label(p.group, 'ABGLEICH', 0.14, 0.044, { height: 0.0022, ink: INK });
     knob(p.group, 0.14, 0.02, 0.008);

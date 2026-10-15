@@ -80,6 +80,8 @@ export const GEN1_SIDE_CABINET = { x: 5.35, z: 2 };
 
 /** What the first VX3 needs from the room it stands in. */
 export interface Gen1Hookup {
+  /** Museum conversion: generator modules and live field taps are removed. */
+  fieldGeneratorsRemoved?: boolean;
   /** The floor's height, scene units. */
   floorY: number;
   rig: RigState;
@@ -291,7 +293,13 @@ export function createGen1Vx3(hookup: Gen1Hookup) {
   }
   const sideUnits = [
     { maker: 'NEUMANN DYNAMIK', title: '7-STAGE BETAFORM AMP', y: 1.1 },
-    { maker: 'VOLT XOCCULA', title: 'ISOLATED-FRAME FLUX EMITTER', y: 0 },
+    {
+      maker: 'VOLT XOCCULA',
+      title: hookup.fieldGeneratorsRemoved
+        ? 'FELDGENERATOR AUSGEBAUT'
+        : 'ISOLATED-FRAME FLUX EMITTER',
+      y: 0,
+    },
     { maker: 'SYNCLEX', title: 'NANOCORE B-E RADIATOR', y: -1.1 },
   ];
   for (const unit of sideUnits) {
@@ -369,18 +377,20 @@ export function createGen1Vx3(hookup: Gen1Hookup) {
   };
   for (const part of [ampKnob, ampMarker])
     input(part, 'Side cabinet', 'Betaform stage gain knob', turnAmp);
-  disc(sideCabinet, 0.25, '#d7ad6b', 0, -0.11, 0.39);
-  disc(sideCabinet, 0.16, '#273d3e', 0, -0.11, 0.4);
-  const emitterLamp = indicator(
-    glows(disc(sideCabinet, 0.09, '#33433e', 0, -0.11, 0.41)),
-    'Side cabinet',
-    'Flux emitter lamp',
-  );
-  dynamic.push(() => {
-    (emitterLamp.material as ReturnType<typeof material>).color.set(
-      rig.field > 0.2 ? '#7ce5c5' : '#33433e',
+  if (!hookup.fieldGeneratorsRemoved) {
+    disc(sideCabinet, 0.25, '#d7ad6b', 0, -0.11, 0.39);
+    disc(sideCabinet, 0.16, '#273d3e', 0, -0.11, 0.4);
+    const emitterLamp = indicator(
+      glows(disc(sideCabinet, 0.09, '#33433e', 0, -0.11, 0.41)),
+      'Side cabinet',
+      'Flux emitter lamp',
     );
-  });
+    dynamic.push(() => {
+      (emitterLamp.material as ReturnType<typeof material>).color.set(
+        rig.field > 0.2 ? '#7ce5c5' : '#33433e',
+      );
+    });
+  }
   for (let fin = 0; fin < 9; fin++)
     cube(
       sideCabinet,
@@ -410,6 +420,8 @@ export function createGen1Vx3(hookup: Gen1Hookup) {
 
   // The wall outlet and the trailing rubber mains lead are visible at rack base.
   const socketX = -5.6;
+  if (hookup.fieldGeneratorsRemoved)
+    cube(group, 0.7, 3.3, 0.24, '#59665b', socketX, floorY + 1.65, -3.79);
   cube(group, 0.52, 0.7, 0.08, '#c9bf9f', socketX, floorY + 2.5, -3.62);
   cube(group, 0.35, 0.45, 0.018, '#eee2bd', socketX, floorY + 2.5, -3.56);
   for (const x of [socketX - 0.08, socketX + 0.08]) {
@@ -585,6 +597,12 @@ export function createGen1Vx3(hookup: Gen1Hookup) {
     // rack-layout.ts): bare metal, the maker's branding, the controls and
     // dials, then the labels.
     cube(panel, panelWidth, h - 0.055, 0.27, '#8a8f87', 0, 0, 0.04);
+    if (hookup.fieldGeneratorsRemoved && module.id.startsWith('field-')) {
+      label(panel, 'FELDGENERATOR AUSGEBAUT', 0, 0, 0.19, 11);
+      for (const x of [-2, 2]) disc(panel, 0.055, '#bcaa81', x, 0, 0.2);
+      top -= h + 0.045;
+      continue;
+    }
     const metalZ = 0.04 + 0.27 / 2;
     const layout = layoutModule(module, U);
     const faceSize = { width: panelWidth - 0.22, height: h - 0.055 };
@@ -775,8 +793,9 @@ export function createGen1Vx3(hookup: Gen1Hookup) {
             else if (control.id === 'purge') purge();
             else {
               if (rig.controls.mains)
-                rig.strain = Math.min(1, rig.strain + 0.15);
-              play('spark');
+                if (!hookup.fieldGeneratorsRemoved)
+                  rig.strain = Math.min(1, rig.strain + 0.15);
+              if (!hookup.fieldGeneratorsRemoved) play('spark');
               write('Pressed DO NOT. The annotation was unspecific.');
             }
           });
@@ -870,7 +889,7 @@ export function createGen1Vx3(hookup: Gen1Hookup) {
             String(
               Math.round(
                 module.id.startsWith('monitor')
-                  ? 38 + rig.instability * 400
+                  ? rig.instability * 400
                   : rig.spindle * 3600,
               ),
             ).padStart(6, '0'),
@@ -939,7 +958,7 @@ export function createGen1Vx3(hookup: Gen1Hookup) {
       );
       bay.add(wire);
     }
-    for (const x of [-1.38, 0.18, 1.42]) {
+    for (const x of hookup.fieldGeneratorsRemoved ? [] : [-1.38, 0.18, 1.42]) {
       const glow = material('#354846', true, true);
       const node = new Mesh(new CircleGeometry(0.13, 8), glow);
       node.position.set(x, -0.25 + x * 0.17, 0.23);
@@ -952,7 +971,16 @@ export function createGen1Vx3(hookup: Gen1Hookup) {
         );
       });
     }
-    label(bay, 'FIELD BUS / PANEL REMOVED', 0, bayHeight / 2 - 0.17, 0.23, 8);
+    label(
+      bay,
+      hookup.fieldGeneratorsRemoved
+        ? 'FELDBUS ABGETRENNT'
+        : 'FIELD BUS / PANEL REMOVED',
+      0,
+      bayHeight / 2 - 0.17,
+      0.23,
+      8,
+    );
     top -= bayHeight + 0.045;
   }
 

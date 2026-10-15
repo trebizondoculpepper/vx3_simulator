@@ -2,6 +2,7 @@ import { mercuryArcLight } from '../game/mercury-arc-light';
 import { designate } from '../game/machine-parts';
 import {
   BoxGeometry,
+  Color,
   CylinderGeometry,
   Group,
   LatheGeometry,
@@ -9,10 +10,12 @@ import {
   PlaneGeometry,
   PointLight,
   Vector2,
+  Vector3,
 } from 'three';
 import type { Material, Texture, MeshStandardMaterial } from 'three';
 import { createPs1Material } from '../rendering/ps1-material';
 import { createLabelTexture } from './screens';
+import type { RoomLamp } from '../rendering/room-lighting';
 
 /** Glass bulb and electrode arms inspired by the owner's reference images.
  * Local dimensions are metres, facing +z; origin at floor level.
@@ -126,15 +129,24 @@ export function createMercuryRectifier(m: number) {
         role: 'indicator',
       });
   });
+  const roomLamp: RoomLamp = {
+    position: { value: new Vector3() },
+    color: { value: new Color('#83dfff') },
+    range: { value: 6 * m },
+    strength: { value: 0 },
+  };
   let lightLevel = 0;
   return {
     group,
+    roomLamp,
     get lightLevel() {
       return lightLevel;
     },
     update(on: boolean, seconds: number, reducedMotion: boolean) {
       const pulse = mercuryArcLight(on, seconds, reducedMotion);
       lightLevel = pulse;
+      light.getWorldPosition(roomLamp.position.value);
+      roomLamp.strength.value = 5 * pulse;
       glow.color.set(on ? '#d8fbff' : '#182a30');
       if (on) glow.color.multiplyScalar(pulse);
       glass.emissiveIntensity = on ? 2.5 * pulse : 0.02;

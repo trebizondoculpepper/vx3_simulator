@@ -3,7 +3,6 @@ import type { RigState } from '../game/rig';
 
 export interface SoundParameters {
   roomGain: number;
-  humGain: number;
   heaterGain: number;
   spindleGain: number;
   spindleHz: number;
@@ -24,7 +23,6 @@ export function writeSoundParameters(
 ): void {
   const powered = state.controls.mains;
   result.roomGain = 0.005;
-  result.humGain = powered ? 0.018 + state.field * 0.008 : 0;
   result.heaterGain = state.heater * 0.014;
   result.spindleGain = state.spindle * 0.019;
   result.spindleHz = 65 + state.spindle * 125;
@@ -48,7 +46,6 @@ export function soundParameters(
 ): SoundParameters {
   const result: SoundParameters = {
     roomGain: 0,
-    humGain: 0,
     heaterGain: 0,
     spindleGain: 0,
     spindleHz: 0,

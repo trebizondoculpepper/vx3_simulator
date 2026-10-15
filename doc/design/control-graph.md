@@ -203,3 +203,46 @@ Every input fitted to this rack now changes the machine. Two alternate panels in
 Spindle, field and supply-load redlines feed three stored device heats. Heat above 0.35 emits apparatus smoke, which contributes to laboratory room smoke. Twenty continuous seconds with room smoke at or above 0.25 latch the fire alarm; the lab call point latches it immediately. Three seconds after alarm, lab sprinklers run from their modeled ceiling heads. Device heat at or above 0.90 while powered ignites that device; 45 seconds of cumulative active burning ruins the lab. Five seconds of sprinkler water while mains remain closed also ruins it. Opening mains stops the live-water timer. The fire alarm and the sprinklers run until they are reset: neither stops by itself, nor when the fire burns out. The corridor fire panel's RÜCKSTELLEN resets alarm and water only after smoke falls below 0.25 and no device is burning. Ruin blocks the machine's controls while allowing camera, doors and the building's fire circuit: in a ruined lab RÜCKSTELLEN, once the fire is out, silences the alarm and shuts the sprinklers, and the lab stays ruined. Reset Simulation (top left) starts a new cold run.
 
 The southmost CRT uses pre-rendered green wireframe screens selected by core temperature (plane, cube, regular polyhedron, irregular polyhedron, projected tesseract); 3,200 K is the model's full-power/critical boundary. A failed core selects the fault screen. The Stage 3 cheat restores the purged, pressurised vessel and starts the xenon recirculator and plant supply while leaving the drive off; LIGHTS ON energises both room lighting selections. The corridor stays lit on an independent circuit.
+
+## Cabinet instruments
+
+Every instrument on cabinets A and B reads the world model through the rig's `read` option (`src/scene/ferrocore-column-rig.ts`); none makes up a value. Several repeat what the east board shows, which is intended.
+
+| Unit | Instrument | Reads |
+| --- | --- | --- |
+| A1 KANÄLE | Eight STÖR LEDs, one per circuit (NETZ, HEIZUNG, SPINDEL, FELD, LAST, XENON, KESSEL, KERN) | That circuit's alarm windows (`alarm.*`) |
+| A2 FC-STEUERUNG | LCD: SOLL, IST, DELTA and OK/ABW | `drive.idealTrim`, `drive.trim`, `drive.delta`, `board.trimMatch` |
+| A3 ENDSTUFE FC | BETRIEB lamp | `drive.mains` and `rig.field` |
+| A4 SPULEN | STROM LED | `rig.field` |
+| A5 HV KATODE | IST kV readout | `rig.heater` (2.50 kV warm) |
+| A6 VARISTOR | FELD-INDUKTIVITÄT display, MH | `rig.field` |
+| A7 XE-REGLER | STÖRUNG lamp | `alarm.XE FLUSS` |
+| A8 STRAHLSTROM | KATODE kV and STRAHLSTROM mA meters | `rig.heater`, `ferrocore.activity` |
+| A10 TIEGELHEIZUNG | TEMP TIEGEL °C readout; ÜBERTEMP. LED | `rig.heater`; `overheat` (a device hot enough to smoke) |
+| B1 KENNUNG | NETZ LED | The column's supply running |
+| B2 MESSWERTE | KERN K, DRUCK cbar, XE % | The vessel: temperature, chamber pressure, buffer |
+| B3, B4 VERDAMPFER | IST °C and LEISTUNG W | `drive.ht` (B3) or `drive.lt` (B4), `rig.heater`, `drive.mains`, `drive.permit` |
+| B5 ANZEIGE | TRIMM dot matrix (IST column, SOLL dots); DEHNUNG matrix (strain bar, instability line); INSTAB LED | `drive.trim`, `drive.idealTrim`; `rig.strain`, `rig.instability`; `alarm.INSTAB` |
+| B6 ANTRIEB | DREHZAHL IST gauge with the red line; HV FIL heater lamp | `rig.spindle`; `column.heaterLamp` |
+| B7 KAPAZITÄT | FERROKERN AUSLASTUNG meter | `ferrocore.activity` |
+| B8 OFFSET | ENERGIE Wh readout; WÄRME bars S, F, L and R | `telltales.energyKwh`; `overheat` heats and `room.smokeLevel` |
+| B9 SCHWEBUNG | STÖRUNG lamp | `alarm.DEHNUNG` |
+| B11 SÄULE, B12 KERN | Gauges, meters, readouts and lamps | The vessel (`column.*` outputs) |
+| B13 VERSORGUNG | NETZSPANNUNG voltmeter | The rocker and the plant supply |
+
+The developer room's unhooked copy of the column reads a cold world of its own.
+
+## Museum Gen1 demonstration
+
+The museum rig has its own `createMuseumExhibitModel`, with separate rack settings and physical heater/spindle state; it has no edges into the laboratory world. Pedestal START acts only from inactive, advancing through a 30 s startup, 60 s demonstration and 8 s rundown. The sequence gates electrical power and motor demand without moving visitor inputs. The original switches, spindle/governor knobs, gains, selectors and service buttons work this local model; RESET ends the demonstration and PURGE reports the disconnected gas system. Both field modules and the side-cabinet emitter have been removed, and field demand/strength are clamped to zero before each physical step. Lamps, meters, scopes, counter and ferrocore motion follow this model, while the information plaque shows its sequence phase and remaining run time.
+
+```mermaid
+flowchart LR
+  START[Pedestal START] --> SEQUENCE[Inactive / startup / demonstration / rundown]
+  INPUTS[Original switches and knobs] --> DRIVE[Isolated Gen1 drive model]
+  SEQUENCE --> DRIVE
+  DRIVE --> READINGS[Heater / spindle / lamps / scopes / drum]
+  SEQUENCE --> PLAQUE[Status and remaining time]
+  REMOVED[Generators removed] --> ZERO[Field permanently zero]
+  ZERO --> DRIVE
+```

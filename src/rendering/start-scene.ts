@@ -1,3 +1,4 @@
+import { stateReport, stateReportName } from '../game/state-report';
 import { createRenderer, renderScale, useEnvironment } from './render-style';
 import {
   coldStart as coldStartSteps,
@@ -14,6 +15,7 @@ import { createMachineActionLog } from '../game/machine-action-log';
 import { DEV_DOOR_WIDTH, DEV_DOOR_HEIGHT } from '../game/dev-room-links';
 import { createDevDoorways } from '../scene/dev-doorways';
 import { createMuseumGallery } from '../scene/museum-gallery';
+import { createMuseumVx3Exhibit } from '../scene/museum-vx3-exhibit';
 import { MAX_ZOOM, MIN_ZOOM, wheelZoom } from './first-person';
 import { createRoomLighting } from './room-lighting';
 import { createAgedWallMap } from './aged-wall';
@@ -312,7 +314,12 @@ export function startScene(canvas: HTMLCanvasElement) {
     bind(object, (hit) => {
       // A ruined lab's machines are dead, but the building's fire circuit
       // still works, so its alarm can be reset.
-      if (fire.ruinCause && machine !== 'Fire circuit') return;
+      if (
+        fire.ruinCause &&
+        machine !== 'Fire circuit' &&
+        !machine.startsWith('Museum VX3')
+      )
+        return;
       // The operator's log names the control exactly, for debugging: the
       // first line the action writes is prefixed with it. Unlogged state
       // changes are described by the transaction fallback.
@@ -487,7 +494,28 @@ export function startScene(canvas: HTMLCanvasElement) {
     labRoom.door.handle.x,
     museumEntry.z + wallThickness,
   );
+  const museumExhibit = createMuseumVx3Exhibit({
+    m: worldUnitsPerMetre,
+    camera: perspectiveCamera,
+    input,
+    indicator,
+    play: (cue) => audio.play(cue, 'museum'),
+    write: (line) => write(line),
+    reducedMotion: () => reducedMotion.matches,
+  });
+  museum.group.add(museumExhibit.group);
   scene.add(museum.group);
+  for (const { x, z, w, d } of [
+    { x: 0, z: 11.5, w: 1.5, d: 1.3 },
+    { x: 0, z: 9.7, w: 0.5, d: 0.43 },
+    { x: -2.2, z: 10.9, w: 1.8, d: 0.15 },
+  ])
+    museum.solids.push({
+      minX: museum.group.position.x + (x - w / 2) * worldUnitsPerMetre,
+      maxX: museum.group.position.x + (x + w / 2) * worldUnitsPerMetre,
+      minZ: museum.group.position.z + (z - d / 2) * worldUnitsPerMetre,
+      maxZ: museum.group.position.z + (z + d / 2) * worldUnitsPerMetre,
+    });
   const corridor = createCorridor({
     floorY,
     worldUnitsPerMetre,
@@ -766,6 +794,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     // The column's equipment is fed from the plant room's mercury arc
     // rectifier; the east board and the ceiling lights are on the mains.
     supplied: () => world.read<boolean>('plant.powered'),
+    // The cabinets' instruments read the world model.
+    read: (id) => world.read(id),
     log: (text) => write(text),
     onEvent: (event) => {
       if (event.kind !== 'catastrophe') return;
@@ -2055,6 +2085,9 @@ export function startScene(canvas: HTMLCanvasElement) {
   const soundSources = [
     { id: 'pa', ...corridor.paPosition },
     { id: 'supply', ...gen2At(-0.66, 0.4) },
+    // The mains hum comes from each cabinet's base, where its supply is.
+    { id: 'cabinet-a', ...gen2At(-0.69, 0.15) },
+    { id: 'cabinet-b', ...gen2At(0.69, 0.15) },
     { id: 'valves', ...gen2At(-0.66, 1.2) },
     { id: 'spindle', ...gen2At(0, 1.0) },
     { id: 'field', ...gen2At(0, 0.7) },
@@ -2104,6 +2137,12 @@ export function startScene(canvas: HTMLCanvasElement) {
       z: recirculator.group.position.z,
     },
     {
+      id: 'museum',
+      x: museum.group.position.x,
+      y: floorY + worldUnitsPerMetre,
+      z: museum.group.position.z + 11.5 * worldUnitsPerMetre,
+    },
+    {
       id: 'rectifier',
       x: rectifier.group.position.x,
       y: floorY + worldUnitsPerMetre,
@@ -2118,7 +2157,7 @@ export function startScene(canvas: HTMLCanvasElement) {
       minX: museum.group.position.x - 4.5 * worldUnitsPerMetre,
       maxX: museum.group.position.x + 4.5 * worldUnitsPerMetre,
       minZ: museum.group.position.z,
-      maxZ: museum.group.position.z + 7.5 * worldUnitsPerMetre,
+      maxZ: museum.group.position.z + museum.bounds.maxZ,
     },
   };
   // Rooms are culled whole: everything in the lab hangs under `lab`, and
@@ -2145,7 +2184,7 @@ export function startScene(canvas: HTMLCanvasElement) {
 
   const overlay = document.createElement('div');
   overlay.className = 'rack-ui';
-  overlay.innerHTML = `<div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"><button type="button" id="reset-simulation" class="reset-simulation" title="Start again: a fresh, cold lab">Reset Simulation</button></div><div class="rack-nav" role="group" aria-label="Movement and zoom"><button type="button" data-pan="left" aria-label="Step left">◀</button><button type="button" data-pan="up" aria-label="Step forward">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Step back">▼</button><button type="button" data-pan="right" aria-label="Step right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook" hidden><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log">▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: ZOOM · ALT+WHEEL: HEIGHT · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
+  overlay.innerHTML = `<div class="sound-controls"><button type="button" id="mute-sound" aria-pressed="false">SOUND ON</button><label for="sound-volume">VOL</label><input type="range" id="sound-volume" min="0" max="100" value="55" aria-label="Sound volume"><button type="button" id="reset-simulation" class="reset-simulation" title="Start again: a fresh, cold lab">Reset Simulation</button><button type="button" id="save-state" class="reset-simulation" title="Download the game state as a Markdown file, for debugging">Save State</button></div><div class="rack-nav" role="group" aria-label="Movement and zoom"><button type="button" data-pan="left" aria-label="Step left">◀</button><button type="button" data-pan="up" aria-label="Step forward">▲</button><span id="unit-readout"></span><button type="button" data-pan="down" aria-label="Step back">▼</button><button type="button" data-pan="right" aria-label="Step right">▶</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="in" aria-label="Zoom in">＋</button></div><aside class="logbook" hidden><div class="logbook-head"><strong>OPERATOR'S LOG</strong><button type="button" id="close-log" aria-label="Put the logbook away">×</button></div><ol id="log-entries"></ol></aside><button type="button" class="notebook-tab" id="open-log">▤ LOG <span id="unread-count"></span></button><p class="rack-help">CLICK: MOUSE LOOK · WASD: WALK · SHIFT: RUN · C: CROUCH · V: LOWER CROUCH · CLICK / E: USE · WHEEL: ZOOM · ALT+WHEEL: HEIGHT · ESC: CURSOR</p><div class="crosshair" aria-hidden="true" hidden></div>`;
   // Resetting is always by hand: a ruined machine stays ruined until the
   // operator asks for a fresh, cold lab. The room's lights are left alone.
   const resetSimulation = () => {
@@ -2207,6 +2246,37 @@ export function startScene(canvas: HTMLCanvasElement) {
   });
   const entries = overlay.querySelector<HTMLOListElement>('#log-entries')!;
   const unitReadout = overlay.querySelector<HTMLElement>('#unit-readout')!;
+  // The game's state as Markdown, for debugging: the model, the controls,
+  // the log and the printout, with the room's own state.
+  const reportState = (time = new Date()) =>
+    stateReport(world, {
+      time,
+      log: [...entries.children].map((item) => item.textContent ?? ''),
+      printed: teleprinterLines,
+      room: {
+        Where: unitReadout.textContent,
+        'Position (m)': `x ${(walker.x / metre).toFixed(2)}, z ${(walker.z / metre).toFixed(2)}`,
+        'Lab lights': labRoom.lights.on,
+        'Plant room lights': plantRoom.lightsOn,
+        'Bench computer': benchOn,
+        'Automatic start running': autoStart !== null,
+        'TRIMM held on SOLL': followTrim,
+        'Column supply selections': gen2.powerSelections,
+        'Column head (local)': gen2.prep.lift,
+      },
+    });
+  overlay
+    .querySelector<HTMLButtonElement>('#save-state')!
+    .addEventListener('click', () => {
+      const time = new Date();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(
+        new Blob([reportState(time)], { type: 'text/markdown' }),
+      );
+      link.download = stateReportName(time);
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    });
   const logbook = overlay.querySelector<HTMLElement>('.logbook')!;
   const tab = overlay.querySelector<HTMLButtonElement>('#open-log')!;
   const unread = overlay.querySelector<HTMLElement>('#unread-count')!;
@@ -2409,6 +2479,11 @@ export function startScene(canvas: HTMLCanvasElement) {
     const line = write('Automatic cold start: one control at a time.');
     if (line) delayedPrinter.queue(line);
   }
+  if (
+    inspectionParams.get('plant-power') === 'on' &&
+    !world.read<boolean>('plant.powered')
+  )
+    world.work('plant.master');
   if (inspectionParams.get('plant-lights') === 'on') plantRoom.toggleLights();
   if (inspectionParams.get('museum-lights') === 'on') museum.toggleLights();
   // Named viewpoints: shareable inspection links (?view=rack) and the
@@ -2437,6 +2512,24 @@ export function startScene(canvas: HTMLCanvasElement) {
       walker.z = room.maxZ + 2.0 * metre;
       orbitYaw = 0;
       orbitPitch = -0.18;
+    },
+    'museum-exhibit': () => {
+      walker.x = museum.group.position.x;
+      walker.z = museum.group.position.z + 8.2 * metre;
+      orbitYaw = Math.PI;
+      orbitPitch = -0.28;
+    },
+    'museum-start': () => {
+      walker.x = museum.group.position.x;
+      walker.z = museum.group.position.z + 8.2 * metre;
+      orbitYaw = Math.PI;
+      orbitPitch = -0.59;
+    },
+    'museum-mural': () => {
+      walker.x = museum.group.position.x + 1.4 * metre;
+      walker.z = museum.group.position.z + 4.7 * metre;
+      orbitYaw = 0;
+      orbitPitch = 0.02;
     },
     'museum-north': () => {
       walker.x = museum.group.position.x - 1.0 * metre;
@@ -2680,6 +2773,8 @@ export function startScene(canvas: HTMLCanvasElement) {
         walker,
         /** What the teletype has printed, oldest first. */
         printed: () => [...teleprinterLines],
+        /** The Save State report, as Markdown. */
+        stateReport: () => reportState(),
         /** The world model the lab runs on, for scripts. */
         world: () => world,
         /** How many of the time-dilation crystal's sparks are in the air. */
@@ -3108,6 +3203,7 @@ export function startScene(canvas: HTMLCanvasElement) {
   const plantLighting = roomLighting.defineRoom(
     'plant',
     ps1Uniforms.plantLight,
+    rectifier.roomLamp,
   );
   const corridorLighting = roomLighting.defineRoom('corridor', { value: 1 });
   const museumLighting = roomLighting.defineRoom('museum', museum.lighting);
@@ -3242,6 +3338,17 @@ export function startScene(canvas: HTMLCanvasElement) {
     gen2.update(time / 1000, delta, reducedMotion.matches);
     audio.updateColumn(prep);
     audio.setPlantPower(plantRoom.powered);
+    // Each cabinet hums while it has power: the plant supply through the
+    // isolator, then A11's NETZ button or B13's rocker.
+    {
+      const fed =
+        world.read<boolean>('plant.powered') &&
+        world.read<boolean>('column.isolator');
+      audio.setCabinetPower(
+        fed && world.read<boolean>('column.netz'),
+        fed && world.read<boolean>('column.rocker'),
+      );
+    }
     audio.setRecirculator(recirculator.working);
     for (const channel of ['spindle', 'field', 'load'] as const)
       heatSmoke[channel].update(
@@ -3390,9 +3497,12 @@ export function startScene(canvas: HTMLCanvasElement) {
             ),
         full: fullActivation,
         instability: world.read<number>('rig.instability'),
-        // Centred on the column, in metres.
+        // Centred on the column's rotor, in metres, and felt less the
+        // further the camera is from it.
         centreX: gen2.group.position.x / worldUnitsPerMetre,
-        centreZ: gen2.group.position.z / worldUnitsPerMetre,
+        centreZ: gen2.group.position.z / worldUnitsPerMetre + 0.06,
+        viewerX: perspectiveCamera.position.x / worldUnitsPerMetre,
+        viewerZ: perspectiveCamera.position.z / worldUnitsPerMetre,
       }),
       effectSeconds,
     );
@@ -3479,6 +3589,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     walker.z = next.z;
     devPassages.update(delta, walker.x, walker.z);
     museum.update(delta, time / 1000, reducedMotion.matches);
+    museumExhibit.update(delta);
     walker.crouch +=
       ((walker.lowCrouched ? 1.85 : walker.crouched ? 1 : 0) - walker.crouch) *
       Math.min(1, delta * 10);
@@ -3614,6 +3725,7 @@ export function startScene(canvas: HTMLCanvasElement) {
     hotline.dispose();
     labRoom.dispose();
     devPassages.dispose();
+    museumExhibit.dispose();
     museum.dispose();
     roomLighting.dispose();
     corridor.dispose();

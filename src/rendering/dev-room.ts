@@ -1269,7 +1269,9 @@ export function startDevRoom(canvas: HTMLCanvasElement) {
       full: fullActivation,
       instability: world.read<number>('rig.instability'),
       centreX: rig.group.position.x,
-      centreZ: rig.group.position.z,
+      centreZ: rig.group.position.z + 0.06,
+      viewerX: camera.position.x,
+      viewerZ: camera.position.z,
     });
     let frame = effectFrame(settings, effectSeconds);
     if (reducedMotion.matches) frame = stillFrame(frame);

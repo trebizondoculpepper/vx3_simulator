@@ -12,6 +12,7 @@ import type {
   Object3D,
 } from 'three';
 import { realistic } from './render-style';
+import type { RoomLamp } from './room-lighting';
 
 // Quantize projected coordinates, preserving clip-space depth and the original w.
 // Shared uniforms let resizing and reduced motion update every scene material.
@@ -233,18 +234,43 @@ export function createPs1Material(
         gl_FragColor.rgb = shown;
       }`,
     );
-    if (this.userData.ps1LocalRoom && this instanceof MeshStandardMaterial)
+    if (this.userData.ps1LocalRoom && this instanceof MeshStandardMaterial) {
+      const lamp = this.userData.ps1RoomLamp as RoomLamp | undefined;
+      let lampLight = '';
+      if (lamp) {
+        shader.uniforms.ps1LampPosition = lamp.position;
+        shader.uniforms.ps1LampColor = lamp.color;
+        shader.uniforms.ps1LampRange = lamp.range;
+        shader.uniforms.ps1LampStrength = lamp.strength;
+        // Dim the switched fill before adding this independently powered lamp.
+        // The final room multiplier must not extinguish either it or emission.
+        shader.uniforms.ps1Dims.value = 0;
+        shader.fragmentShader = `uniform vec3 ps1LampPosition;
+          uniform vec3 ps1LampColor;
+          uniform float ps1LampRange;
+          uniform float ps1LampStrength;
+          ${shader.fragmentShader}`;
+        lampLight = `vec3 ps1ToLamp = (viewMatrix * vec4(ps1LampPosition, 1.0)).xyz + vViewPosition;
+          float ps1LampDistance = length(ps1ToLamp);
+          float ps1LampFalloff = pow(max(0.0, 1.0 - ps1LampDistance / ps1LampRange), 2.0);
+          float ps1LampFace = 0.12 + 0.88 * max(0.0, dot(normal, ps1ToLamp / max(ps1LampDistance, 0.001)));
+          vec3 ps1LampLight = diffuseColor.rgb * ps1LampColor * ps1LampStrength * ps1LampFalloff * ps1LampFace;`;
+      }
+      const fill = realistic
+        ? 'reflectedLight.indirectDiffuse + reflectedLight.indirectSpecular'
+        : 'diffuseColor.rgb * (0.72 + 0.28 * max(0.0, dot(normal, normalize(vec3(0.4, 0.8, 0.5)))))';
       shader.fragmentShader = shader.fragmentShader.replace(
         'vec3 outgoingLight = totalDiffuse + totalSpecular + totalEmissiveRadiance;',
-        realistic
-          ? // Lit by the environment alone, so no other room's lamp reaches it.
-            `vec3 outgoingLight = reflectedLight.indirectDiffuse + reflectedLight.indirectSpecular + totalEmissiveRadiance;`
-          : `float ps1Face = 0.72 + 0.28 * max(0.0, dot(normal, normalize(vec3(0.4, 0.8, 0.5))));
-        vec3 outgoingLight = diffuseColor.rgb * ps1Face + totalEmissiveRadiance;`,
+        // Only the room's own declared lamp can illuminate these surfaces;
+        // a lamp across the masonry never enters this calculation.
+        lamp
+          ? `${lampLight}\nvec3 outgoingLight = (${fill}) * ps1RoomLight + totalEmissiveRadiance + ps1LampLight;`
+          : `vec3 outgoingLight = ${fill} + totalEmissiveRadiance;`,
       );
+    }
   };
   material.customProgramCacheKey = function (this: typeof material) {
-    return `${this.userData.ps1LocalRoom ? 'ps1-local-room-v1' : 'ps1-snap-dither-v7'}-${realistic ? 'realistic' : 'ps1'}`;
+    return `${this.userData.ps1LocalRoom ? `ps1-local-room-v2-${this.userData.ps1RoomLamp ? 'lamp' : 'fill'}` : 'ps1-snap-dither-v7'}-${realistic ? 'realistic' : 'ps1'}`;
   };
   return material;
 }

@@ -8,6 +8,9 @@ import {
   recordingFileName,
   settingsForActivity,
   settingsForMachine,
+  fieldExposure,
+  FIELD_NEAR,
+  FIELD_FAR,
   divergencePulse,
   withBypass,
 } from './effect-settings';
@@ -208,6 +211,60 @@ describe('the machine’s effects on the room', () => {
     expect(machine(0.9, 1, 1, 1).warp.swellSpeed).toBeGreaterThan(
       machine(0.9, 1, 1, 0).warp.swellSpeed,
     );
+  });
+});
+
+describe('distance from the rotor', () => {
+  const at = (metres: number) =>
+    settingsForMachine({
+      activity: 0.9,
+      full: 1,
+      overheat: 1,
+      instability: 0,
+      centreX: 1,
+      centreZ: 2,
+      viewerX: 1 + metres * 0.6,
+      viewerZ: 2 + metres * 0.8,
+    });
+
+  it('is full beside the machine and falls with the inverse square', () => {
+    expect(fieldExposure(0)).toBe(1);
+    expect(fieldExposure(FIELD_NEAR)).toBe(1);
+    expect(fieldExposure(3)).toBeCloseTo(0.25, 6);
+    expect(fieldExposure(6)).toBeCloseTo(1 / 16, 6);
+    for (let d = 1; d < 12; d += 0.5)
+      expect(fieldExposure(d + 0.5)).toBeLessThanOrEqual(fieldExposure(d));
+  });
+
+  it('is nothing ten metres away', () => {
+    expect(fieldExposure(FIELD_FAR)).toBe(0);
+    expect(fieldExposure(9.5)).toBeLessThan(0.01);
+    const far = effectFrame(at(10), 3);
+    expect(far).toMatchObject({ pi: Math.PI, warp: 0, channels: [1, 1, 1] });
+    expect(far.divergence.horizontalPx).toBe(0);
+    expect(far.precision[0]).toBe(0);
+  });
+
+  it('scales every distortion alike, and leaves out the watcher as near', () => {
+    const near = at(0);
+    const third = at(3);
+    expect(third.warp.amount).toBeCloseTo(near.warp.amount / 4, 6);
+    expect(third.divergence.horizontalPx).toBeCloseTo(
+      near.divergence.horizontalPx / 4,
+      6,
+    );
+    expect(third.phaser.depth).toBeCloseTo(near.phaser.depth / 4, 6);
+    expect(third.pi.wander).toBeCloseTo(near.pi.wander / 4, 6);
+    expect(
+      settingsForMachine({
+        activity: 0.9,
+        full: 1,
+        overheat: 1,
+        instability: 0,
+        centreX: 1,
+        centreZ: 2,
+      }),
+    ).toEqual(near);
   });
 });
 

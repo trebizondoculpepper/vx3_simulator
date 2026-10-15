@@ -321,15 +321,41 @@ export interface MachineEffectInputs {
   overheat: number;
   /** How far the field is from equilibrium, 0 to 1. */
   instability: number;
-  /** Where the machine stands, metres on the floor plan. */
+  /** Where the machine's rotor stands, metres on the floor plan. */
   centreX: number;
   centreZ: number;
+  /**
+   * Where the watcher stands, metres on the floor plan: the effects fall
+   * away with distance from the rotor (`fieldExposure`). Left out, they
+   * are felt at full strength, as beside the machine.
+   */
+  viewerX?: number;
+  viewerZ?: number;
 }
+
+/** Within this distance of the rotor, metres, the effects are full. */
+export const FIELD_NEAR = 1.5;
+/** From this distance, metres, nothing is felt at all. */
+export const FIELD_FAR = 10;
 
 const smoothstep = (from: number, to: number, value: number) => {
   const t = Math.max(0, Math.min(1, (value - from) / (to - from)));
   return t * t * (3 - 2 * t);
 };
+
+/**
+ * How strongly the machine's effects reach someone `metres` from its
+ * rotor, 0 to 1: full within FIELD_NEAR, then falling with the inverse
+ * square of the distance (a quarter at 3 m, a sixteenth at 6 m), and
+ * tapering to nothing at FIELD_FAR, where the inverse square alone would
+ * still leave a trace.
+ */
+export function fieldExposure(metres: number) {
+  const d = Math.max(0, metres);
+  if (d >= FIELD_FAR) return 0;
+  const inverseSquare = d <= FIELD_NEAR ? 1 : (FIELD_NEAR / d) ** 2;
+  return inverseSquare * (1 - smoothstep(FIELD_FAR * 0.7, FIELD_FAR, d));
+}
 
 /**
  * The effects a running machine has on the room around it.
@@ -344,7 +370,9 @@ const smoothstep = (from: number, to: number, value: number) => {
  * swell of distances in long waves about every six seconds, stronger as
  * the core nears critical; the trembling and the divergence double; π
  * comes loose and the colours breathe with it. An unstable field quickens
- * the breathing. Centred on the machine, so walking away helps.
+ * the breathing. Centred on the machine's rotor, and falling away with
+ * the inverse square of the watcher's distance from it: walking away
+ * helps, and ten metres off nothing is felt.
  */
 export function settingsForMachine(
   machine: MachineEffectInputs,
@@ -378,6 +406,23 @@ export function settingsForMachine(
   settings.warp.swellSpeed = ((Math.PI * 2) / 6) * (1 + unsettled);
   settings.pi.wander = 0.3 * hot;
   settings.phaser.depth = 0.03 * near + 0.03 * full + 0.1 * hot;
+  // Felt less the further the watcher stands from the rotor.
+  const reach =
+    machine.viewerX === undefined || machine.viewerZ === undefined
+      ? 1
+      : fieldExposure(
+          Math.hypot(
+            machine.viewerX - machine.centreX,
+            machine.viewerZ - machine.centreZ,
+          ),
+        );
+  settings.precision.grid *= reach;
+  settings.divergence.horizontalPx *= reach;
+  settings.divergence.verticalPx *= reach;
+  settings.divergence.parallax *= reach;
+  settings.warp.amount *= reach;
+  settings.pi.wander *= reach;
+  settings.phaser.depth *= reach;
   return settings;
 }
 

@@ -24,6 +24,7 @@ import type { CapColour, PanelKit } from './eighties-controls';
 import { createPanelMeter, createRoundGauge } from './panel-instruments';
 import { createToggle } from './panel-switchgear';
 import { createCanvasTexture } from './screens';
+import { createCabinetInterior } from './control-cabinet-interior';
 import { createPrintedImageTexture } from './printed-image';
 import { coreProjection } from '../game/core-projection';
 import { createCoreProjectionAnimation } from './core-projection-animation';
@@ -811,7 +812,15 @@ export function createCircuitBoard(
     inside.position.set(0, hatchY, CABINET_FRONT + 0.004);
     bay.add(inside);
     compartments.set(design.title, inside);
-    if (!emptyCompartments.includes(design.title))
+    // The supply and control bays show a 1970s cabinet's inner workings.
+    if (
+      !emptyCompartments.includes(design.title) &&
+      (design.title === 'ENERGIE' || design.title === 'STEUERUNG')
+    )
+      inside.add(
+        createCabinetInterior(kit, design.title, hatchW - 0.02, hatchH - 0.02),
+      );
+    else if (!emptyCompartments.includes(design.title))
       for (const [row, y] of [0.12, -0.05].entries()) {
         add(
           bay,

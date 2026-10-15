@@ -51,7 +51,12 @@ type SoundBank = Record<
 
 /** Places in the rack that sounds come from, positioned by the scene. */
 export type SoundSource =
+  | 'museum'
   | 'supply'
+  /** The foot of the VX3's grey cabinet A, by its A11 supply. */
+  | 'cabinet-a'
+  /** The foot of its olive cabinet B, by its B13 supply. */
+  | 'cabinet-b'
   | 'valves'
   | 'spindle'
   | 'field'
@@ -78,8 +83,77 @@ const cassetteAssetUrls: Record<CassetteButton, URL> = {
   ),
 };
 
+/** How loud a powered cabinet's fan is, beside it. */
+const CABINET_HUM = 0.003;
+
+interface CabinetFan {
+  /** Seconds (time constant) to wind up to speed, and to run down. */
+  spinUp: number;
+  spinDown: number;
+  /** Where the rush of air through the grille is loudest, Hz. */
+  airHz: number;
+  /** The motor's rumble, below this, Hz. */
+  rumbleHz: number;
+  /** The blades passing: blades × revolutions per second, Hz. */
+  bladeHz: number;
+  /** How often the blade tone swells, Hz. */
+  wobbleHz: number;
+  /** The noise's playback rate, so the two fans' air never matches. */
+  rate: number;
+}
+
+/** A cabinet's sound: its hum's power, its fan's speed, what the speed bends. */
+interface CabinetSound {
+  power: GainNode;
+  spin: GainNode;
+  pitched: { param: AudioParam; full: number }[];
+  /** Whether it was last told it has power, once it has been told. */
+  on: boolean | null;
+}
+
+/**
+ * The beep each cabinet's electronics give as they come on: a pair of
+ * notes, Hz, each this many seconds long, and how loud beside it.
+ */
+const CABINET_BEEPS: Record<
+  'a' | 'b',
+  { notes: number[]; length: number; gap: number; wave: OscillatorType }
+> = {
+  // Cabinet A: two short high pips.
+  a: { notes: [1760, 1760], length: 0.07, gap: 0.09, wave: 'square' },
+  // Cabinet B: a lower chirp, falling.
+  b: { notes: [988, 740], length: 0.11, gap: 0.02, wave: 'triangle' },
+};
+const CABINET_BEEP_LEVEL = 0.05;
+
+/** The share of full pitch a stopped fan's sound is bent down to. */
+const FAN_STANDSTILL = 0.2;
+
+/** Cabinet A's fan is smaller and faster; B's is bigger and lower. */
+const CABINET_FANS: Record<'a' | 'b', CabinetFan> = {
+  a: {
+    airHz: 1150,
+    rumbleHz: 240,
+    bladeHz: 147,
+    wobbleHz: 0.31,
+    rate: 1.04,
+    spinUp: 2.6,
+    spinDown: 4,
+  },
+  b: {
+    airHz: 760,
+    rumbleHz: 180,
+    bladeHz: 118,
+    wobbleHz: 0.23,
+    rate: 0.93,
+    spinUp: 3.8,
+    spinDown: 5.5,
+  },
+};
+
 type Channel =
-  | 'hum'
+  | 'humA'
+  | 'humB'
   | 'heater'
   | 'spindle'
   | 'field'
@@ -90,7 +164,8 @@ type Channel =
   | 'recirculator';
 
 const channelSources: Record<Channel, SoundSource> = {
-  hum: 'supply',
+  humA: 'cabinet-a',
+  humB: 'cabinet-b',
   heater: 'valves',
   spindle: 'spindle',
   field: 'field',
@@ -121,7 +196,9 @@ interface AudioGraph {
   context: AudioContext;
   master: GainNode;
   room: GainNode;
-  hum: GainNode;
+  humA: GainNode;
+  humB: GainNode;
+  cabinets: Record<'a' | 'b', CabinetSound>;
   heater: GainNode;
   spindle: GainNode;
   field: GainNode;
@@ -150,7 +227,6 @@ interface AudioGraph {
 
 const parameters: SoundParameters = {
   roomGain: 0,
-  humGain: 0,
   heaterGain: 0,
   spindleGain: 0,
   spindleHz: 0,
@@ -184,7 +260,9 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
     return node;
   };
   const room = gain(-0.05);
-  const hum = gain(0.1, 'hum');
+  // Each cabinet's supply transformer hums at the mains frequency.
+  const humA = gain(-0.1, 'humA');
+  const humB = gain(0.1, 'humB');
   const heater = gain(-0.2, 'heater');
   const spindle = gain(-0.25, 'spindle');
   const field = gain(0.2, 'field');
@@ -221,9 +299,24 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
   };
   oscillator('sine', 72, recirculator, 0.6);
   oscillator('sine', 144, recirculator, 0.12);
-  oscillator('sine', 50, hum, 1);
-  oscillator('sine', 100, hum, 0.28);
-  oscillator('sine', 150, hum, 0.1);
+  // Each cabinet: its supply transformer's faint hum, on the moment it
+  // has power, and its cooling fan, which spins up over a few seconds
+  // (and runs down when switched off), rising in pitch and level.
+  const cabinets = {} as Record<'a' | 'b', CabinetSound>;
+  for (const [id, destination] of [
+    ['a', humA],
+    ['b', humB],
+  ] as const) {
+    const power = context.createGain();
+    power.gain.value = 0;
+    power.connect(destination);
+    oscillator('sine', 50, power, 0.12);
+    oscillator('sine', 100, power, 0.04);
+    const spin = context.createGain();
+    spin.gain.value = 0;
+    spin.connect(destination);
+    cabinets[id] = { power, spin, pitched: [], on: null };
+  }
   oscillator('sawtooth', 100, rectifier, 0.6);
   oscillator('square', 50, rectifier, 0.22);
   oscillator('sawtooth', 301, rectifier, 0.08);
@@ -261,6 +354,61 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
   fanFilter.type = 'lowpass';
   fanFilter.frequency.value = 750;
   noise.connect(fanFilter).connect(recirculator);
+  // Each cabinet's cooling fan: air rushing through its grille, the
+  // motor's rumble, and the tone of its blades passing, which wobbles a
+  // little. Two fans of different makes, so each cabinet has its own
+  // pitch and the pair beat slowly against each other.
+  const fans: [CabinetSound, CabinetFan, number][] = [
+    [cabinets.a, CABINET_FANS.a, 0.11],
+    [cabinets.b, CABINET_FANS.b, 0.53],
+  ];
+  for (const [cabinet, fan, offset] of fans) {
+    const destination = cabinet.spin;
+    const air = context.createBufferSource();
+    air.buffer = noiseBuffer;
+    air.loop = true;
+    air.playbackRate.value = fan.rate;
+    const grille = context.createBiquadFilter();
+    grille.type = 'bandpass';
+    grille.frequency.value = fan.airHz;
+    grille.Q.value = 0.8;
+    const airLevel = context.createGain();
+    airLevel.gain.value = 1.4;
+    air.connect(grille).connect(airLevel).connect(destination);
+    const motor = context.createBiquadFilter();
+    motor.type = 'lowpass';
+    motor.frequency.value = fan.rumbleHz;
+    const motorLevel = context.createGain();
+    motorLevel.gain.value = 0.9;
+    air.connect(motor).connect(motorLevel).connect(destination);
+    air.start(0, offset * noiseBuffer.duration);
+    sources.push(air);
+    cabinet.pitched.push(
+      { param: air.playbackRate, full: fan.rate },
+      { param: grille.frequency, full: fan.airHz },
+      { param: motor.frequency, full: fan.rumbleHz },
+    );
+    const blades = context.createGain();
+    blades.gain.value = 0.16;
+    blades.connect(destination);
+    const tone = context.createOscillator();
+    tone.type = 'triangle';
+    tone.frequency.value = fan.bladeHz;
+    tone.connect(blades);
+    tone.start();
+    sources.push(tone);
+    cabinet.pitched.push({ param: tone.frequency, full: fan.bladeHz });
+    for (const { param, full } of cabinet.pitched)
+      param.value = full * FAN_STANDSTILL;
+    // The blade tone swells and fades as the bearing settles.
+    const wobble = context.createOscillator();
+    wobble.frequency.value = fan.wobbleHz;
+    const depth = context.createGain();
+    depth.gain.value = 0.06;
+    wobble.connect(depth).connect(blades.gain);
+    wobble.start();
+    sources.push(wobble);
+  }
   const alarmLoop = context.createBufferSource();
   alarmLoop.buffer = alarmBuffer;
   alarmLoop.loop = true;
@@ -355,7 +503,9 @@ function createGraph(library: typeof import('zzfx')): AudioGraph {
     context,
     master,
     room,
-    hum,
+    humA,
+    humB,
+    cabinets,
     heater,
     spindle,
     field,
@@ -404,6 +554,7 @@ export function createSoundEngine() {
   let paPan: StereoPannerNode | null = null;
   let paWall: BiquadFilterNode | null = null;
   let recirculatorWorking = false;
+  const cabinetPower = { a: false, b: false };
   let graph: AudioGraph | null = null;
   let loading: Promise<void> | null = null;
   let disposed = false;
@@ -422,6 +573,33 @@ export function createSoundEngine() {
       ? spatial.gain(source) * (transmitted.get(source) ?? 1)
       : 1;
 
+  /** A cabinet's power-on beep, from where it stands. */
+  const beep = (id: 'a' | 'b') => {
+    if (!graph || muted) return;
+    const { context, master } = graph;
+    const source = id === 'a' ? 'cabinet-a' : 'cabinet-b';
+    const level = CABINET_BEEP_LEVEL * distanceGain(source);
+    if (level <= 0) return;
+    const { notes, length, gap, wave } = CABINET_BEEPS[id];
+    const pan = context.createStereoPanner();
+    pan.pan.value = spatial?.pan(source) ?? 0;
+    pan.connect(master);
+    let at = context.currentTime + 0.02;
+    for (const hz of notes) {
+      const note = context.createOscillator();
+      note.type = wave;
+      note.frequency.value = hz;
+      const envelope = context.createGain();
+      envelope.gain.setValueAtTime(0.0001, at);
+      envelope.gain.exponentialRampToValueAtTime(level, at + 0.005);
+      envelope.gain.setValueAtTime(level, at + length - 0.015);
+      envelope.gain.exponentialRampToValueAtTime(0.0001, at + length);
+      note.connect(envelope).connect(pan);
+      note.start(at);
+      note.stop(at + length + 0.02);
+      at += length + gap;
+    }
+  };
   const setMix = (nextVolume: number, nextMuted: boolean) => {
     volume = Math.max(0, Math.min(1, nextVolume));
     muted = nextMuted;
@@ -711,7 +889,28 @@ export function createSoundEngine() {
         : 0,
       now,
     );
-    ramp(graph.hum.gain, parameters.humGain * distanceGain('supply'), now);
+    ramp(graph.humA.gain, CABINET_HUM * distanceGain('cabinet-a'), now);
+    ramp(graph.humB.gain, CABINET_HUM * distanceGain('cabinet-b'), now);
+    for (const id of ['a', 'b'] as const) {
+      const cabinet = graph.cabinets[id];
+      const on = cabinetPower[id];
+      if (cabinet.on === on) continue;
+      // Switched on, it beeps; already on when the sound started, it
+      // just spins up.
+      if (on && cabinet.on === false) beep(id);
+      cabinet.on = on;
+      // The hum is there at once; the fan winds up, or runs down.
+      const fan = CABINET_FANS[id];
+      const constant = on ? fan.spinUp : fan.spinDown;
+      cabinet.power.gain.setTargetAtTime(on ? 1 : 0, now, 0.05);
+      cabinet.spin.gain.setTargetAtTime(on ? 1 : 0, now, constant);
+      for (const { param, full } of cabinet.pitched)
+        param.setTargetAtTime(
+          full * (on ? 1 : FAN_STANDSTILL),
+          now,
+          constant * 1.3,
+        );
+    }
     ramp(
       graph.heater.gain,
       parameters.heaterGain * distanceGain('valves'),
@@ -819,7 +1018,7 @@ export function createSoundEngine() {
     setFluorescent(level: number) {
       if (!graph) return;
       graph.fluorescent.gain.setTargetAtTime(
-        0.12 * Math.max(0, Math.min(1, level)),
+        0.03 * Math.max(0, Math.min(1, level)),
         graph.context.currentTime,
         0.12,
       );
@@ -829,6 +1028,11 @@ export function createSoundEngine() {
     },
     setRecirculator(on: boolean) {
       recirculatorWorking = on;
+    },
+    /** Whether each of the VX3's cabinets has power: each hums while it does. */
+    setCabinetPower(a: boolean, b: boolean) {
+      cabinetPower.a = a;
+      cabinetPower.b = b;
     },
     setSprinklers(on: boolean) {
       sprinklersActive = on;

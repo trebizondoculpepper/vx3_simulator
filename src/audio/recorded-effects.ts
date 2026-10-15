@@ -31,7 +31,7 @@ const levels: Record<RecordedCue, number> = {
   'toggle-down': 0.07,
   rocker: 0.08,
   'bakelite-switch': 0.22,
-  'ballast-start': 0.35,
+  'ballast-start': 0.09,
   knob: 0.025,
   selector: 0.06,
   'breaker-on': 0.12,

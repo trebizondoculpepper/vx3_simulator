@@ -1,13 +1,22 @@
 import { Mesh } from 'three';
-import type { Material, Object3D, Scene } from 'three';
+import type { Color, Material, Object3D, Scene, Vector3 } from 'three';
 
 export interface RoomLight {
   value: number;
 }
 
+/** A powered lamp whose spill belongs only to its declared room. */
+export interface RoomLamp {
+  position: { value: Vector3 };
+  color: { value: Color };
+  range: { value: number };
+  strength: { value: number };
+}
+
 export interface RoomDefinition {
   id: string;
   level: RoomLight;
+  lamp?: RoomLamp;
 }
 
 export interface RoomAudit {
@@ -27,9 +36,9 @@ export function createRoomLighting() {
   const roomCopies = new WeakMap<Material, Map<string, Material>>();
   const copies: Material[] = [];
 
-  const defineRoom = (id: string, level: RoomLight) => {
+  const defineRoom = (id: string, level: RoomLight, lamp?: RoomLamp) => {
     if (rooms.has(id)) throw new Error(`Room already defined: ${id}`);
-    const room = { id, level };
+    const room = { id, level, lamp };
     rooms.set(id, room);
     return room;
   };
@@ -61,6 +70,7 @@ export function createRoomLighting() {
       }
       materialOwners.set(material, room.id);
       material.userData.ps1Room = room.level;
+      material.userData.ps1RoomLamp = room.lamp;
       material.userData.ps1LocalRoom = true;
       material.needsUpdate = true;
       return material;

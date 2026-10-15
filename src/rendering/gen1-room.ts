@@ -23,28 +23,15 @@ import {
 } from 'three';
 import type { Material, Texture } from 'three';
 import { PANEL_WIDTH } from '../game/rack-layout';
-import { applyRack, createRackControls } from '../game/rack-controls';
-import { createRig } from '../game/rig';
 import type { Footprint } from '../game/walk-collision';
 import { createCanvasTexture } from '../scene/screens';
-import {
-  GEN1_RACK_Z,
-  GEN1_SIDE_CABINET,
-  GEN1_TOTAL_HEIGHT,
-  createGen1Vx3,
-} from '../scene/gen1-vx3';
+import { GEN1_RACK_Z, GEN1_TOTAL_HEIGHT } from '../scene/gen1-vx3';
 import { createFirstPerson } from './first-person';
 import { createPs1Material, ps1Uniforms } from './ps1-material';
 
 const metre = PANEL_WIDTH / 0.4826;
 
-/**
- * Room dev3, `/?room=dev3`: not part of the game. The first-generation VX3,
- * taken out of the lab and kept here as an archive of what we used to
- * have: the main rack, the side cabinet and the ferrocore drum, standing
- * exactly as they stood in the lab, in a plain gallery with a sign in
- * front. It is unwired: switched off, silent, and nothing on it works.
- */
+/** Room dev3: the former archive bay, retaining its cordon and door to dev2. */
 export function startGen1Room(canvas: HTMLCanvasElement) {
   const renderer = createRenderer(canvas);
   const scene = new Scene();
@@ -147,16 +134,16 @@ export function startGen1Room(canvas: HTMLCanvasElement) {
     c.fillText('VX3 · GENERATION 1', 256, 62);
     c.font = '19px monospace';
     const lines = [
-      'The first VX3 rig, as it stood in',
-      'the lab, Helmholtz-Bau, Raum −2.17.',
+      'Das Exponat befindet sich jetzt im',
+      'VX-Museum, im südlichen Saal.',
       '',
-      'Retired from service owing to dangerous',
-      'faults in its turbo-encabulator.',
+      'Die Feldgeneratoren wurden entfernt.',
+      'Die Vorführung darf bedient werden.',
     ];
     lines.forEach((line, i) => c.fillText(line, 256, 110 + i * 26));
     c.fillStyle = '#c9b27a';
     c.font = 'bold 15px monospace';
-    c.fillText('DISCONNECTED · KEPT FOR REFERENCE', 256, 236);
+    c.fillText('UMGEZOGEN · VX-MUSEUM', 256, 236);
     sign.texture.needsUpdate = true;
   }
   // The stand is to the left of the rack, turned toward the way in, so it
@@ -186,33 +173,7 @@ export function startGen1Room(canvas: HTMLCanvasElement) {
   board.add(backing, plaque);
   stand.add(post, board);
 
-  // The machine, as an archive: built from its own code, but unwired. Its
-  // rig is never stepped and nothing is clickable, so it stands switched
-  // off, every control where it was left.
-  const rig = createRig();
-  const settings = createRackControls();
-  applyRack(settings, rig.controls);
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const idle = () => {};
-  const machine = createGen1Vx3({
-    floorY,
-    rig,
-    settings,
-    camera,
-    input: idle,
-    indicator: (object) => object,
-    play: idle,
-    write: idle,
-    flipToggle: idle,
-    flipMains: idle,
-    resetRig: idle,
-    purge: idle,
-    reducedMotion: () => true,
-    pi: () => Math.PI,
-    darkness: () => 0,
-  });
-  scene.add(machine.group);
-  machine.update(0);
 
   // Everything solid between knee and head height blocks the walker.
   scene.updateMatrixWorld(true);
@@ -264,7 +225,7 @@ export function startGen1Room(canvas: HTMLCanvasElement) {
 
   const notes = document.createElement('div');
   notes.innerHTML =
-    '<strong>Room dev3</strong> · not part of the game · the first-generation VX3, retired and unwired, kept as an archive<br>' +
+    '<strong>Room dev3</strong> · not part of the game · the first-generation VX3 has moved to the museum; the northern archive cordon remains<br>' +
     'Click: mouse look · WASD: walk · Shift: run · C: crouch · wheel: zoom · Esc: cursor · <kbd>P</kbd> toggles PS1 resolution<br>' +
     'Door to dev2: west, south of the archive cordon · <a href="/?room=dev0">developer room</a> · <a href="/?room=dev1">effects room</a> · <a href="/">lab</a>';
   Object.assign(notes.style, {
@@ -327,7 +288,6 @@ export function startGen1Room(canvas: HTMLCanvasElement) {
             floorY + y * metre,
           );
         },
-        sideCabinet: GEN1_SIDE_CABINET,
       },
     });
 
@@ -353,7 +313,6 @@ export function startGen1Room(canvas: HTMLCanvasElement) {
     walk.dispose();
     passages.dispose();
     notes.remove();
-    machine.dispose();
     scene.traverse((object) => {
       if (object instanceof Mesh) object.geometry.dispose();
     });

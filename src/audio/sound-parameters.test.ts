@@ -7,7 +7,6 @@ describe('sound parameters', () => {
   it('leaves only room tone in a cold cabinet', () => {
     const sound = soundParameters(createRig(), createRackControls());
     expect(sound.roomGain).toBeGreaterThan(0);
-    expect(sound.humGain).toBe(0);
     expect(sound.spindleGain).toBe(0);
     expect(sound.counterClicksPerSecond).toBe(0);
   });
@@ -21,7 +20,6 @@ describe('sound parameters', () => {
     rig.instability = 0.75;
     rig.strain = 0.5;
     const sound = soundParameters(rig, createRackControls());
-    expect(sound.humGain).toBeGreaterThan(0);
     expect(sound.heaterGain).toBeGreaterThan(0);
     expect(sound.spindleHz).toBeGreaterThan(65);
     expect(sound.rotorHz).toBeGreaterThan(6);
