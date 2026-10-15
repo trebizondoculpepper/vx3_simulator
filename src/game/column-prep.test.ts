@@ -14,6 +14,7 @@ import {
   createColumnPrep,
   driveLift,
   heat,
+  isExposed,
   isSealed,
   isStarved,
   lambdaVolts,
@@ -192,23 +193,22 @@ describe('column cold start', () => {
     expect(state.spinRate).toBeLessThan(0.01);
   });
 
-  it('burns out if activated in air', () => {
+  it('runs, fouled, if activated in air: no interlock, no burnout', () => {
     const state = createColumnPrep();
     setActivation(state, 2000);
     const events = run(state, 10);
-    expect(events).toContainEqual({ kind: 'catastrophe', cause: 'burnout' });
-    expect(coreStage(state)).toBe('failed');
+    expect(events).toContainEqual({ kind: 'active' });
+    expect(events.some((e) => e.kind === 'catastrophe')).toBe(false);
+    expect(coreStage(state)).toBe('glowing');
   });
 
-  it('burns out if the clamps are opened on a hot core', () => {
+  it('runs on if the clamps are opened on a hot core', () => {
     const state = charged();
     setActivation(state, 2000);
     run(state, 10);
     setClamped(state, false);
-    expect(run(state, 2)).toContainEqual({
-      kind: 'catastrophe',
-      cause: 'burnout',
-    });
+    expect(run(state, 5).some((e) => e.kind === 'catastrophe')).toBe(false);
+    expect(isExposed(state)).toBe(true);
   });
 
   it('suffers a flux inductance catastrophe when the outlet is left open on a hot core', () => {

@@ -37,6 +37,15 @@ import {
 } from '../cold-start';
 import { atmospherePermit, feedFromLine, lineFlow } from '../gen2-wiring';
 import {
+  ALARM_PPM,
+  createExhaust,
+  doseEffects,
+  emission,
+  fouling,
+  glow,
+  stepExhaust,
+} from '../exhaust';
+import {
   XENON_HAZARD_STRAIN_PER_SECOND,
   xenonHazard,
   xenonReady,
@@ -268,6 +277,9 @@ export function createWorld() {
     [failure, temperature, xenon],
     (f, t, x) => isStarved(prep({ failure: f, temperature: t, xenon: x })),
   );
+  // FREIGABE: the atmosphere the procedure asks for, lit on the panels. It
+  // holds nothing back: the VX3 has no interlocks, and a drive closed on a
+  // fouled vessel runs (src/game/exhaust.ts).
   const permit = g.derive(
     'drive.permit',
     [failure, clamped, lift, air, xenon, recirculatorWorking],
@@ -277,6 +289,33 @@ export function createWorld() {
         r,
       ),
   );
+
+  // ---- The exhaust: a fouled or leaking core's hallucinogenic gas -------------
+
+  const coreGlow = g.derive('vessel.glow', [temperature], glow);
+  const foul = g.derive('vessel.fouling', [sealed, oxygen, xenon], fouling);
+  const emitting = g.derive(
+    'vessel.emission',
+    [coreGlow, foul, outletOpen, sealed],
+    (gl, f, out, s) =>
+      emission({ glow: gl, fouling: f, outletOpen: out, unsealed: !s }),
+  );
+  // Gas escaping round an unclamped head, seen as smoke at the seal.
+  const sealSmoke = g.derive(
+    'vessel.sealSmoke',
+    [coreGlow, sealed, lift],
+    (gl, s, l) => (s || l > 0 ? 0 : gl),
+  );
+  const freshExhaust = createExhaust();
+  const roomExhaust = g.state('room.exhaust', freshExhaust.room, {
+    note: 'the room’s exhaust concentration, ppm',
+  });
+  const dose = g.state('operator.dose', freshExhaust.dose, {
+    note: 'the operator’s dose of exhaust, 0 to 1',
+  });
+  const soot = g.state('vessel.soot', 0, {
+    note: 'smoke staining on the vessel’s upper section, 0 to 1',
+  });
 
   // ---- The drive's controls ------------------------------------------------
 
@@ -327,7 +366,6 @@ export function createWorld() {
     'drive.controls',
     [
       mains,
-      permit,
       spin,
       spindleKnob,
       hb,
@@ -343,26 +381,8 @@ export function createWorld() {
       gnd,
       band,
     ],
-    (
-      m,
-      p,
-      sp,
-      s,
-      h,
-      f,
-      t,
-      e,
-      gov,
-      r,
-      po,
-      ex,
-      nul,
-      rat,
-      gr,
-      b,
-    ): RigControls => ({
+    (m, sp, s, h, f, t, e, gov, r, po, ex, nul, rat, gr, b): RigControls => ({
       mains: m,
-      permit: p,
       // applyRack: SPIN and H-B gate their dials, and so on.
       spindle: sp ? s : 0,
       field: h ? f : 0,
@@ -498,11 +518,7 @@ export function createWorld() {
   ) => g.derive(`alarm.${label}`, deps, fn);
   const conditions: Node<boolean>[] = [
     condition('NETZ AUS', [plantPowered], () => !plantPowered.value),
-    condition(
-      'HEIZ. GESP.',
-      [mains, permit],
-      () => mains.value && !permit.value,
-    ),
+    condition('ABGAS', [roomExhaust], () => roomExhaust.value > ALARM_PPM),
     condition(
       'SPINDEL ROT',
       [spindle],
@@ -693,6 +709,20 @@ export function createWorld() {
         if (event.kind === 'catastrophe') mains.set(false);
       }
       writeVessel(state);
+    },
+  );
+
+  g.process(
+    'exhaust',
+    [emitting, sealSmoke, roomExhaust, dose, soot],
+    [roomExhaust, dose, soot],
+    (dt) => {
+      const state = { room: roomExhaust.peek(), dose: dose.peek() };
+      stepExhaust(state, emitting.peek(), dt);
+      roomExhaust.set(state.room);
+      dose.set(state.dose);
+      // A minute of full smoke at the seal stains the head dark.
+      soot.set(Math.min(1, soot.peek() + (sealSmoke.peek() * dt) / 60));
     },
   );
 
@@ -1416,6 +1446,29 @@ export function createWorld() {
     where: 'Column: the core’s turning',
   });
 
+  g.output('circuit.FREIGABE', [permit], (p) => p, {
+    where: 'Circuit board STEUERUNG: FREIGABE lamp; column heater wattmeters',
+  });
+  g.output('room.exhaust.ppm', [roomExhaust], (p) => Math.round(p), {
+    where: 'Lab wall: ABGAS gas detector',
+  });
+  g.output('column.sealSmoke', [sealSmoke], (v) => v, {
+    where: 'Column: smoke escaping at the vessel’s seal',
+  });
+  g.output('column.soot', [soot], (v) => v, {
+    where: 'Column: smoke stains on the vessel’s upper section',
+  });
+  g.output('operator.hallucinations', [dose], doseEffects, {
+    where: 'The operator’s eyes: ghosting, apparitions, patterns',
+  });
+  g.output(
+    'room.coherence',
+    [foul, coreGlow],
+    (f, gl) => (gl > 0 ? 1 - f : 1),
+    {
+      where: 'The room: how much of the core’s phase effects survive fouling',
+    },
+  );
   g.output('room.anomaly', [activity], anomalyStage, {
     where: 'The room: colour, π, warp and sparks (their stage)',
   });

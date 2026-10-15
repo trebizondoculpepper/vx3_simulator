@@ -239,7 +239,7 @@ const BAYS: BayDesign[] = [
     title: 'STEUERUNG',
     subtitle: 'FREIGABE · FERROKERN',
     alarms: [
-      'HEIZ. GESP.',
+      'ABGAS',
       'SPINDEL ROT',
       'FELD ROT',
       'STÖRUNG',

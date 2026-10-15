@@ -187,16 +187,15 @@ describe('cold start', () => {
   });
 
   describe('failure states', () => {
-    it('burns the core out if the ferrocore is lit before the vessel is purged', () => {
+    it('lights the core in a vessel that was never purged: nothing stops it', () => {
       const state = createColdStart();
       driveHead(state, 0);
       run(state, LIFT_SECONDS + 0.5);
       clampVessel(state, true);
       state.rig.controls.mains = true;
       const events = run(state, 10);
-      expect(kinds(events)).toContain('vessel:catastrophe:burnout');
-      expect(coreStage(state.vessel)).toBe('failed');
-      expect(state.rig.controls.mains).toBe(false);
+      expect(kinds(events)).not.toContain('vessel:catastrophe:burnout');
+      expect(state.vessel.failure).toBeNull();
     });
 
     it('suffers a flux inductance catastrophe if the purge valve is left open on a running core', () => {
@@ -251,13 +250,13 @@ describe('cold start', () => {
         expect(trip.event.report.hazardShare).toBeGreaterThan(0.5);
     });
 
-    it('burns the core out if the clamps are opened while it runs', () => {
+    it('runs on, fouled, if the clamps are opened while it runs', () => {
       const state = prepareVessel();
       lightFerrocore(state, { tracksTrim: true });
       expect(fullyOperational(state)).toBe(true);
       clampVessel(state, false);
       const events = run(state, 2, { tracksTrim: true });
-      expect(kinds(events)).toContain('vessel:catastrophe:burnout');
+      expect(kinds(events)).not.toContain('vessel:catastrophe:burnout');
       expect(fullyOperational(state)).toBe(false);
     });
   });

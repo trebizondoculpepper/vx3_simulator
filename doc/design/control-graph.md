@@ -221,7 +221,7 @@ Every instrument on cabinets A and B reads the world model through the rig's `re
 | A10 TIEGELHEIZUNG | TEMP TIEGEL °C readout; ÜBERTEMP. LED | `rig.heater`; `overheat` (a device hot enough to smoke) |
 | B1 KENNUNG | NETZ LED | The column's supply running |
 | B2 MESSWERTE | KERN K, DRUCK cbar, XE % | The vessel: temperature, chamber pressure, buffer |
-| B3, B4 VERDAMPFER | IST °C and LEISTUNG W | `drive.ht` (B3) or `drive.lt` (B4), `rig.heater`, `drive.mains`, `drive.permit` |
+| B3, B4 VERDAMPFER | IST °C and LEISTUNG W | `drive.ht` (B3) or `drive.lt` (B4), `rig.heater`, `drive.mains` |
 | B5 ANZEIGE | TRIMM dot matrix (IST column, SOLL dots); DEHNUNG matrix (strain bar, instability line); INSTAB LED | `drive.trim`, `drive.idealTrim`; `rig.strain`, `rig.instability`; `alarm.INSTAB` |
 | B6 ANTRIEB | DREHZAHL IST gauge with the red line; HV FIL heater lamp | `rig.spindle`; `column.heaterLamp` |
 | B7 KAPAZITÄT | FERROKERN AUSLASTUNG meter | `ferrocore.activity` |

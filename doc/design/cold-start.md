@@ -86,7 +86,7 @@ Each failure is an event the scene can animate and give consequences later.
 
 | Failure | How it is reached | Model event | What the model does now |
 |---|---|---|---|
-| Core burnout | The ferrocore is lit before the vessel is sealed and purged, or the clamps are opened (or the head raised) on a hot core: oxygen meets a core above 800 K | `vessel: catastrophe, burnout` | The core fails, cools and the breaker trips; QUITT replaces the core |
+| Fouled core (hallucinogenic exhaust) | The ferrocore is lit before the vessel is purged or charged, with the clamps off, or with the outlet open: a little fouling and a lot are the same failure, by degree | none; `room.exhaust`, `operator.dose` and `operator.hallucinations` in the world (`src/game/exhaust.ts`) | The core runs on; the exhaust fills the room and the operator hallucinates. Burnout is kept, unreachable, for running with the head raised, still to be designed |
 | Flux inductance catastrophe | The purge valve is left open on a running core: the chamber never reaches working pressure, the bottle drains through it, and when it is empty the starved core collapses | `vessel: catastrophe, flux-inductance` | As above; QUITT also puts on a fresh bottle |
 | Breaker trip, field strain | The field is brought up and not trimmed to lock | `rig: incident` with `fieldShare` high | Existing: the breaker trips, the trip report prints clues |
 | Breaker trip, dry circuit | The spindle runs past 0.3 with less than 2 SLPM moving, for example with the recirculator stopped after the purge is shut | `rig: incident` with `hazardShare` high | Existing: as above, with the dry-xenon clue |
@@ -98,4 +98,4 @@ The existing overheat, smoke and fire models (`overheat.ts`, `fire-incident.ts`)
 - The vessel model's bottle (`vessel.supply`, drained by purging) is separate from the bank's contents in the plant room (`xenon-cylinders.ts`, 3,000 litres at 5 SLPM). They should become one quantity when the model is wired into the scene, or the bottle should be renamed the vessel's reservoir.
 - The recirculator's 6 SLPM is a game invention, chosen so that a working loop satisfies the drive's existing 2 SLPM threshold.
 - The concept rig's column station still drives `column-prep.ts` directly; it should read and write `cold-start.ts` instead when the rig moves into the lab.
-- Nothing yet stops the drive being lit with the head raised and unclamped other than the burnout; whether the rack should refuse the mains instead is a design choice.
+- The VX3 has no interlocks, by design (1970s bleeding-edge technology in the spirit of Chernobyl): improper operation is allowed and has consequences. Running with the head raised is to become its own, larger disaster; it is not designed yet.

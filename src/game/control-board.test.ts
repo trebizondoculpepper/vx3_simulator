@@ -139,7 +139,7 @@ describe('board lamps', () => {
     expect(new Set(annunciators.map((window) => window.label)).size).toBe(18);
   });
 
-  it('show why the drive is held off once NETZ is on', () => {
+  it('show what is wrong with the vessel once NETZ is on', () => {
     const board = createBoard();
     const prep = createColumnPrep();
     const state = {
@@ -148,7 +148,7 @@ describe('board lamps', () => {
       recirculatorWorking: false,
       xenonFlowSlpm: 0,
       gen2: { prep },
-      permit: false,
+      exhaustPpm: 0,
     };
     const lit = () => {
       stepBoard(board, state, 0.1);
@@ -159,16 +159,13 @@ describe('board lamps', () => {
     };
     expect(lit()).toEqual([]);
     state.rig.controls.mains = true;
-    expect(lit()).toEqual([
-      'HEIZ. GESP.',
-      'KOPF OFFEN',
-      'XE FLUSS',
-      'UMWÄLZUNG',
-    ]);
+    expect(lit()).toEqual(['KOPF OFFEN', 'XE FLUSS', 'UMWÄLZUNG']);
     prep.lift = 0;
     prep.clamped = true;
     expect(lit()).toContain('O2 KESSEL');
     expect(lit()).not.toContain('KOPF OFFEN');
+    state.exhaustPpm = 120;
+    expect(lit()).toContain('ABGAS');
   });
 
   it('warn that the plant master is off, whatever else is happening', () => {

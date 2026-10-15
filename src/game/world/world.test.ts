@@ -266,7 +266,7 @@ describe('the lab as a graph', () => {
         plantPowered: world.read('plant.powered'),
         recirculatorWorking: world.read('recirculator.working'),
         gen2: { prep },
-        permit: world.read('drive.permit'),
+        exhaustPpm: world.read('room.exhaust'),
         smoking: world.read<number>('room.smokeLevel') > 0.05,
         burning: world.read('fire.alarm'),
       });

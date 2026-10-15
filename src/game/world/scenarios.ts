@@ -98,14 +98,9 @@ export const scenarios: Scenario[] = [
   {
     name: 'NETZ before the vessel',
     cause:
-      'The drive breaker is closed with the head up, nothing purged and the recirculator off: the permit holds the heaters, and the vessel, flow and recirculator windows say why.',
+      'The drive breaker is closed with the head up, nothing purged and the recirculator off. Nothing holds it back; the vessel, flow and recirculator windows say what is wrong.',
     steps: [...switchOn, work('board.NETZ'), wait(1)],
-    reaches: [
-      'alarm.HEIZ. GESP.',
-      'alarm.KOPF OFFEN',
-      'alarm.XE FLUSS',
-      'alarm.UMWÄLZUNG',
-    ],
+    reaches: ['alarm.KOPF OFFEN', 'alarm.XE FLUSS', 'alarm.UMWÄLZUNG'],
   },
   {
     name: 'NETZ before the purge',
@@ -129,15 +124,36 @@ export const scenarios: Scenario[] = [
     reaches: ['alarm.XE VORRAT'],
   },
   {
+    name: 'Lit before the purge',
+    cause:
+      'The vessel is sealed and charged with xenon, but the purge is skipped: the core lights in air. Nothing stops it; its fouled exhaust fills the room, ABGAS lights, and the operator hallucinates.',
+    steps: [
+      ...switchOn,
+      work('column.SENKEN'),
+      wait(6.5),
+      work('column.SPANNEN'),
+      work('column.XE EIN'),
+      work('xenon.regulator', 0.5),
+      work('recirculator.switch'),
+      wait(2),
+      ...lightFerrocore,
+      wait(90),
+    ],
+    reaches: ['alarm.KERN LUFT', 'alarm.ABGAS', 'operator:hallucinating'],
+  },
+  {
+    name: 'Outlet left open on a running core',
+    cause:
+      'The outlet is opened on a running core: the pump exhausts the excited chamber gas into the lab, ABGAS lights, and the operator hallucinates.',
+    steps: [...coldStart, work('column.outlet'), wait(120)],
+    reaches: ['alarm.ABGAS', 'operator:hallucinating'],
+  },
+  {
     name: 'Clamps released at full power',
     cause:
-      'SPANNEN pressed again on a running core: the chamber opens to air, KERN LUFT warns, and the core burns out.',
-    steps: [...coldStart, work('column.SPANNEN'), wait(5)],
-    reaches: [
-      'alarm.KERN LUFT',
-      'alarm.KERN DEFEKT',
-      'vessel:catastrophe:burnout',
-    ],
+      'SPANNEN pressed again on a running core: the chamber opens to air and KERN LUFT warns; the core runs on, fouled, smoking at the seal and staining the head, and the room fills with exhaust.',
+    steps: [...coldStart, work('column.SPANNEN'), wait(120)],
+    reaches: ['alarm.KERN LUFT', 'alarm.ABGAS', 'operator:hallucinating'],
   },
   {
     name: 'Field mistrimmed',
@@ -192,14 +208,19 @@ export const scenarios: Scenario[] = [
  * for the owner, not something to search for.
  */
 export const undesigned: Record<Target, string> = {
+  'vessel:catastrophe:burnout':
+    'A core in air no longer burns: it fouls, and the operator hallucinates. The burnout is kept for running with the head raised, a disaster still to be designed.',
   'vessel:catastrophe:flux-inductance':
-    'The column model’s second failure needs a hot core on an empty buffer. In the lab the atmosphere permit drops the heaters as soon as the chamber falls below working pressure, so the core cools before the buffer can run dry.',
+    'The column model’s second failure needs a hot core on an empty buffer. The buffer only empties with the line dry, and a dry circuit trips the drive breaker first, so the core cools before the buffer runs out.',
+  'alarm.KERN DEFEKT':
+    'It lights on a failed core, and neither of the core’s failures is reachable now (the burnout and the flux inductance, above).',
 };
 
 /** Every target the world has: its alarm windows and its bad ends. */
 export const allTargets = (world: World = createWorld()): Target[] => [
   ...world.conditions.map((c) => c.id),
   'plant:fully-operational',
+  'operator:hallucinating',
   'vessel:catastrophe:burnout',
   'vessel:catastrophe:flux-inductance',
   'rig:incident',
@@ -212,6 +233,9 @@ export const allTargets = (world: World = createWorld()): Target[] => [
 
 function targetsOf(world: World, events: WorldEvent[]): Target[] {
   const reached = world.conditions.filter((c) => c.value).map((c) => c.id);
+  // The whole ladder: the exhaust has brought on the geometric patterns.
+  if (world.read<{ patterns: number }>('operator.hallucinations').patterns > 0)
+    reached.push('operator:hallucinating');
   for (const e of events) {
     if (e.source === 'fire') reached.push(`fire:${e.event}`);
     else if (e.event.kind === 'catastrophe')

@@ -177,11 +177,11 @@ it('ships pre-rendered assets containing every displayed clue', () => {
   }
 });
 
-it('shows the vessel page while the drive waits for the atmosphere', () => {
+it('shows the vessel page while the atmosphere is not ready', () => {
   const inputs = running(0, 0);
   expect(benchPage({ ...inputs, permit: false })).toBe('vessel');
   expect(benchWarnings({ ...inputs, permit: false })).toContain(
-    'HEIZUNG GESPERRT',
+    'KESSEL NICHT BEREIT',
   );
   expect(benchPage({ ...inputs, permit: true })).not.toBe('vessel');
 });

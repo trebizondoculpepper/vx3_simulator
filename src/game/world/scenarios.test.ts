@@ -35,22 +35,20 @@ describe('designed scenarios', () => {
     );
   });
 
-  it('holds off the flux inductance catastrophe with the permit', () => {
-    // The column model's way there: leave the outlet open on a running
-    // core. The permit drops first and the core cools.
-    const { world, reached } = play([
+  it('fouls nothing on a clean cold start: no exhaust, no dose', () => {
+    const { world } = play([...coldStart, { id: 'wait', setting: 120 }]);
+    expect(world.read<number>('room.exhaust')).toBeLessThan(1);
+    expect(world.read<number>('operator.dose')).toBeLessThan(0.01);
+    expect(world.read<number>('vessel.soot')).toBe(0);
+  });
+
+  it('smokes at the seal and stains the head when the clamps are off', () => {
+    const { world } = play([
       ...coldStart,
-      { id: 'column.outlet' },
-      { id: 'wait', setting: 15 },
+      { id: 'column.SPANNEN' },
+      { id: 'wait', setting: 30 },
     ]);
-    expect(world.read('drive.permit')).toBe(false);
-    expect(world.read<number>('vessel.temperature')).toBeLessThan(800);
-    const later = play([
-      ...coldStart,
-      { id: 'column.outlet' },
-      { id: 'wait', setting: 600 },
-    ]);
-    expect(reached.has('vessel:catastrophe:flux-inductance')).toBe(false);
-    expect(later.reached.has('vessel:catastrophe:flux-inductance')).toBe(false);
+    expect(world.read<number>('column.sealSmoke')).toBeGreaterThan(0.5);
+    expect(world.read<number>('vessel.soot')).toBeGreaterThan(0.2);
   });
 });

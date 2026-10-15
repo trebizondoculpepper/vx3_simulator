@@ -15,7 +15,7 @@ The recorder row brings back the old board's CRT and pen plotter. STEUERUNG has 
 | Bay | Schematic | Alarms | Instruments | Controls |
 | --- | --- | --- | --- | --- |
 | ENERGIE: supply and drive | Mains, HAUPTSCHALTER, rectifier, the column's isolator, A11 NETZ and B13 rocker, the drive's contactor, heaters and drive | NETZ AUS, LAST, RAUCH, BRAND | Load kW, energy kWh | NETZ, NOT-AUS, QUITT, L-TEST |
-| STEUERUNG: permit and ferrocore | Sealed, O2 = 0, xenon pressure, recirculation, FREIGABE (the permit), heaters warm, spindle, field locked, core at full power, VOLLBETRIEB | HEIZ. GESP., SPINDEL ROT, FELD ROT, STÖRUNG, DEHNUNG, INSTAB | Spindle, field, instability, trim IST and SOLL | ERDE, DÄMPF., RÜCKS. |
+| STEUERUNG: permit and ferrocore | Sealed, O2 = 0, xenon pressure, recirculation, FREIGABE (the atmosphere the procedure asks for; it holds nothing back), heaters warm, spindle, field locked, core at full power, VOLLBETRIEB | ABGAS, SPINDEL ROT, FELD ROT, STÖRUNG, DEHNUNG, INSTAB | Spindle, field, instability, trim IST and SOLL | ERDE, DÄMPF., RÜCKS. |
 | XENON: gas | Cylinders, regulator, recirculator, the column's buffer, inlet, vessel, outlet, pump | XE FLUSS, UMWÄLZUNG, XE DRUCK, XE VORRAT, KOPF OFFEN, O2 KESSEL, KERN LUFT, KERN DEFEKT | Chamber pressure, lambda probe, line flow, buffer % | SPÜLEN |
 
 The eighteen alarm windows are the board's existing ones, regrouped by circuit; they still flash until QUITT and burn steady while their cause lasts, and L-TEST flashes every lamp on the board together for ten seconds. VOLLBETRIEB, the big blue lamp at the end of the STEUERUNG schematic, is the first thing in the room that shows the plant fully operational.

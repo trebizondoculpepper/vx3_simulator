@@ -11,11 +11,13 @@
  * kelvin scale, which the core follows with a lag) and its brightness.
  * Hot, it glows orange; at full power it goes blue, pulses and spins.
  *
- * Two ways it ends badly. Heat the core while the chamber is open or still
- * holds air, and the oxygen burns it out. Leave the outlet open on a hot
- * core and the chamber never reaches pressure while the bottle drains
- * through it; when the bottle is empty the starved core suffers a flux
- * inductance catastrophe.
+ * Nothing stops a core being lit in a fouled chamber (open, unclamped or
+ * still holding air): it runs, and its exhaust fills the room with
+ * hallucinations (src/game/exhaust.ts). One way it ends badly: leave the
+ * outlet open on a hot core and the chamber never reaches pressure while
+ * the bottle drains through it; when the bottle is empty the starved core
+ * suffers a flux inductance catastrophe. A burnout is kept for a disaster
+ * still to be designed: running with the head raised.
  *
  * Gas is tracked as partial pressures in bar. The head's travel is a share
  * from 0 (lowered) to 1 (raised).
@@ -75,7 +77,7 @@ export const ATMOSPHERE = 1.0;
 export const REGULATOR = 1.8;
 /** The xenon pressure a hot core needs, bar. */
 export const WORKING_PRESSURE = 1.2;
-/** Above this share of air in the chamber, a hot core burns. */
+/** Above this share of air in the chamber, a hot core is in air (KERN LUFT). */
 export const AIR_LIMIT = 0.05;
 export const FULL_BOTTLE = 25;
 export const AMBIENT = 293;
@@ -282,9 +284,10 @@ export function stepColumnPrep(
     (target - state.temperature) * Math.min(1, dt / THERMAL_LAG);
 
   if (isActive(state)) {
+    // A core in air does not burn: it fouls (src/game/exhaust.ts).
     let cause: Catastrophe | null = null;
-    if (!isSealed(state) || airShare(state) > AIR_LIMIT) cause = 'burnout';
-    else if (state.supply <= 0 && state.xenon < 0.3) cause = 'flux-inductance';
+    if (isSealed(state) && state.supply <= 0 && state.xenon < 0.3)
+      cause = 'flux-inductance';
     if (cause) {
       state.failure = cause;
       events.push({ kind: 'catastrophe', cause });

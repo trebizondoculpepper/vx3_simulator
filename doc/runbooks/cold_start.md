@@ -24,7 +24,7 @@ Knob settings are on the knobs' 0 to 10 scale. Every knob turns down one detent 
 
 ## The rules the machine follows
 
-- The drive's valve heaters and the ferrocore run only in a purged xenon atmosphere: the vessel's head down and clamped, the oxygen purged out, the xenon at working pressure (1.2 bar or more), and the recirculator running. Until then the drive is interlocked, whatever its switches say.
+- The drive's valve heaters and the ferrocore must only be run in a purged xenon atmosphere: the vessel's head down and clamped, the oxygen purged out, the xenon at working pressure (1.2 bar or more), and the recirculator running. The FREIGABE (_release_) lamp shows when it is. **Nothing enforces this.** The VX3 has no interlocks: the drive will start whatever state the vessel is in. A core run in a fouled vessel (oxygen left in, xenon short, the clamps off) or with the outlet open puts out an exhaust that is powerfully hallucinogenic. It smokes at an unclamped seal and stains the head; the ABGAS (_exhaust_) window and the wall gas detector show it in the room; and the people in the room begin to see things: echoes of what they have just looked at, figures at the edge of sight, and then geometric patterns over everything. It wears off slowly once the drive is off and the room has cleared.
 - Xenon reaches the machine only while the recirculator runs.
 - The cabinets' equipment runs on direct current from the mercury arc rectifier: with the HAUPTSCHALTER (_main switch_) open, the cabinets are dead. The east board and the lights are on the mains.
 - The core's temperature is not set by hand: the warm heaters bring it to a glow (about 1,300 K), and the drive's spindle and field take it on to full power (3,200 K and above).
@@ -104,7 +104,7 @@ Stand at B11 SÄULE (_column_), cabinet B's column station, low in the cabinet: 
 Stand at the east board.
 
 1. `East board: NETZ handle` (_mains_), the first handle of the KREISLAUF (_circuit_) bay: close the drive's breaker. It refuses, with a line in the log, if the HAUPTSCHALTER (_main switch_) is open or the machine is switched off at the isolator, A11 or B13.
-   - **Watch:** the top row of alarm windows. If anything above was missed, HEIZ. GESP. (_heating locked out_) lights with the window for what is missing: KOPF OFFEN (_head open_), O2 KESSEL (_oxygen in the vessel_), XE DRUCK (_xenon pressure_), XE FLUSS (_xenon flow_) or UMWÄLZUNG (_recirculation_). Otherwise the valve heaters warm by themselves in about six seconds: the HEIZUNG (_heating_) meter rises, the log says when they are at temperature, and the core glows orange (about 1,300 K on B12 KERN's (_core's_) IST K (_actual, kelvin_) readout).
+   - **Watch:** the top row of alarm windows. If anything above was missed, the window for what is missing lights: KOPF OFFEN (_head open_), O2 KESSEL (_oxygen in the vessel_), XE DRUCK (_xenon pressure_), XE FLUSS (_xenon flow_) or UMWÄLZUNG (_recirculation_). **Nothing stops the drive:** open NETZ again at once and put it right before going on. The valve heaters warm by themselves in about six seconds: the HEIZUNG (_heating_) meter rises, the log says when they are at temperature, and the core glows orange (about 1,300 K on B12 KERN's (_core's_) IST K (_actual, kelvin_) readout).
 
 ![The east board, NETZ (mains) on](images/11-east-board.png)
 
@@ -142,14 +142,13 @@ Stand at B6 ANTRIEB (_drive_), cabinet B's drive unit at shoulder height, with t
 
 ## Faults and recovery
 
-| What happened                               | What you see                                                                                                                                                     | What to do                                                                                                                                                 |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Core heating in an open or unpurged vessel  | East board KERN LUFT (_core in air_); B11's STÖRUNG (_fault_) lamp flashing; a log warning                                                                       | Trip the drive at once (NETZ (_mains_) or NOT-AUS (_emergency stop_)) and finish sealing and purging                                                       |
-| Burnout (the core heated in air)            | East board KERN DEFEKT (_core failed_); B11's STÖRUNG (_fault_) lamp; the drive trips with a bang                                                                | `VX3 B11 SÄULE: QUITT button` (_acknowledge_) or `East board: RÜCKS. handle` (_reset_) fits a fresh core and tops up the xenon; start again from section 4 |
-| Xenon starved (flux inductance catastrophe) | East board XE DRUCK (_xenon pressure_), then KERN DEFEKT (_core failed_); B11's DRUCK (_pressure_) lamp                                                          | As burnout; check the recirculator and the regulator first                                                                                                 |
-| Strain builds until the drive trips         | East board DEHNUNG (_strain_), INSTAB (_instability_), STÖRUNG (_fault_); a fault printout with clues                                                            | Retrim, bring DREHZAHL (_speed_) or FELD (_field_) down, use the insulation band; acknowledge with `East board: QUITT handle` (_acknowledge_)              |
-| Over the red lines                          | East board SPINDEL ROT (_spindle in the red_), FELD ROT (_field in the red_), LAST (_load_); the machine smokes, RAUCH (_smoke_); the fire alarm, BRAND (_fire_) | Bring DREHZAHL (_speed_) and FELD (_field_) down; the fire alarm is reset at the corridor panel                                                            |
-| The cabinets are dead                       | No lamps or readouts in cabinets A and B; powered buttons log "no supply"                                                                                        | Close the HAUPTSCHALTER (_main switch_); check the isolator, A11 and B13                                                                                   |
+| What happened                                  | What you see                                                                                                                                                     | What to do                                                                                                                                    |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core heating in an open or unpurged vessel     | East board KERN LUFT (_core in air_); B11's STÖRUNG (_fault_) lamp flashing; a log warning                                                                       | Trip the drive at once (NETZ (_mains_) or NOT-AUS (_emergency stop_)) and finish sealing and purging                                          |
+| Exhaust in the room (a fouled or leaking core) | East board ABGAS (_exhaust_); the wall gas detector's reading; smoke at an unclamped seal; then echoes, figures at the edge of sight, and patterns               | Trip the drive, close the outlet and the clamps, purge properly; leave the room to clear and wait for your eyes to recover                    |
+| Strain builds until the drive trips            | East board DEHNUNG (_strain_), INSTAB (_instability_), STÖRUNG (_fault_); a fault printout with clues                                                            | Retrim, bring DREHZAHL (_speed_) or FELD (_field_) down, use the insulation band; acknowledge with `East board: QUITT handle` (_acknowledge_) |
+| Over the red lines                             | East board SPINDEL ROT (_spindle in the red_), FELD ROT (_field in the red_), LAST (_load_); the machine smokes, RAUCH (_smoke_); the fire alarm, BRAND (_fire_) | Bring DREHZAHL (_speed_) and FELD (_field_) down; the fire alarm is reset at the corridor panel                                               |
+| The cabinets are dead                          | No lamps or readouts in cabinets A and B; powered buttons log "no supply"                                                                                        | Close the HAUPTSCHALTER (_main switch_); check the isolator, A11 and B13                                                                      |
 
 `East board: QUITT handle` (_acknowledge_) acknowledges the flashing windows: an acknowledged window burns steady until its cause clears, and one that cleared before anyone acknowledged it keeps flashing until QUITT. `East board: L-TEST handle` (_lamp test_) flashes every lamp on the board together for ten seconds.
 
@@ -158,7 +157,7 @@ Stand at B6 ANTRIEB (_drive_), cabinet B's drive unit at shoulder height, with t
 | Bay                                 | Window      | In English           | Lit when                                                        |
 | ----------------------------------- | ----------- | -------------------- | --------------------------------------------------------------- |
 | KREISLAUF (_circuit_)               | NETZ AUS    | Mains off            | The HAUPTSCHALTER (_main switch_) is open                       |
-|                                     | HEIZ. GESP. | Heating locked out   | NETZ is on but the heaters are interlocked                      |
+|                                     | ABGAS       | Exhaust              | The core's exhaust in the room is over 40 ppm                   |
 |                                     | SPINDEL ROT | Spindle in the red   | Spindle over its red line                                       |
 |                                     | FELD ROT    | Field in the red     | Field over its red line                                         |
 |                                     | LAST        | Load                 | Load over 6.5 kW                                                |
@@ -206,86 +205,86 @@ Stand at B6 ANTRIEB (_drive_), cabinet B's drive unit at shoulder height, with t
 
 ## Glossary
 
-| German                         | English                                    |
-| ------------------------------ | ------------------------------------------ |
-| ANTRIEB                        | Drive                                      |
-| ANZEIGE                        | Display                                    |
-| AUS                            | Off                                        |
-| AUSGANG                        | Output                                     |
-| AUSLASS                        | Outlet                                     |
-| BETRIEB                        | Running, in operation                      |
-| BRAND                          | Fire                                       |
-| DEHNUNG                        | Strain                                     |
-| DICHT                          | Sealed                                     |
-| DREHZAHL                       | Speed (revolutions)                        |
-| DRUCK                          | Pressure                                   |
-| DÄMPF. (DÄMPFUNG)              | Damping                                    |
-| EIN                            | On, in                                     |
-| ENDSTUFE                       | Power amplifier (output stage)             |
-| ERDE?                          | Earth?                                     |
-| FC-STEUERUNG                   | Ferrocore control                          |
-| FELD                           | Field                                      |
-| HAUPTSCHALTER                  | Main switch                                |
-| HAUPTTRENNER                   | Main isolator                              |
-| HEBEN                          | Raise                                      |
-| HEIZ. GESP. (HEIZUNG GESPERRT) | Heating locked out                         |
-| HEIZUNG                        | Heating                                    |
-| HT, LT                         | High tension, low tension                  |
-| HV FIL                         | High-voltage filaments (the valve heaters) |
-| HV KATODE                      | High-voltage cathode                       |
-| IST                            | Actual (value)                             |
-| KAMMERDRUCK                    | Chamber pressure                           |
-| KANALÜBERSICHT                 | Channel overview                           |
-| KANÄLE                         | Channels                                   |
-| KAPAZITÄT                      | Capacity                                   |
-| KENNUNG                        | Identification                             |
-| KERN                           | Core                                       |
-| KERN DEFEKT                    | Core failed                                |
-| KERN LUFT                      | Core in air                                |
-| KESSEL                         | Vessel                                     |
-| KOPF OFFEN                     | Head open                                  |
-| KREISLAUF                      | Circuit                                    |
-| L-TEST                         | Lamp test                                  |
-| LAMBDA-SONDE                   | Lambda probe (oxygen sensor)               |
-| LAST                           | Load                                       |
-| MESSWERTE                      | Measured values                            |
-| NETZ                           | Mains                                      |
-| NETZ AUS                       | Mains off                                  |
-| NETZSPANNUNG                   | Mains voltage                              |
-| NOT-AUS                        | Emergency stop                             |
-| nur mit Freigabe               | Only with authorisation                    |
-| O2 = 0                         | No oxygen                                  |
-| OBEN, UNTEN                    | Up, down                                   |
-| QUITT (QUITTIEREN)             | Acknowledge                                |
-| RAUCH                          | Smoke                                      |
-| RESERVE                        | Spare                                      |
-| ROT                            | Red (over the red line)                    |
-| RÜCKS. (RÜCKSETZEN)            | Reset                                      |
-| SÄULE                          | Column                                     |
-| SCHWEBUNG                      | Beat frequency                             |
-| SENKEN                         | Lower                                      |
-| SOLL                           | Set point (target value)                   |
-| SPANNEN                        | Clamp                                      |
-| SPINDEL                        | Spindle                                    |
-| SPULEN                         | Coils                                      |
-| SPÜLEN                         | Purge                                      |
-| STÖRUNG                        | Fault                                      |
-| STRAHL                         | Beam                                       |
-| STRAHLROHR                     | Beam tube                                  |
-| STRAHLSTROM                    | Beam current                               |
-| TECHNIKRAUM                    | Plant room                                 |
-| TIEGELHEIZUNG                  | Crucible heating                           |
-| TRIMM                          | Trim                                       |
-| UMWÄLZUNG                      | Recirculation                              |
-| UNTERSETZUNG                   | Gearing ratio (reduction)                  |
-| VERDAMPFER                     | Evaporator                                 |
-| VERSORGUNG                     | Supply                                     |
-| XE (XENON)                     | Xenon                                      |
-| XE EIN                         | Xenon in                                   |
-| XE FLUSS                       | Xenon flow                                 |
-| XE VORRAT                      | Xenon reserve                              |
-| XE-REGLER                      | Xenon regulator                            |
-| ZÜND (ZÜNDUNG)                 | Ignition                                   |
+| German              | English                                    |
+| ------------------- | ------------------------------------------ |
+| ANTRIEB             | Drive                                      |
+| ANZEIGE             | Display                                    |
+| AUS                 | Off                                        |
+| AUSGANG             | Output                                     |
+| AUSLASS             | Outlet                                     |
+| BETRIEB             | Running, in operation                      |
+| BRAND               | Fire                                       |
+| DEHNUNG             | Strain                                     |
+| DICHT               | Sealed                                     |
+| DREHZAHL            | Speed (revolutions)                        |
+| DRUCK               | Pressure                                   |
+| DÄMPF. (DÄMPFUNG)   | Damping                                    |
+| EIN                 | On, in                                     |
+| ENDSTUFE            | Power amplifier (output stage)             |
+| ERDE?               | Earth?                                     |
+| FC-STEUERUNG        | Ferrocore control                          |
+| FELD                | Field                                      |
+| HAUPTSCHALTER       | Main switch                                |
+| HAUPTTRENNER        | Main isolator                              |
+| HEBEN               | Raise                                      |
+| ABGAS               | Exhaust                                    |
+| HEIZUNG             | Heating                                    |
+| HT, LT              | High tension, low tension                  |
+| HV FIL              | High-voltage filaments (the valve heaters) |
+| HV KATODE           | High-voltage cathode                       |
+| IST                 | Actual (value)                             |
+| KAMMERDRUCK         | Chamber pressure                           |
+| KANALÜBERSICHT      | Channel overview                           |
+| KANÄLE              | Channels                                   |
+| KAPAZITÄT           | Capacity                                   |
+| KENNUNG             | Identification                             |
+| KERN                | Core                                       |
+| KERN DEFEKT         | Core failed                                |
+| KERN LUFT           | Core in air                                |
+| KESSEL              | Vessel                                     |
+| KOPF OFFEN          | Head open                                  |
+| KREISLAUF           | Circuit                                    |
+| L-TEST              | Lamp test                                  |
+| LAMBDA-SONDE        | Lambda probe (oxygen sensor)               |
+| LAST                | Load                                       |
+| MESSWERTE           | Measured values                            |
+| NETZ                | Mains                                      |
+| NETZ AUS            | Mains off                                  |
+| NETZSPANNUNG        | Mains voltage                              |
+| NOT-AUS             | Emergency stop                             |
+| nur mit Freigabe    | Only with authorisation                    |
+| O2 = 0              | No oxygen                                  |
+| OBEN, UNTEN         | Up, down                                   |
+| QUITT (QUITTIEREN)  | Acknowledge                                |
+| RAUCH               | Smoke                                      |
+| RESERVE             | Spare                                      |
+| ROT                 | Red (over the red line)                    |
+| RÜCKS. (RÜCKSETZEN) | Reset                                      |
+| SÄULE               | Column                                     |
+| SCHWEBUNG           | Beat frequency                             |
+| SENKEN              | Lower                                      |
+| SOLL                | Set point (target value)                   |
+| SPANNEN             | Clamp                                      |
+| SPINDEL             | Spindle                                    |
+| SPULEN              | Coils                                      |
+| SPÜLEN              | Purge                                      |
+| STÖRUNG             | Fault                                      |
+| STRAHL              | Beam                                       |
+| STRAHLROHR          | Beam tube                                  |
+| STRAHLSTROM         | Beam current                               |
+| TECHNIKRAUM         | Plant room                                 |
+| TIEGELHEIZUNG       | Crucible heating                           |
+| TRIMM               | Trim                                       |
+| UMWÄLZUNG           | Recirculation                              |
+| UNTERSETZUNG        | Gearing ratio (reduction)                  |
+| VERDAMPFER          | Evaporator                                 |
+| VERSORGUNG          | Supply                                     |
+| XE (XENON)          | Xenon                                      |
+| XE EIN              | Xenon in                                   |
+| XE FLUSS            | Xenon flow                                 |
+| XE VORRAT           | Xenon reserve                              |
+| XE-REGLER           | Xenon regulator                            |
+| ZÜND (ZÜNDUNG)      | Ignition                                   |
 
 ## Checking a run
 

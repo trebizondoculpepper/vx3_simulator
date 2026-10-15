@@ -15,6 +15,7 @@ import {
 } from './column-prep';
 import type { ColumnPrepState } from './column-prep';
 import { REDLINES } from './redlines';
+import { ALARM_PPM } from './exhaust';
 
 /**
  * The east wall's 1974 process board, rewired in 1986 as a remote station
@@ -76,7 +77,7 @@ export interface Annunciator {
  */
 export const annunciators: readonly Annunciator[] = [
   { label: 'NETZ AUS', colour: 'amber' },
-  { label: 'HEIZ. GESP.', colour: 'amber' },
+  { label: 'ABGAS', colour: 'red' },
   { label: 'SPINDEL ROT', colour: 'red' },
   { label: 'FELD ROT', colour: 'red' },
   { label: 'LAST', colour: 'red' },
@@ -149,8 +150,8 @@ export interface BoardInputs {
   recirculatorWorking?: boolean;
   /** The column's vessel, once the second-generation VX3 is installed. */
   gen2?: { prep: ColumnPrepState };
-  /** The drive's atmosphere permit: purged, pressurised, recirculating. */
-  permit?: boolean;
+  /** The room's exhaust concentration, ppm (src/game/exhaust.ts). */
+  exhaustPpm?: number;
   /** The machine is smoking, and the fire alarm is sounding. */
   smoking?: boolean;
   burning?: boolean;
@@ -168,7 +169,7 @@ export function warningConditions(inputs: BoardInputs): boolean[] {
   const flow = inputs.xenonFlowSlpm;
   return [
     inputs.plantPowered === false,
-    mains && inputs.permit === false,
+    (inputs.exhaustPpm ?? 0) > ALARM_PPM,
     rig.spindle > REDLINES.spindle.limit,
     rig.field > REDLINES.field.limit,
     telltales.powerKw > REDLINES.load.limit,

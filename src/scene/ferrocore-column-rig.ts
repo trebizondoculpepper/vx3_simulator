@@ -900,7 +900,7 @@ export function createFerrocoreColumnRig(
     // that circuit's alarm windows on the east board is lit.
     const channels: [string, string[]][] = [
       ['NETZ', ['NETZ AUS']],
-      ['HEIZUNG', ['HEIZ. GESP.']],
+      ['ABGAS', ['ABGAS']],
       ['SPINDEL', ['SPINDEL ROT']],
       ['FELD', ['FELD ROT']],
       ['LAST', ['LAST']],
@@ -1432,9 +1432,7 @@ export function createFerrocoreColumnRig(
       () =>
         String(
           Math.round(
-            model(`drive.${n === 1 ? 'ht' : 'lt'}`) &&
-              model('drive.mains') &&
-              model('drive.permit')
+            model(`drive.${n === 1 ? 'ht' : 'lt'}`) && model('drive.mains')
               ? 600 + (1 - num('rig.heater')) * 900
               : 0,
           ),

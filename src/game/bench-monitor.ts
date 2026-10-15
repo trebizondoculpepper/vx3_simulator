@@ -11,8 +11,9 @@ export interface BenchInputs {
   plantPowered?: boolean;
   rack?: RackControls;
   /**
-   * The drive's atmosphere permit from the column's vessel: false while it
-   * is not sealed, purged, pressurised and recirculating.
+   * The drive's atmosphere permit (FREIGABE) from the column's vessel:
+   * false while it is not sealed, purged, pressurised and recirculating.
+   * It holds nothing back; a core lit without it fouls.
    */
   permit?: boolean;
 }
@@ -66,7 +67,7 @@ export function benchWarnings(inputs: BenchInputs): string[] {
     return ['MASCHINE AUSGESCHALTET', 'NETZ AM OSTPULT SCHLIESSEN'];
   const warnings: string[] = [];
   if (inputs.permit === false)
-    warnings.push('HEIZUNG GESPERRT', 'KESSEL SPUELEN UND FUELLEN');
+    warnings.push('KESSEL NICHT BEREIT', 'KESSEL SPUELEN UND FUELLEN');
   if (spindleTooHigh(inputs))
     warnings.push('SPINDELDREHZAHL ZU HOCH', 'DREHZAHL AM ANTRIEB SENKEN');
   if (!xenonReady(xenonFlowSlpm))
