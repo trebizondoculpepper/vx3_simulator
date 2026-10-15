@@ -418,31 +418,68 @@ export function createGen1Vx3(hookup: Gen1Hookup) {
   );
   group.add(sideConduit);
 
-  // The wall outlet and the trailing rubber mains lead are visible at rack base.
+  // The wall outlet: a surface-mounted Schuko socket in cream Duroplast, as
+  // fitted across the GDR, with the rig's black rubber angled plug pushed
+  // home in it and its lead falling away to the rack's base.
   const socketX = -5.6;
+  const socketY = floorY + 2.5;
   if (hookup.fieldGeneratorsRemoved)
     cube(group, 0.7, 3.3, 0.24, '#59665b', socketX, floorY + 1.65, -3.79);
-  cube(group, 0.52, 0.7, 0.08, '#c9bf9f', socketX, floorY + 2.5, -3.62);
-  cube(group, 0.35, 0.45, 0.018, '#eee2bd', socketX, floorY + 2.5, -3.56);
-  for (const x of [socketX - 0.08, socketX + 0.08]) {
-    disc(group, 0.037, '#3c3b31', x, floorY + 2.56, -3.54);
-  }
-  disc(group, 0.045, '#3c3b31', socketX, floorY + 2.4, -3.54);
-  cube(group, 0.18, 0.15, 0.13, '#403f36', socketX, floorY + 2.24, -3.46);
+  /** A short cylinder facing out of the wall, its back at `z`. */
+  const boss = (
+    radius: number,
+    depth: number,
+    color: string,
+    x: number,
+    y: number,
+    z: number,
+  ) => {
+    const mesh = new Mesh(
+      new CylinderGeometry(radius, radius, depth, 16),
+      material(color),
+    );
+    mesh.rotation.x = Math.PI / 2;
+    mesh.position.set(x, y, z + depth / 2);
+    group.add(mesh);
+    return mesh;
+  };
+  // The box, its raised round rim, and the recessed well inside it.
+  cube(group, 0.66, 0.66, 0.16, '#e2d8b8', socketX, socketY, -3.58);
+  boss(0.29, 0.05, '#ece3c6', socketX, socketY, -3.5);
+  disc(group, 0.235, '#b9ae8e', socketX, socketY, -3.449);
+  // The two earthing clips, above and below the pins.
+  for (const dy of [-0.2, 0.2])
+    cube(group, 0.11, 0.035, 0.04, '#c7c9c4', socketX, socketY + dy, -3.44);
+  // A screw holding the box to the wall.
+  disc(group, 0.03, '#a9a494', socketX + 0.27, socketY - 0.27, -3.499);
+  // The plug: a round rubber body with grip ribs, pushed into the well.
+  const plugBack = -3.45;
+  boss(0.2, 0.3, '#1e1e1c', socketX, socketY, plugBack);
+  for (const z of [0.08, 0.15, 0.22])
+    boss(0.208, 0.025, '#2b2b28', socketX, socketY, plugBack + z);
+  disc(group, 0.2, '#262624', socketX, socketY, plugBack + 0.301);
+  // An angled plug: the lead leaves the bottom through a strain relief.
+  const relief = new Mesh(
+    new CylinderGeometry(0.075, 0.09, 0.2, 10),
+    material('#1e1e1c'),
+  );
+  relief.position.set(socketX, socketY - 0.26, plugBack + 0.17);
+  group.add(relief);
   label(
     group,
-    '240 V / ISOLATED',
+    '220 V ~ / TRENNTRAFO',
     socketX,
     floorY + 3.03,
     -3.58,
-    8,
+    5,
     '#e3d8b7',
     '#343d38',
   );
   const cable = new Mesh(
     new TubeGeometry(
       new CatmullRomCurve3([
-        new Vector3(socketX, floorY + 2.24, -3.4),
+        new Vector3(socketX, socketY - 0.34, plugBack + 0.17),
+        new Vector3(socketX, socketY - 0.7, plugBack + 0.3),
         new Vector3(socketX, floorY + 1.45, -3.05),
         new Vector3(-4.35, floorY + 0.04, -1.75),
         new Vector3(-4.15, floorY + 0.04, -0.2),
