@@ -281,7 +281,11 @@ export function createPatternOverlay(
 
       void main() {
         vec3 base = texture2D(frame, vUv).rgb;
-        vec3 light = pattern();
+        // Worked into the picture, not laid over it: the pattern is as
+        // bright as what is under it, so a dark room stays dark and the
+        // room always shows through.
+        float luma = dot(base, vec3(0.299, 0.587, 0.114));
+        vec3 light = pattern() * (0.15 + 0.85 * sqrt(luma));
         vec3 worked;
         if (mode == 0) {
           uvec3 b = uvec3(base * 255.0 + 0.5);

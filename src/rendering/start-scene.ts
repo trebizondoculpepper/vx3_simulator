@@ -33,6 +33,9 @@ import {
   stillFrame,
 } from './apply-effects';
 import { createChromaticDivergence } from './chromatic-divergence';
+import { createOperatorVisions } from './operator-visions';
+import { ALARM_PPM } from '../game/exhaust';
+import type { VisionLevels } from './operator-visions';
 import type { World, WorldEvent } from '../game/world/world';
 import { createAutoStart } from '../game/world/auto-start';
 import type { AutoStart } from '../game/world/auto-start';
@@ -770,6 +773,12 @@ export function startScene(canvas: HTMLCanvasElement) {
   // The board is a tool: it stays whole while the room around it bends.
   exemptFromEffects(circuitBoard.group);
   const divergence = createChromaticDivergence(renderer, worldUnitsPerMetre);
+  // What the column's exhaust makes the operator see (src/game/exhaust.ts).
+  const visions = createOperatorVisions(renderer, {
+    metre: worldUnitsPerMetre,
+    floorY,
+  });
+  let visionStage = 0;
 
   // The VX3's ferrocore column and its two cabinets stand in the bay the
   // first rig left, its back to the north wall, beside the computer desk.
@@ -1568,7 +1577,59 @@ export function startScene(canvas: HTMLCanvasElement) {
     register.texture.needsUpdate = true;
   });
 
-  // Prismatic tell-tale for fully operational ferrocores: dark until ready,
+  // The gas detector beside it: the column's exhaust in the room, ppm,
+  // on a needle, with a red lamp past the ABGAS limit (src/game/exhaust.ts).
+  const gasX = wallDisplayX + 2.35;
+  cube(lab, 1.0, 1.3, 0.2, '#b9a54a', gasX, meterY + 0.05, -3.5);
+  cube(lab, 0.86, 0.86, 0.04, '#e9dfbf', gasX, meterY + 0.08, -3.38);
+  label(
+    lab,
+    'GASWARNGERÄT',
+    gasX,
+    meterY + 0.6,
+    -3.39,
+    8,
+    '#202018',
+    '#b9a54a',
+  );
+  label(lab, 'ABGAS ppm', gasX, meterY - 0.24, -3.355, 7);
+  for (let tick = 0; tick <= 10; tick++) {
+    const angle = -Math.PI * 0.6 + (tick / 10) * Math.PI * 1.2;
+    const ppm = tick * 50;
+    disc(
+      lab,
+      tick % 2 === 0 ? 0.022 : 0.012,
+      ppm > ALARM_PPM ? '#c43a22' : '#4b5044',
+      gasX + Math.sin(angle) * 0.32,
+      meterY - 0.06 + Math.cos(angle) * 0.32,
+      -3.355,
+    );
+  }
+  const gasNeedle = cube(
+    lab,
+    0.018,
+    0.3,
+    0.012,
+    '#1d1d1a',
+    gasX,
+    meterY - 0.06,
+    -3.335,
+  );
+  gasNeedle.geometry.translate(0, 0.14, 0);
+  indicator(gasNeedle, 'Gas detector', 'ABGAS ppm needle');
+  const gasLamp = indicator(
+    glows(disc(lab, 0.05, '#5a2420', gasX, meterY - 0.45, -3.38)),
+    'Gas detector',
+    'ABGAS lamp',
+  );
+  dynamic.push(() => {
+    const ppm = world.read<number>('room.exhaust.ppm');
+    gasNeedle.rotation.z = -Math.PI * (Math.min(1, ppm / 500) * 1.2 - 0.6);
+    (gasLamp.material as ReturnType<typeof material>).color.set(
+      ppm > ALARM_PPM ? '#ff3b26' : '#5a2420',
+    );
+  });
+
   // then glowing and sparkling. It is built here facing +z around its backing
   // board's centre, and hung above the teleprinter once that is placed.
   const crystalUnit = new Group();
@@ -2204,6 +2265,8 @@ export function startScene(canvas: HTMLCanvasElement) {
     Object.assign(board, createBoard());
     Object.assign(settings, createRackControls());
     Object.assign(rig, createRig());
+    visions.clear();
+    visionStage = 0;
     write('Simulation reset. VX3 cold.');
     delayedPrinter.queue('SIMULATION RESET · VX3 COLD');
   };
@@ -2462,6 +2525,16 @@ export function startScene(canvas: HTMLCanvasElement) {
     world = play([...coldStartSteps, ...overdrive]).world;
     for (let i = 0; i < 1200 && !world.read('fire.ruined'); i++)
       world.tick(0.1, () => 0.5);
+    circuitBoard.restarted();
+  }
+  // The same for the fouled column: the clamps released on a running
+  // core, two minutes on (smoke at the seal, soot, exhaust, a full dose).
+  if (import.meta.env.DEV && inspectionParams.get('scenario') === 'fouled') {
+    world = play([
+      ...coldStartSteps,
+      { id: 'column.SPANNEN' },
+      { id: 'wait', setting: 120 },
+    ]).world;
     circuitBoard.restarted();
   }
   // Inspection views (?view=…), each standing the walker in front of one
@@ -3532,7 +3605,11 @@ export function startScene(canvas: HTMLCanvasElement) {
           Math.min(1, delta / 3);
     let effects = effectFrame(
       settingsForMachine({
-        activity: wreckedRun ? 0 : world.read<number>('ferrocore.activity'),
+        // A fouled core's disturbance goes into its exhaust, not the room.
+        activity: wreckedRun
+          ? 0
+          : world.read<number>('ferrocore.activity') *
+            world.read<number>('room.coherence'),
         // From the redline to critical: how hot the drive has got.
         overheat: wreckedRun
           ? 0
@@ -3567,7 +3644,8 @@ export function startScene(canvas: HTMLCanvasElement) {
         : 6 + telltales.dilationActivity * 30,
       2.6,
     );
-    const level = anomalyStage(activity);
+    // A fouled core's disturbance goes into its exhaust, not the room.
+    const level = anomalyStage(activity * world.read<number>('room.coherence'));
     if (level > anomalyLevel)
       write(
         level === 1
@@ -3740,13 +3818,53 @@ export function startScene(canvas: HTMLCanvasElement) {
       verticalPx: effects.divergence.verticalPx * split,
       parallax: effects.divergence.parallax * split,
     };
-    if (divergence.active(diverged))
-      divergence.render(scene, viewer, diverged, effectSeconds);
-    else renderer.render(scene, viewer);
+    // The exhaust's hallucinations, by the operator's dose. A figure only
+    // stands on open floor in the room the operator is in.
+    const levels = world.read<VisionLevels>('operator.hallucinations');
+    const solids = footprints ?? [];
+    visions.update(delta, viewer, levels, (x, z) => {
+      const wx = x * metre;
+      const wz = z * metre;
+      if (roomAt(roomPlan, wx, wz) !== listenerRoom) return false;
+      const margin = 0.4 * metre;
+      return !solids.some(
+        (s) =>
+          wx > s.minX - margin &&
+          wx < s.maxX + margin &&
+          wz > s.minZ - margin &&
+          wz < s.maxZ + margin,
+      );
+    });
+    const stage =
+      levels.patterns > 0.2
+        ? 3
+        : levels.apparitions > 0.3
+          ? 2
+          : levels.ghosting > 0.5
+            ? 1
+            : 0;
+    if (stage > visionStage)
+      write(
+        [
+          '',
+          'There is something in the air off the column. When I turn my head, what I was looking at stays where it was for a moment.',
+          'Someone was standing just out of sight. Nobody is there now.',
+          'The room has started tiling itself in flat colours. The tiles fit perfectly. I would like to go outside.',
+        ][stage],
+      );
+    else if (stage === 0 && visionStage > 0)
+      write('My eyes are my own again, as far as I can tell.');
+    visionStage = stage;
+    visions.render(() => {
+      if (divergence.active(diverged))
+        divergence.render(scene, viewer, diverged, effectSeconds);
+      else renderer.render(scene, viewer);
+    }, viewer);
   });
   const dispose = () => {
     renderer.setAnimationLoop(null);
     divergence.dispose();
+    visions.dispose();
     observer.disconnect();
     canvas.removeEventListener('wheel', wheel);
     canvas.removeEventListener('pointerdown', down);

@@ -22,6 +22,7 @@ import { brushedAluminium, wornPaint } from '../rendering/metal-finish';
 import { createCanvasTexture } from './screens';
 import { createGasVent } from './gas-vent';
 import { createSealPuff } from './seal-puff';
+import { createSealLeak, createSootBand } from './seal-leak';
 import {
   createBarGraph,
   createEightiesButton,
@@ -2799,6 +2800,52 @@ export function createFerrocoreColumnRig(
   const sealPuff = createSealPuff({ radius: 0.252 });
   sealPuff.group.position.y = chamberTop + 0.032;
   column.add(sealPuff.group);
+  // Exhaust seeping round the seam of a lowered, unclamped head, and the
+  // soot it leaves on the vessel's upper section: on the chamber's lip and
+  // top flange below the seam, and on the head's mating collar above it,
+  // which carries its stain up when it rises.
+  const sealLeak = createSealLeak({ radius: 0.252 });
+  sealLeak.group.position.y = chamberTop + 0.032;
+  column.add(sealLeak.group);
+  const sootBands = [
+    {
+      parent: column,
+      radius: outerR + 0.0015,
+      height: 0.16,
+      y: chamberTop - 0.08,
+      seam: 'top' as const,
+      seed: 3,
+    },
+    {
+      parent: column,
+      radius: 0.2515,
+      height: 0.042,
+      y: chamberTop + 0.012,
+      seam: 'top' as const,
+      seed: 4,
+    },
+    {
+      parent: head,
+      radius: 0.2515,
+      height: 0.095,
+      y: frameTop + 0.035,
+      seam: 'bottom' as const,
+      seed: 5,
+    },
+    {
+      parent: head,
+      radius: 0.1915,
+      height: 0.034,
+      y: frameTop + 0.175,
+      seam: 'bottom' as const,
+      seed: 6,
+    },
+  ].map(({ parent, radius, height, y, seam, seed }) => {
+    const band = createSootBand({ radius, height, seam, seed });
+    band.mesh.position.y = y;
+    parent.add(band.mesh);
+    return band;
+  });
 
   // ---- Leads that ride with the head --------------------------------------
   // Their head ends move with it, so they are rebuilt whenever it moves.
@@ -2946,6 +2993,13 @@ export function createFerrocoreColumnRig(
       if (event.kind === 'lowered') sealPuff.burst();
     }
     sealPuff.update(delta, reducedMotion);
+    sealLeak.update(
+      seconds,
+      Number(model('column.sealSmoke')) || 0,
+      reducedMotion,
+    );
+    const soot = Number(model('column.soot')) || 0;
+    for (const band of sootBands) band.set(soot);
     display.kelvin = prep.temperature;
     display.brightness = prep.brightness;
     display.failed = prep.failure !== null;
@@ -3171,6 +3225,8 @@ export function createFerrocoreColumnRig(
     dispose() {
       purgeVent.dispose();
       sealPuff.dispose();
+      sealLeak.dispose();
+      for (const band of sootBands) band.dispose();
       disposeKit(kit, group);
     },
   };
