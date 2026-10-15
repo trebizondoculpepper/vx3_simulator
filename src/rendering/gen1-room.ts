@@ -227,7 +227,7 @@ export function startGen1Room(canvas: HTMLCanvasElement) {
   notes.innerHTML =
     '<strong>Room dev3</strong> · not part of the game · the first-generation VX3 has moved to the museum; the northern archive cordon remains<br>' +
     'Click: mouse look · WASD: walk · Shift: run · C: crouch · wheel: zoom · Esc: cursor · <kbd>P</kbd> toggles PS1 resolution<br>' +
-    'Door to dev2: west, south of the archive cordon · <a href="/?room=dev0">developer room</a> · <a href="/?room=dev1">effects room</a> · <a href="/">lab</a>';
+    'Doors: dev2 west, south of the archive cordon · dev4 east · <a href="/?room=dev0">developer room</a> · <a href="/?room=dev1">effects room</a> · <a href="/">lab</a>';
   Object.assign(notes.style, {
     position: 'absolute',
     left: '12px',

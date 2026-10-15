@@ -41,11 +41,14 @@ const openRoom = async () => {
   const asked = params.get('room');
   const requested = asked === 'dev' ? 'dev0' : asked;
   const room =
-    requested && ['dev0', 'dev1', 'dev2', 'dev3'].includes(requested)
+    requested && ['dev0', 'dev1', 'dev2', 'dev3', 'dev4'].includes(requested)
       ? requested
       : 'corridor';
   let start: (canvas: HTMLCanvasElement) => RoomHandle;
-  if (room === 'dev3')
+  if (room === 'dev4')
+    start = (await import('./rendering/hallucination-room'))
+      .startHallucinationRoom;
+  else if (room === 'dev3')
     start = (await import('./rendering/gen1-room')).startGen1Room;
   else if (room === 'dev2')
     start = (await import('./rendering/parts-room')).startPartsRoom;
@@ -104,7 +107,9 @@ const openRoom = async () => {
 const travel = (event: Event) => {
   const { to, from } = (event as CustomEvent<{ to: string; from: string }>)
     .detail;
-  if (!['corridor', 'dev0', 'dev1', 'dev2', 'dev3', 'museum'].includes(to))
+  if (
+    !['corridor', 'dev0', 'dev1', 'dev2', 'dev3', 'dev4', 'museum'].includes(to)
+  )
     return;
   const url = new URL(location.href);
   url.search = '';

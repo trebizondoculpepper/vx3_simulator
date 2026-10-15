@@ -1,7 +1,7 @@
 import type { Footprint } from './walk-collision';
 
 export type DevRoomId =
-  'corridor' | 'dev0' | 'dev1' | 'dev2' | 'dev3' | 'museum';
+  'corridor' | 'dev0' | 'dev1' | 'dev2' | 'dev3' | 'dev4' | 'museum';
 export type DoorSide = 'north' | 'south' | 'east' | 'west';
 export interface DevDoor {
   to: DevRoomId;
@@ -16,6 +16,7 @@ export const DEV_ROOM_NAMES: Record<DevRoomId, string> = {
   dev1: 'DEV1 · EFFEKTE',
   dev2: 'DEV2 · BAUTEILE',
   dev3: 'DEV3 · ARCHIV',
+  dev4: 'DEV4 · TRUGBILDER',
   museum: 'VX-MUSEUM',
 };
 export const DEV_DOOR_WIDTH = 1.2;
@@ -65,7 +66,9 @@ export function devDoors(
     case 'dev2':
       return [west('dev1'), east('dev3')];
     case 'dev3':
-      return [west('dev2')];
+      return [west('dev2'), east('dev4')];
+    case 'dev4':
+      return [west('dev3')];
   }
 }
 

@@ -19,6 +19,10 @@ describe('development wing', () => {
     ]);
     expect(devDoors('dev3', bounds, 1).map((door) => door.to)).toEqual([
       'dev2',
+      'dev4',
+    ]);
+    expect(devDoors('dev4', bounds, 1).map((door) => door.to)).toEqual([
+      'dev3',
     ]);
   });
   it('keeps the archive entrance on its west wall, south of the cordon', () => {
