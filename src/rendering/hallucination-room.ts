@@ -858,6 +858,14 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
             (v) => (echo.drift = v),
             3,
           ),
+          dial(
+            'BLUR',
+            0,
+            0.08,
+            () => echo.blur,
+            (v) => (echo.blur = v),
+            3,
+          ),
           {
             ...dial(
               'MOST',
@@ -1142,7 +1150,7 @@ export function startHallucinationRoom(canvas: HTMLCanvasElement) {
     '<strong>Hallucination room</strong> · not part of the game · the console is in front of you<br>' +
     'Click: mouse look · WASD: walk · Shift: run · C: crouch · wheel: zoom · Esc: cursor<br>' +
     'APPARITION: turn up RATE, or press SUMMON, then turn about: they wait at the edge of sight and fade when looked at<br>' +
-    'GHOSTING: turn up STRENGTH, hold still a moment, then turn: what you saw stays on your eyes and fades<br>' +
+    'GHOSTING: turn up STRENGTH, hold still a moment, then turn: what you saw stays on your eyes, fading and blurring<br>' +
     'Door: dev3 west · <kbd>P</kbd> toggles PS1 resolution · <a href="/?room=dev1">effects room</a> · <a href="/">lab</a>';
   Object.assign(notes.style, {
     position: 'absolute',

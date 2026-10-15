@@ -3,7 +3,8 @@
  *
  * While the viewer holds still for a moment, the view is taken as a
  * snapshot. When they move again, that snapshot stays where it was on the
- * screen, an echo laid over the moving view, and fades. Each stillness
+ * screen, an echo laid over the moving view, and fades, blurring as it
+ * goes, a memory becoming indistinct. Each stillness
  * makes one; a restless viewer trails several. Nothing in the room is
  * wrong; only the seeing is.
  *
@@ -23,6 +24,11 @@ export interface GhostingSettings {
   fadeSeconds: number;
   /** How fast a ghost swells while it fades, as a share of the screen a second. */
   drift: number;
+  /**
+   * How indistinct a ghost has grown by the time it has faded: the spread
+   * of its Gaussian blur, as a share of the screen's height.
+   */
+  blur: number;
   /** At most this many ghosts at once; the oldest goes first. */
   most: number;
 }
@@ -35,6 +41,7 @@ export function defaultGhostingSettings(): GhostingSettings {
     strength: 0,
     fadeSeconds: 1.8,
     drift: 0.02,
+    blur: 0.02,
     most: 3,
   };
 }
@@ -57,6 +64,8 @@ export interface Ghost {
   opacity: number;
   /** How much larger than the screen it has grown. */
   scale: number;
+  /** Its blur now, as a share of the screen's height. */
+  blur: number;
   /** Seconds since it was let go. */
   age: number;
 }
@@ -110,6 +119,7 @@ export function createGhosting(
             snapshot: held,
             opacity: Math.min(1, settings.strength),
             scale: 1,
+            blur: 0,
             age: 0,
           });
           released = held;
@@ -131,6 +141,13 @@ export function createGhosting(
           (Math.min(1, settings.strength) * seconds) /
           Math.max(0.05, settings.fadeSeconds);
         ghost.scale += settings.drift * seconds;
+        // A memory loses its detail sooner than its presence: the blur
+        // comes on quickly at first, then more slowly as the ghost goes.
+        ghost.blur =
+          settings.blur *
+          Math.sqrt(
+            Math.min(1, ghost.age / Math.max(0.05, settings.fadeSeconds)),
+          );
       }
       for (let i = ghosts.length - 1; i >= 0; i--)
         if (ghosts[i].opacity <= 0) ghosts.splice(i, 1);

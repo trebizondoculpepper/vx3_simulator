@@ -35,7 +35,7 @@ describe('perceptual ghosting', () => {
     const { released } = g.step(0.1, at(0.2));
     expect(released).toBe(taken);
     expect(g.ghosts).toEqual([
-      { snapshot: taken, opacity: 0.6, scale: 1, age: 0 },
+      { snapshot: taken, opacity: 0.6, scale: 1, blur: 0, age: 0 },
     ]);
     expect(g.held).toBeNull();
   });
@@ -55,6 +55,26 @@ describe('perceptual ghosting', () => {
     expect(g.ghosts[0].scale).toBeCloseTo(1.05);
     for (let k = 6; k <= 11; k++) g.step(0.1, at(0.2 + k * 0.2));
     expect(g.ghosts).toHaveLength(0);
+  });
+
+  it('blurs the ghost as it fades, quickly at first', () => {
+    const g = createGhosting({
+      ...defaultGhostingSettings(),
+      strength: 1,
+      fadeSeconds: 1,
+      blur: 0.04,
+    });
+    hold(g, 0.6);
+    g.step(0.1, at(0.2));
+    expect(g.ghosts[0].blur).toBe(0);
+    for (let k = 1; k <= 3; k++) g.step(0.1, at(0.2 + k * 0.2));
+    // Under a third of the way through its fade, over half its final blur.
+    const early = g.ghosts[0].blur;
+    expect(early).toBeGreaterThan(0.02);
+    expect(early).toBeLessThan(0.025);
+    for (let k = 4; k <= 9; k++) g.step(0.1, at(0.2 + k * 0.2));
+    expect(g.ghosts[0].blur).toBeGreaterThan(early);
+    expect(g.ghosts[0].blur).toBeLessThanOrEqual(0.04);
   });
 
   it('does not count a slow drift or a small twitch as moving', () => {
